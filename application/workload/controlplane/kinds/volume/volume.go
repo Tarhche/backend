@@ -119,10 +119,10 @@ func (s *Volumes) Refuse(context.Context, kind.Raw, string, any) error {
 // Adopt takes in a volume found in a restored VM labelled as the platform's
 // with no record, as it is: its name, its driver, and the labels it was given
 // beside the platform's own.
-func (s *Volumes) Adopt(observed kind.Observation) (blocks.Adoption, bool) {
+func (s *Volumes) Adopt(_ context.Context, observed kind.Observation) (blocks.Adoption, bool, error) {
 	var status volumeKind.Status
 	if err := json.Unmarshal(observed.Status, &status); err != nil || status.Docker == nil || len(status.Docker.Name) == 0 {
-		return blocks.Adoption{}, false
+		return blocks.Adoption{}, false, nil
 	}
 
 	labels := maps.Clone(status.Docker.Labels)
@@ -136,10 +136,10 @@ func (s *Volumes) Adopt(observed kind.Observation) (blocks.Adoption, bool) {
 
 	spec, err := json.Marshal(volumeKind.Spec{Name: status.Docker.Name, Driver: status.Docker.Driver, Labels: labels})
 	if err != nil {
-		return blocks.Adoption{}, false
+		return blocks.Adoption{}, false, nil
 	}
 
-	return blocks.Adoption{Name: status.Docker.Name, Spec: spec, Expected: volumeKind.Present}, true
+	return blocks.Adoption{Name: status.Docker.Name, Spec: spec, Expected: volumeKind.Present}, true, nil
 }
 
 // Named reports whether name is the name a volume was asked for with.

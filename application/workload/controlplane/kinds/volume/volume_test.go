@@ -71,7 +71,8 @@ func TestVolumes_Adopt(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	adopted, ok := blockstest.New().Volumes.Adopt(kind.Observation{UUID: "v-uuid", Status: status})
+	adopted, ok, err := blockstest.New().Volumes.Adopt(context.Background(), kind.Observation{UUID: "v-uuid", Status: status})
+	require.NoError(t, err)
 	require.True(t, ok)
 
 	var spec volumeKind.Spec

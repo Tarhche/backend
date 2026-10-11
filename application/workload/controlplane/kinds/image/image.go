@@ -169,8 +169,8 @@ func (s *Images) Refuse(ctx context.Context, r kind.Raw, action string, payload 
 
 // Adopt takes in nothing: nothing can label an image, so nothing found in a
 // restored VM is known to have been the platform's.
-func (s *Images) Adopt(kind.Observation) (blocks.Adoption, bool) {
-	return blocks.Adoption{}, false
+func (s *Images) Adopt(context.Context, kind.Observation) (blocks.Adoption, bool, error) {
+	return blocks.Adoption{}, false, nil
 }
 
 // Named reports whether name is a reference to an image: the one it was

@@ -39,6 +39,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -562,25 +563,26 @@ func (s *Containers) Refuse(_ context.Context, r kind.Raw, action string, payloa
 // Adopt takes in a container found in a restored VM labelled as the
 // platform's with no record: as the spec it was made with, which its labels
 // carry, expected to be doing what it is doing, unless that is having been
-// stopped.
-func (s *Containers) Adopt(observed kind.Observation) (blocks.Adoption, bool) {
+// stopped. One its labels say is a service of a stack whose record is there,
+// in the same VM, is the stack's again, as its stack's graph makes the
+// container of a service (stackOf): owned by the stack, labelled as the
+// stack's and as the service, and named <slug>_<service>, which the stack's
+// graph knows it by. One whose labels name a stack that is not there, or is
+// in another VM, is nobody's, as any other is: its labels confer nothing.
+func (s *Containers) Adopt(ctx context.Context, observed kind.Observation) (blocks.Adoption, bool, error) {
 	var status containerKind.Status
 	if err := json.Unmarshal(observed.Status, &status); err != nil || status.Docker == nil {
-		return blocks.Adoption{}, false
+		return blocks.Adoption{}, false, nil
 	}
 
 	spec, labelled := containerKind.SpecFromLabels(status.Docker.Labels)
 	if !labelled {
-		return blocks.Adoption{}, false
+		return blocks.Adoption{}, false, nil
 	}
 
-	if parent, in := vmOf(observed.Owners); in {
+	parent, in := vmOf(observed.Owners)
+	if in {
 		spec.VM = stackKind.VMChoice{UUID: parent}
-	}
-
-	encoded, err := json.Marshal(spec)
-	if err != nil {
-		return blocks.Adoption{}, false
 	}
 
 	expected := containerKind.Running
@@ -588,12 +590,69 @@ func (s *Containers) Adopt(observed kind.Observation) (blocks.Adoption, bool) {
 		expected = containerKind.Stopped
 	}
 
-	name := spec.Name
-	if len(name) == 0 {
-		name = status.Docker.Name
+	adoption := blocks.Adoption{Expected: expected}
+
+	stacked, err := s.stackOf(ctx, parent, status.Docker.Labels)
+	if err != nil {
+		return blocks.Adoption{}, false, err
 	}
 
-	return blocks.Adoption{Name: name, Spec: encoded, Expected: expected}, true
+	if stacked != nil {
+		spec.Name = stacked.name
+		adoption.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: stacked.uuid}}
+		adoption.Labels = map[string]string{stackKind.LabelStack: stacked.uuid, stackKind.LabelService: stacked.service}
+	}
+
+	encoded, err := json.Marshal(spec)
+	if err != nil {
+		return blocks.Adoption{}, false, nil
+	}
+
+	adoption.Name = cmp.Or(spec.Name, status.Docker.Name)
+	adoption.Spec = encoded
+
+	return adoption, true, nil
+}
+
+// stacked is the service of a stack a container is.
+type stacked struct {
+	uuid    string
+	service string
+
+	// name is the Docker name the stack's graph knows the container of the
+	// service by: <slug>_<service>.
+	name string
+}
+
+// stackOf is the service of a stack a container in the Docker VM vmUUID
+// names is, as its labels say, when they say it of a stack whose record is
+// there, in that VM: nothing when they say nothing of a stack, or name one
+// that is not there, or is in another VM. What reading the stack fails with
+// is an error.
+func (s *Containers) stackOf(ctx context.Context, vmUUID string, labels map[string]string) (*stacked, error) {
+	uuid, service := labels[stackKind.LabelStack], labels[stackKind.LabelService]
+	if len(uuid) == 0 || len(service) == 0 || len(vmUUID) == 0 {
+		return nil, nil
+	}
+
+	r, err := s.Resources.GetOne(ctx, stackKind.Name, uuid)
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		return nil, nil
+	case err != nil:
+		return nil, err
+	}
+
+	st, err := kind.Decode[stackKind.Spec, stackKind.Status](r.Raw)
+	if err != nil {
+		return nil, err
+	}
+
+	if stackKind.VMOf(st) != vmUUID || len(st.Metadata.Slug) == 0 {
+		return nil, nil
+	}
+
+	return &stacked{uuid: uuid, service: service, name: stackKind.Want{Slug: st.Metadata.Slug}.Named(service)}, nil
 }
 
 // Named reports whether name is the name a container was asked for with.

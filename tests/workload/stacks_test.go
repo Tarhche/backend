@@ -32,6 +32,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
@@ -857,4 +858,121 @@ func (w *workload) stackRecord(t *testing.T, uuid string) stackKind.Stack {
 	require.NoError(t, err)
 
 	return s
+}
+
+// TestAStackItsVMsSnapshotHolds restores a stack's Docker VM to a snapshot
+// taken while the stack ran, after one of its containers was deleted, and
+// made again by the stack's graph under a new record: the restore forgets
+// that record, which the restored disk does not hold, and the container the
+// disk holds, which no record speaks for, is taken in again as the stack's,
+// as its graph would have made it. The stack runs with it, which its record
+// names as its service's, and its delete removes it, as it removes any
+// container it made, and keeps its volume and its VM.
+func TestAStackItsVMsSnapshotHolds(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID := w.dockerVM(t, "builds")
+
+	deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+		Name:      "store",
+		Compose:   storeCompose,
+		VMUUID:    vmUUID,
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, deployed.ValidationErrors)
+	require.NotNil(t, deployed.Stack)
+
+	stackUUID, slug := deployed.Stack.UUID, deployed.Stack.Slug
+	named := func(name string) string { return slug + "_" + name }
+
+	w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+	snapshotted := w.containerRecord(t, vmUUID, named("web"))
+	snapshotUUID := w.snapshot(t, vmUUID, "with the stack")
+
+	deleted, err := deleteContainer.NewUseCase(w.client, w.translator).Execute(ctx, &deleteContainer.Request{VMUUID: vmUUID, ID: named("web"), Force: true, OwnerUUID: ownerUUID})
+	require.NoError(t, err)
+	require.Empty(t, deleted.ValidationErrors)
+
+	since := w.containerKept(t, vmUUID, named("web"), "made again", func(c containerKind.Container) bool {
+		return c.Metadata.UUID != snapshotted.Metadata.UUID && c.Status.Status.State == containerKind.Running
+	})
+
+	w.stack(t, stackUUID, "running with what was made again", func(s presenter.StackDetail) bool {
+		return s.State == "running" && w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == since.Metadata.UUID
+	})
+
+	w.restore(t, vmUUID, snapshotUUID)
+
+	t.Run("the container the restored disk holds is taken in again as the stack's, as its graph would have made it", func(t *testing.T) {
+		adopted := eventually(t, "the container the restored disk holds taken in", func(ctx context.Context) (containerKind.Container, error) {
+			r, err := w.resources.GetOne(ctx, containerKind.Name, snapshotted.Metadata.UUID)
+			if err != nil {
+				return containerKind.Container{}, err
+			}
+
+			return kind.Decode[containerKind.Spec, containerKind.Status](r.Raw)
+		}, func(containerKind.Container) bool { return true })
+
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: stackUUID}}, adopted.Metadata.Owners, "its stack's, from the moment it is taken in")
+		assert.Equal(t, map[string]string{stackKind.LabelStack: stackUUID, stackKind.LabelService: "web"}, adopted.Metadata.Labels, "labelled as the stack's, and as its service")
+		assert.Equal(t, named("web"), adopted.Metadata.Name)
+		assert.Equal(t, named("web"), adopted.Spec.Name)
+	})
+
+	t.Run("and what was made since the snapshot is forgotten", func(t *testing.T) {
+		require.Eventually(t, func() bool {
+			_, err := w.resources.GetOne(ctx, containerKind.Name, since.Metadata.UUID)
+
+			return errors.Is(err, domain.ErrNotExists)
+		}, settle, beat, "what the restored disk does not hold was never forgotten")
+
+		c, there := w.dockerd.Holds(t, vmUUID).Container(named("web"))
+		require.True(t, there)
+		assert.Equal(t, snapshotted.Metadata.UUID, c.Labels[blockKinds.Label(containerKind.Name)], "one web, the one the snapshot holds")
+	})
+
+	t.Run("the stack runs with it, which its record names as its service's", func(t *testing.T) {
+		w.stack(t, stackUUID, "running with the container taken in", func(s presenter.StackDetail) bool {
+			return s.State == "running" && w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == snapshotted.Metadata.UUID
+		})
+
+		web := w.stackRecord(t, stackUUID).Status.Services[1]
+		assert.Equal(t, stackKind.ServiceStatus{Name: "web", State: stackKind.ServiceRunning, Containers: []stackKind.ContainerStatus{{ID: snapshotted.Metadata.UUID, Name: named("web"), State: "running"}}}, web)
+	})
+
+	t.Run("deleted, the stack removes it as any container it made, and keeps its volume and its vm", func(t *testing.T) {
+		removed, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, removed.ValidationErrors)
+
+		require.Eventually(t, func() bool {
+			_, err := w.resources.GetOne(ctx, stackKind.Name, stackUUID)
+
+			return errors.Is(err, domain.ErrNotExists)
+		}, settle, beat, "the stack was never removed")
+
+		assert.Empty(t, w.containerRecords(t, vmUUID))
+
+		held := w.dockerd.Holds(t, vmUUID)
+
+		for _, service := range []string{"db", "web"} {
+			_, there := held.Container(named(service))
+			assert.False(t, there, "%s went with it", service)
+		}
+
+		_, networked := held.Network(named("backend"))
+		assert.False(t, networked, "and so did its network")
+
+		assert.True(t, held.Volume(named("data")), "its volume stays")
+
+		_, kept := w.findBlock(t, volumeKind.Name, vmUUID, named("data"))
+		assert.True(t, kept)
+
+		w.stored(t, vmUUID, "kept", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+	})
 }

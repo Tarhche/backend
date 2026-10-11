@@ -83,7 +83,8 @@ func TestNetworks_Adopt(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	adopted, ok := blockstest.New().Networks.Adopt(kind.Observation{UUID: "n-uuid", Status: status})
+	adopted, ok, err := blockstest.New().Networks.Adopt(context.Background(), kind.Observation{UUID: "n-uuid", Status: status})
+	require.NoError(t, err)
 	require.True(t, ok)
 
 	var spec networkKind.Spec

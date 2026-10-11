@@ -18,6 +18,7 @@ import (
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
@@ -187,6 +188,37 @@ func TestBlocks_Witnessed(t *testing.T) {
 
 		_, kept = w.Kept(containerKind.Name, "from-the-snapshot")
 		assert.False(t, kept, "only the first look after the restore takes anything in")
+	})
+
+	t.Run("and one its labels say is a stack's, of a stack that is there, is taken in as that stack's, as its kind says", func(t *testing.T) {
+		t.Parallel()
+
+		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
+		w := blockstest.New(vmtest.WithVMs(restored))
+
+		shop, err := kind.Encode(stackKind.Stack{
+			Kind:     stackKind.Name,
+			Metadata: kind.Metadata{UUID: "stack-uuid", Name: "shop", Slug: "shop-abcde", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+			Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+			Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running}},
+		})
+		require.NoError(t, err)
+
+		w.Keep(shop)
+
+		labels := labelled(t, "from-the-snapshot")
+		labels[stackKind.LabelStack] = "stack-uuid"
+		labels[stackKind.LabelService] = "web"
+
+		witnessed(t, w, at, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "shop-abcde_web", State: "running", Labels: labels}))
+
+		adopted, kept := w.Kept(containerKind.Name, "from-the-snapshot")
+		require.True(t, kept)
+
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}, adopted.Metadata.Owners, "its stack's")
+		assert.Equal(t, map[string]string{stackKind.LabelStack: "stack-uuid", stackKind.LabelService: "web"}, adopted.Metadata.Labels)
+		assert.Equal(t, "shop-abcde_web", adopted.Metadata.Name)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, adopted.Metadata.Refs, "living in its vm, which does not own it")
 	})
 
 	t.Run("nor long after the restore", func(t *testing.T) {

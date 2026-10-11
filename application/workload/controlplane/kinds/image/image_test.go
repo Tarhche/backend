@@ -250,6 +250,7 @@ func TestImages_Named(t *testing.T) {
 	assert.True(t, w.Images.Named(kept, "docker.io/library/nginx"))
 	assert.False(t, w.Images.Named(kept, "nginx:1.27"))
 
-	_, adopted := w.Images.Adopt(kind.Observation{UUID: "i"})
+	_, adopted, err := w.Images.Adopt(context.Background(), kind.Observation{UUID: "i"})
+	require.NoError(t, err)
 	assert.False(t, adopted, "nothing labels an image, so nothing is known to have been the platform's")
 }

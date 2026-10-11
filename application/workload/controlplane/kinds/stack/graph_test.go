@@ -956,13 +956,17 @@ func commands(g *stackGraph, kinds ...string) []string {
 }
 
 // applied is a stack of shop's in vm-1, kept deploying, once its graph, as
-// policy types its edges, made what it needs and then it, and the executor
-// that made it.
-func applied(t *testing.T, policy graph.DependencyPolicy) (*stackGraph, *execute.Executor, *graph.Plan) {
+// policy types its edges, made what it needs and then it, with what kept
+// says kept before, and the executor that made it.
+func applied(t *testing.T, policy graph.DependencyPolicy, kept ...kind.Raw) (*stackGraph, *execute.Executor, *graph.Plan) {
 	t.Helper()
 
 	g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 	g.Keep(aStack("s-1", "vm-1", shop))
+
+	for _, r := range kept {
+		g.Keep(r)
+	}
 
 	executor, err := execute.New(g.kinds, ownership.New(g.Registry, g.Resources, nil), executionsMemory.NewRepository(), nil)
 	require.NoError(t, err)
@@ -1011,6 +1015,49 @@ func TestGraph_applied(t *testing.T) {
 		data := blockRecord(t, g, volumeKind.Name, "shop_data")
 		assert.Empty(t, data.Metadata.Owners, "and its volume is used, and owned by nothing")
 		assert.Contains(t, r.Metadata.Refs, kind.Reference{Kind: volumeKind.Name, UUID: data.Metadata.UUID})
+	})
+
+	t.Run("a network and a volume of its names that nothing owns, as what a restored disk holds is taken in, are made nothing of again, and are its own once its graph is carried out, as it would have made them", func(t *testing.T) {
+		t.Parallel()
+
+		taken := func(kindName string, uuid string, name string, spec any, status any) kind.Raw {
+			raw, err := kind.Encode(kind.Resource[any, any]{
+				Kind: kindName,
+				Metadata: kind.Metadata{
+					UUID:      uuid,
+					Name:      name,
+					OwnerUUID: "owner",
+					Refs:      []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}},
+					Node:      vmtest.Node,
+				},
+				Spec:   spec,
+				Status: status,
+			})
+			require.NoError(t, err)
+
+			return raw
+		}
+
+		g, _, _ := applied(t, graph.DefaultPolicy(),
+			taken(networkKind.Name, "n-back", "shop_back", networkKind.Spec{Name: "shop_back"}, networkKind.Status{Status: kind.Status{State: networkKind.Present, Expected: networkKind.Present}, Docker: &networkKind.Docker{ID: "n1", Name: "shop_back"}}),
+			taken(volumeKind.Name, "v-data", "shop_data", volumeKind.Spec{Name: "shop_data"}, volumeKind.Status{Status: kind.Status{State: volumeKind.Present, Expected: volumeKind.Present}, Docker: &volumeKind.Docker{Name: "shop_data"}}),
+		)
+
+		made := commands(g, networkKind.Name, volumeKind.Name)
+		assert.NotContains(t, made, "create network/shop_back", "found by its name, and made nothing of again")
+		assert.NotContains(t, made, "create volume/shop_data")
+
+		back := blockRecord(t, g, networkKind.Name, "shop_back")
+		assert.Equal(t, "n-back", back.Metadata.UUID)
+		assert.Len(t, back.Metadata.Owners, 4, "owned by it and by what joins it")
+		assert.Contains(t, back.Metadata.Owners, root)
+
+		data := blockRecord(t, g, volumeKind.Name, "shop_data")
+		assert.Equal(t, "v-data", data.Metadata.UUID)
+		assert.Empty(t, data.Metadata.Owners, "used, and owned by nothing, as a volume it made is")
+
+		_, r, _ := storedStack(t, g, "s-1")
+		assert.Contains(t, r.Metadata.Refs, kind.Reference{Kind: volumeKind.Name, UUID: "v-data"})
 	})
 
 	t.Run("removed, its containers go in the reverse of the order they depend on one another, then its networks, and its volume and its vm stay", func(t *testing.T) {

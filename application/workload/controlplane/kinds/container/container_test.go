@@ -3,6 +3,7 @@ package container_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -617,7 +618,7 @@ func TestContainers_Prepare(t *testing.T) {
 func TestContainers_Adopt(t *testing.T) {
 	t.Parallel()
 
-	w := blockstest.New()
+	ctx := context.Background()
 
 	spec, err := containerKind.SpecLabel(containerKind.Spec{Name: "web", Image: "nginx:1.27", Env: []string{"A=1"}, RestartPolicy: containerKind.RestartNo})
 	require.NoError(t, err)
@@ -629,27 +630,121 @@ func TestContainers_Adopt(t *testing.T) {
 		return encoded
 	}
 
-	adopted, ok := w.Containers.Adopt(kind.Observation{
-		UUID:   "c-uuid",
-		Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}},
-		Status: status(containerKind.Completed, map[string]string{containerKind.LabelSpec: spec}),
+	inVM1 := []kind.Reference{{Kind: "vm", UUID: "vm-1"}}
+
+	t.Run("as it was asked for, which its labels carry, expected to be doing what it does", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New()
+
+		adopted, ok, err := w.Containers.Adopt(ctx, kind.Observation{UUID: "c-uuid", Owners: inVM1, Status: status(containerKind.Completed, map[string]string{containerKind.LabelSpec: spec})})
+		require.NoError(t, err)
+		require.True(t, ok)
+
+		var read containerKind.Spec
+		require.NoError(t, json.Unmarshal(adopted.Spec, &read))
+
+		assert.Equal(t, "web", adopted.Name)
+		assert.Equal(t, []string{"A=1"}, read.Env, "as it was asked for, which its label carries")
+		assert.Equal(t, "vm-1", read.VM.UUID)
+		assert.Equal(t, containerKind.Running, adopted.Expected, "a one-off that ended is still expected running")
+		assert.Empty(t, adopted.Owners, "nobody's")
+		assert.Empty(t, adopted.Labels)
+
+		stoppedOne, ok, err := w.Containers.Adopt(ctx, kind.Observation{UUID: "c-uuid", Status: status(containerKind.Stopped, map[string]string{containerKind.LabelSpec: spec})})
+		require.NoError(t, err)
+		require.True(t, ok)
+		assert.Equal(t, containerKind.Stopped, stoppedOne.Expected, "and one stopped is expected stopped")
+
+		_, ok, err = w.Containers.Adopt(ctx, kind.Observation{UUID: "c-uuid", Status: status(containerKind.Running, nil)})
+		require.NoError(t, err)
+		assert.False(t, ok, "one whose spec its labels do not carry cannot be told")
 	})
-	require.True(t, ok)
 
-	var read containerKind.Spec
-	require.NoError(t, json.Unmarshal(adopted.Spec, &read))
+	// a stack's, in the vm stackVM names, under the slug shop-abcde.
+	aStack := func(t *testing.T, uuid string, stackVM string) kind.Raw {
+		t.Helper()
 
-	assert.Equal(t, "web", adopted.Name)
-	assert.Equal(t, []string{"A=1"}, read.Env, "as it was asked for, which its label carries")
-	assert.Equal(t, "vm-1", read.VM.UUID)
-	assert.Equal(t, containerKind.Running, adopted.Expected, "a one-off that ended is still expected running")
+		raw, err := kind.Encode(stackKind.Stack{
+			Kind:     stackKind.Name,
+			Metadata: kind.Metadata{UUID: uuid, Name: "shop", Slug: "shop-abcde", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: stackVM}}},
+			Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: stackVM}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+			Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running}},
+		})
+		require.NoError(t, err)
 
-	stoppedOne, ok := w.Containers.Adopt(kind.Observation{UUID: "c-uuid", Status: status(containerKind.Stopped, map[string]string{containerKind.LabelSpec: spec})})
-	require.True(t, ok)
-	assert.Equal(t, containerKind.Stopped, stoppedOne.Expected, "and one stopped is expected stopped")
+		return raw
+	}
 
-	_, ok = w.Containers.Adopt(kind.Observation{UUID: "c-uuid", Status: status(containerKind.Running, nil)})
-	assert.False(t, ok, "one whose spec its labels do not carry cannot be told")
+	stackLabels := func(stackUUID string) map[string]string {
+		return map[string]string{containerKind.LabelSpec: spec, stackKind.LabelStack: stackUUID, stackKind.LabelService: "web"}
+	}
+
+	t.Run("one its labels say is a service of a stack in its vm is the stack's again, as the stack's graph makes the container of a service", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New()
+		w.Keep(aStack(t, "stack-1", "vm-1"))
+
+		adopted, ok, err := w.Containers.Adopt(ctx, kind.Observation{UUID: "c-uuid", Owners: inVM1, Status: status(containerKind.Running, stackLabels("stack-1"))})
+		require.NoError(t, err)
+		require.True(t, ok)
+
+		var read containerKind.Spec
+		require.NoError(t, json.Unmarshal(adopted.Spec, &read))
+
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "stack-1"}}, adopted.Owners, "owned by its stack")
+		assert.Equal(t, map[string]string{stackKind.LabelStack: "stack-1", stackKind.LabelService: "web"}, adopted.Labels, "labelled as the stack's, and as the service")
+		assert.Equal(t, "shop-abcde_web", adopted.Name, "named under its stack's slug, as its stack's graph knows it")
+		assert.Equal(t, "shop-abcde_web", read.Name)
+		assert.Equal(t, "nginx:1.27", read.Image, "and as it was asked for")
+		assert.Equal(t, "vm-1", read.VM.UUID)
+	})
+
+	for name, tt := range map[string]struct {
+		stacks []kind.Raw
+		labels map[string]string
+	}{
+		"one naming a stack that is not there": {
+			labels: stackLabels("gone"),
+		},
+		"one naming a stack in another vm": {
+			stacks: []kind.Raw{aStack(t, "stack-2", "vm-2")},
+			labels: stackLabels("stack-2"),
+		},
+		"one naming no service of the stack": {
+			stacks: []kind.Raw{aStack(t, "stack-1", "vm-1")},
+			labels: map[string]string{containerKind.LabelSpec: spec, stackKind.LabelStack: "stack-1"},
+		},
+	} {
+		t.Run(name+" is nobody's, as any other is: its labels confer nothing", func(t *testing.T) {
+			t.Parallel()
+
+			w := blockstest.New()
+			for _, s := range tt.stacks {
+				w.Keep(s)
+			}
+
+			adopted, ok, err := w.Containers.Adopt(ctx, kind.Observation{UUID: "c-uuid", Owners: inVM1, Status: status(containerKind.Running, tt.labels)})
+			require.NoError(t, err)
+			require.True(t, ok)
+
+			assert.Empty(t, adopted.Owners)
+			assert.Empty(t, adopted.Labels)
+			assert.Equal(t, "web", adopted.Name, "as it was asked for")
+		})
+	}
+
+	t.Run("what reading its stack fails with is an error, and it is not taken in", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New()
+		w.Memory.Fail = errors.New("the database is gone")
+
+		_, ok, err := w.Containers.Adopt(ctx, kind.Observation{UUID: "c-uuid", Owners: inVM1, Status: status(containerKind.Running, stackLabels("stack-1"))})
+		assert.ErrorIs(t, err, w.Memory.Fail)
+		assert.False(t, ok)
+	})
 }
 
 func TestContainers_Named(t *testing.T) {

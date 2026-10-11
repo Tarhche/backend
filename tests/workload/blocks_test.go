@@ -26,7 +26,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworks"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/createSnapshot"
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/getSnapshot"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/createVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/restoreVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/startVM"
@@ -497,20 +496,7 @@ func TestARestoredDockerVM(t *testing.T) {
 
 	w.vmIn(t, vmUUID, "stopped")
 
-	taken, err := createSnapshot.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createSnapshot.Request{VMUUID: vmUUID, Name: "before", OwnerUUID: ownerUUID})
-	require.NoError(t, err)
-	require.Empty(t, taken.ValidationErrors)
-
-	snapshotUUID := taken.Snapshot.UUID
-
-	eventually(t, "the snapshot being ready", func(ctx context.Context) (presenter.Snapshot, error) {
-		read, err := getSnapshot.NewUseCase(w.client, w.owners).Execute(ctx, &getSnapshot.Request{UUID: snapshotUUID, OwnerUUID: ownerUUID})
-		if err != nil {
-			return presenter.Snapshot{}, err
-		}
-
-		return read.Snapshot, nil
-	}, func(s presenter.Snapshot) bool { return s.State == "ready" })
+	snapshotUUID := w.snapshot(t, vmUUID, "before")
 
 	started, err := startVM.NewUseCase(w.client, w.translator).Execute(ctx, &startVM.Request{UUID: vmUUID, OwnerUUID: ownerUUID})
 	require.NoError(t, err)
@@ -531,13 +517,7 @@ func TestARestoredDockerVM(t *testing.T) {
 		return !there && len(w.containerRecords(t, vmUUID)) == 1
 	}, settle, beat, "kept was never deleted")
 
-	restored, err := restoreVM.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, &restoreVM.Request{UUID: vmUUID, OwnerUUID: ownerUUID, SnapshotUUID: snapshotUUID})
-	require.NoError(t, err)
-	require.Empty(t, restored.ValidationErrors)
-
-	w.stored(t, vmUUID, "running from the snapshot", func(v vmKind.VM) bool {
-		return v.Status.State == vmKind.Running && !v.Status.RestoredAt.IsZero()
-	})
+	w.restore(t, vmUUID, snapshotUUID)
 
 	t.Run("its records are what its restored disk holds", func(t *testing.T) {
 		held := w.dockerd.Holds(t, vmUUID)
@@ -560,6 +540,38 @@ func TestARestoredDockerVM(t *testing.T) {
 		listed, err := getVMContainers.NewUseCase(w.client, w.translator).Execute(ctx, &getVMContainers.Request{VMUUID: vmUUID, OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		assert.False(t, slices.ContainsFunc(listed.Items, func(c presenter.Container) bool { return c.Name == "later" }))
+	})
+}
+
+// snapshot is a snapshot of the VM vmUUID names, taken from the dashboard
+// under name, once it is ready.
+func (w *workload) snapshot(t *testing.T, vmUUID string, name string) string {
+	t.Helper()
+
+	taken, err := createSnapshot.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(t.Context(), &createSnapshot.Request{VMUUID: vmUUID, Name: name, OwnerUUID: ownerUUID})
+	require.NoError(t, err)
+	require.Empty(t, taken.ValidationErrors)
+	require.NotNil(t, taken.Snapshot)
+
+	w.snapshotIn(t, taken.Snapshot.UUID, "ready")
+
+	return taken.Snapshot.UUID
+}
+
+// restore restores the VM vmUUID names to a snapshot from the dashboard, and
+// is the VM as the control plane keeps it once it runs from the snapshot:
+// restored since the restore was asked.
+func (w *workload) restore(t *testing.T, vmUUID string, snapshotUUID string) vmKind.VM {
+	t.Helper()
+
+	asked := time.Now()
+
+	restored, err := restoreVM.NewUseCase(w.client, w.validator, w.translator).Execute(t.Context(), &restoreVM.Request{UUID: vmUUID, OwnerUUID: ownerUUID, SnapshotUUID: snapshotUUID})
+	require.NoError(t, err)
+	require.Empty(t, restored.ValidationErrors)
+
+	return w.stored(t, vmUUID, "running from the snapshot", func(v vmKind.VM) bool {
+		return v.Status.State == vmKind.Running && v.Status.RestoredAt.After(asked)
 	})
 }
 

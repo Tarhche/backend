@@ -18,10 +18,11 @@
 // What is found in a Docker VM labelled as the platform's with no record of
 // its own, in the first look into a VM whose disk was just restored from a
 // snapshot, is taken in again, as its kind says it is read off what was
-// observed of it (Kind.Adopt): the restored disk is what the VM holds now,
-// and it is what its stored building blocks are reset to. Any other time, it
-// is shown as nobody's, which is what a record deleted a moment before its
-// node said so would otherwise come back as.
+// observed of it and what it belongs to (Kind.Adopt): a stack's container is
+// its stack's again, while the stack is there. The restored disk is what the
+// VM holds now, and it is what its stored building blocks are reset to. Any
+// other time, it is shown as nobody's, which is what a record deleted a
+// moment before its node said so would otherwise come back as.
 //
 // Inside a Docker VM, a building block is named by its Docker id or its name,
 // as the dashboard has always named them, and the strategy resolves that to
@@ -65,8 +66,10 @@ const (
 type Kind interface {
 	// Adopt is what an object labelled as the platform's, found with no
 	// record in a Docker VM whose disk was just restored, is taken in as,
-	// read off what was observed of it, or false when it cannot be told.
-	Adopt(observed kind.Observation) (Adoption, bool)
+	// read off what was observed of it, and what it belongs to as the
+	// records kept say, or false when it cannot be told. What reading those
+	// records fails with is an error, and nothing is taken in.
+	Adopt(ctx context.Context, observed kind.Observation) (Adoption, bool, error)
 
 	// Named reports whether name names r inside its VM otherwise than by
 	// its uuid, its Docker id or its name: a container by the name it was
@@ -94,6 +97,13 @@ type Adoption struct {
 	Name     string
 	Spec     json.RawMessage
 	Expected kind.State
+
+	// Owners are what owns it beside the VM it lives in, which owns
+	// nothing, and Labels what its record is labelled with, as what made it
+	// had them: a stack's container is its stack's, labelled as its stack's
+	// graph labels the container of a service. With none, nothing owns it.
+	Owners []kind.Reference
+	Labels map[string]string
 }
 
 // Dependencies are what the shared code reads and asks.
@@ -412,13 +422,13 @@ func (b *Blocks) adoptable(v vmKind.VM, at time.Time) bool {
 }
 
 // adopt takes in what was found labelled as the platform's in a restored VM,
-// as the kind reads it off what was observed of it, living in the VM, its
-// spec its first generation, and reports whether it did. One another control
-// plane took in first is taken in.
+// as the kind reads it off what was observed of it, living in the VM, owned
+// by what the kind says owns it, its spec its first generation, and reports
+// whether it did. One another control plane took in first is taken in.
 func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instance kind.Observation, at time.Time) (bool, error) {
-	adoption, ok := b.kind.Adopt(instance)
-	if !ok {
-		return false, nil
+	adoption, ok, err := b.kind.Adopt(ctx, instance)
+	if err != nil || !ok {
+		return false, err
 	}
 
 	common, err := resource.Common(instance.Status)
@@ -443,6 +453,8 @@ func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instan
 			UUID:       instance.UUID,
 			Name:       adoption.Name,
 			OwnerUUID:  v.Metadata.OwnerUUID,
+			Labels:     adoption.Labels,
+			Owners:     slices.Clone(adoption.Owners),
 			Refs:       []kind.Reference{{Kind: blockKinds.Parent, UUID: v.Metadata.UUID}},
 			Node:       nodeName,
 			Generation: 1,
@@ -455,7 +467,7 @@ func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instan
 
 	switch {
 	case err == nil:
-		b.Logger.InfoContext(ctx, "took in what a restored vm holds labelled as the platform's", "kind", b.descriptor.Name, "uuid", instance.UUID, "vm", v.Metadata.UUID)
+		b.Logger.InfoContext(ctx, "took in what a restored vm holds labelled as the platform's", "kind", b.descriptor.Name, "uuid", instance.UUID, "vm", v.Metadata.UUID, "owners", adoption.Owners)
 
 		return true, nil
 	case errors.Is(err, domain.ErrAlreadyExists):
