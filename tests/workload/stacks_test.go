@@ -729,16 +729,18 @@ func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
 
 	// being made again, which its vm's dockerd has said nothing of, it is
 	// listed by the stack's detail all the same, as its record says it is
-	// the stack's.
+	// the stack's. What a heartbeat taken before the one deleted went says
+	// of it may be shown beside it for a while, as nobody's.
 	detail, err := w.readStack(ctx, stackUUID)
 	require.NoError(t, err)
 
-	remade := slices.IndexFunc(detail.Containers, func(c presenter.Container) bool { return c.Name == web })
+	remade := slices.IndexFunc(detail.Containers, func(c presenter.Container) bool { return c.Name == web && !c.Unmanaged })
 	require.GreaterOrEqual(t, remade, 0, "the stack's detail lists %s, being made again: %+v", web, detail.Containers)
+	assert.Empty(t, detail.Containers[remade].ID, "which docker never had")
 	assert.Equal(t, "web", detail.Containers[remade].Service)
 	assert.Equal(t, stackUUID, detail.Containers[remade].StackUUID)
 	assert.Contains(t, []string{"created", "dead"}, detail.Containers[remade].State, "being made, or its making failed, in docker's words")
-	assert.Len(t, detail.Containers, 2, "beside db")
+	assert.True(t, slices.ContainsFunc(detail.Containers, func(c presenter.Container) bool { return c.Service == "db" && !c.Unmanaged }), "beside db")
 
 	w.dockerd.Allow("nginx:alpine")
 
