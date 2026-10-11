@@ -372,9 +372,9 @@ networks:
 // is its volume, once nothing mounts it, and its VM, under its uuid and its
 // slug, and then everything in it; stopped and started, its containers stop
 // and start in the order they depend on one another; stopped, one of its
-// containers, deleted, is made again stopped, though its making fails at
-// first, and it stays stopped; and deleted, it takes its containers and its
-// network with it, and leaves its volume and its VM.
+// containers, deleted, is made again stopped, and it stays stopped; and
+// deleted, it takes its containers and its network with it, and leaves its
+// volume and its VM.
 func TestAStacksGraph(t *testing.T) {
 	t.Parallel()
 
@@ -621,49 +621,6 @@ func TestAStacksGraph(t *testing.T) {
 		assert.Equal(t, "stop "+named("web"), made[len(made)-1], "what docker starts as it makes it is stopped once it is made, and nothing starts it after")
 	})
 
-	t.Run("stopped, one of its containers, deleted while its image cannot be pulled, fails to be made, and is made stopped once it can be, never asked to run, and it stays stopped", func(t *testing.T) {
-		w.stack(t, stackUUID, "stopped", func(s presenter.StackDetail) bool { return s.State == "stopped" })
-
-		before := w.containerRecord(t, vmUUID, named("web"))
-		did := len(w.dockerd.Did(vmUUID))
-
-		// its registry is down, and its VM holds no copy of its image.
-		w.dockerd.Refuse("nginx:alpine")
-		w.dockerd.Forget(t, vmUUID, "nginx:alpine")
-
-		deleted, err := deleteContainer.NewUseCase(w.client, w.translator).Execute(ctx, &deleteContainer.Request{VMUUID: vmUUID, ID: named("web"), Force: true, OwnerUUID: ownerUUID})
-		require.NoError(t, err)
-		require.Empty(t, deleted.ValidationErrors)
-
-		failed := w.containerKept(t, vmUUID, named("web"), "made again, and failed", func(c containerKind.Container) bool {
-			return c.Metadata.UUID != before.Metadata.UUID && c.Status.Status.State == containerKind.Failed
-		})
-
-		assert.Nil(t, failed.Status.Docker, "docker never had it")
-		assert.Equal(t, containerKind.Stopped, failed.Status.Expected, "admitted expected stopped, as its stack is")
-
-		w.dockerd.Allow("nginx:alpine")
-
-		again := w.containerKept(t, vmUUID, named("web"), "made once its image can be pulled", func(c containerKind.Container) bool {
-			return c.Metadata.UUID == failed.Metadata.UUID && c.Status.Docker != nil
-		})
-
-		assert.Equal(t, containerKind.Stopped, again.Status.Expected, "expected stopped still, by the run after the one that failed")
-
-		s := w.stack(t, stackUUID, "stopped with it", func(s presenter.StackDetail) bool {
-			return s.State == "stopped" && w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == again.Metadata.UUID
-		})
-		assert.Equal(t, "stopped", s.State, "and not degraded")
-
-		c, there := w.dockerd.Holds(t, vmUUID).Container(named("web"))
-		require.True(t, there)
-		assert.NotEqual(t, "running", c.State, "it is left stopped")
-
-		made := w.dockerd.Did(vmUUID)[did:]
-		require.Contains(t, made, "create "+named("web"))
-		assert.Equal(t, "stop "+named("web"), made[len(made)-1], "made by its create, what docker starts as it makes it stopped once it is made, and nothing starts it after")
-	})
-
 	t.Run("deleted, it takes its containers and its network with it, and leaves its volume and its vm", func(t *testing.T) {
 		before := len(w.dockerd.Did(vmUUID))
 
@@ -713,6 +670,86 @@ func TestAStacksGraph(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, status, string(body))
 		assert.Contains(t, string(body), `"compose.services.web.healthcheck"`)
 	})
+}
+
+// TestAStoppedStacksContainerWhoseMakingFails stops a stack, and deletes its
+// web server while no registry has its image and its VM holds none: the
+// stack's graph makes it again, expected stopped as its stack is, and its
+// create fails, docker never having it, which fails the stack's plan. Once
+// the image can be pulled, the run after makes it by its create, still
+// expected stopped, what docker starts as it makes it stopped, and nothing
+// asks it to run: the stack is stopped again, and not degraded.
+//
+// It runs alone, not in parallel: the second it takes, its registry down and
+// its stack backed off, moves when the tests beside it wait on what a node
+// says, and some of those read a record as soon as a dockerd holds what it is
+// to say, before the node has said it.
+func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
+	w := start(t)
+	ctx := t.Context()
+
+	deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+		Name:      "store",
+		Compose:   storeCompose,
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, deployed.ValidationErrors)
+	require.NotNil(t, deployed.Stack)
+
+	stackUUID, slug, vmUUID := deployed.Stack.UUID, deployed.Stack.Slug, deployed.VM.UUID
+	web := slug + "_web"
+
+	w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+	stopped, err := stopStack.NewUseCase(w.client, w.translator).Execute(ctx, &stopStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
+	require.NoError(t, err)
+	require.Empty(t, stopped.ValidationErrors)
+
+	w.stack(t, stackUUID, "stopped", func(s presenter.StackDetail) bool { return s.State == "stopped" })
+
+	before := w.containerRecord(t, vmUUID, web)
+	did := len(w.dockerd.Did(vmUUID))
+
+	// its registry is down, and its VM holds no copy of its image.
+	w.dockerd.Refuse("nginx:alpine")
+	w.dockerd.Forget(t, vmUUID, "nginx:alpine")
+
+	deleted, err := deleteContainer.NewUseCase(w.client, w.translator).Execute(ctx, &deleteContainer.Request{VMUUID: vmUUID, ID: web, Force: true, OwnerUUID: ownerUUID})
+	require.NoError(t, err)
+	require.Empty(t, deleted.ValidationErrors)
+
+	failed := w.containerKept(t, vmUUID, web, "made again, and failed", func(c containerKind.Container) bool {
+		return c.Metadata.UUID != before.Metadata.UUID && c.Status.Status.State == containerKind.Failed
+	})
+
+	assert.Nil(t, failed.Status.Docker, "docker never had it")
+	assert.Equal(t, containerKind.Stopped, failed.Status.Expected, "admitted expected stopped, as its stack is")
+
+	w.dockerd.Allow("nginx:alpine")
+
+	again := w.containerKept(t, vmUUID, web, "made once its image can be pulled", func(c containerKind.Container) bool {
+		return c.Metadata.UUID == failed.Metadata.UUID && c.Status.Docker != nil
+	})
+
+	assert.Equal(t, containerKind.Stopped, again.Status.Expected, "expected stopped still, by the run after the one that failed")
+
+	// failed while web could not be made, it is stopped once web is: it is
+	// waited on as it is, failed on the way.
+	s := eventually(t, "the stack stopped with it", func(ctx context.Context) (presenter.StackDetail, error) {
+		return w.readStack(ctx, stackUUID)
+	}, func(s presenter.StackDetail) bool {
+		return s.State == "stopped" && w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == again.Metadata.UUID
+	})
+	assert.Equal(t, "stopped", s.State, "and not degraded")
+
+	c, there := w.dockerd.Holds(t, vmUUID).Container(web)
+	require.True(t, there)
+	assert.NotEqual(t, "running", c.State, "it is left stopped")
+
+	made := w.dockerd.Did(vmUUID)[did:]
+	require.Contains(t, made, "create "+web)
+	assert.Equal(t, "stop "+web, made[len(made)-1], "made by its create, what docker starts as it makes it stopped once it is made, and nothing starts it after")
 }
 
 // TestAStackWhoseFileCannotBeRead deletes a stack whose file the platform
