@@ -656,6 +656,17 @@ type stacked struct {
 // has no such service; and a container of a service the stack has a record
 // of already, found in the restored disk, taken in from it, or made since.
 // What reading the records fails with is an error.
+//
+// The check, and the create of the record that follows it (blocks' adopt),
+// are not one write. A container is taken in once whoever takes it in, its
+// record's uuid being the one its labels carry; but two containers labelled
+// as the same service of a stack, each heard by another control plane at
+// the same time, can both find no record named so, and both be taken in as
+// the service's. Two such containers on one disk are two that something
+// other than the stack's graph made, which makes one container of a service,
+// named so. Nothing is removed for it: the stack's graph finds one of the
+// two as the service's container, by its name, and the other is kept as the
+// stack's beside it, and goes with the stack.
 func (s *Containers) stackOf(ctx context.Context, vmUUID string, docker containerKind.Docker) (*stacked, error) {
 	uuid, service := docker.Labels[stackKind.LabelStack], docker.Labels[stackKind.LabelService]
 	if len(uuid) == 0 || len(service) == 0 || len(vmUUID) == 0 {
