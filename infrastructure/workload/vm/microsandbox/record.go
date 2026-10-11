@@ -58,6 +58,12 @@ type record struct {
 	Failure string `json:"failure,omitempty"`
 
 	StartedAt time.Time `json:"started_at"`
+
+	// CreatedAt is when the instance was made, created or restored with
+	// nothing to replace: what its node said of one before then was another,
+	// under the same name, deleted since. A record kept before it was kept
+	// has none.
+	CreatedAt time.Time `json:"created_at,omitzero"`
 }
 
 // exit is how a main process ended.

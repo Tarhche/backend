@@ -188,6 +188,7 @@ type Instance struct {
 	ExitCode  int               `json:"exit_code"`
 	Reason    string            `json:"reason"`
 	StartedAt time.Time         `json:"started_at"`
+	CreatedAt time.Time         `json:"created_at,omitzero"`
 }
 
 func NewInstance(i vm.Instance) Instance {
@@ -201,6 +202,7 @@ func NewInstance(i vm.Instance) Instance {
 		ExitCode:  i.ExitCode,
 		Reason:    i.Reason,
 		StartedAt: i.StartedAt,
+		CreatedAt: i.CreatedAt,
 	}
 }
 
@@ -215,6 +217,7 @@ func (i Instance) ToVM() vm.Instance {
 		ExitCode:  i.ExitCode,
 		Reason:    i.Reason,
 		StartedAt: i.StartedAt,
+		CreatedAt: i.CreatedAt,
 	}
 }
 

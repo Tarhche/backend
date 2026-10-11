@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -160,6 +161,79 @@ func TestEngine_Lifecycle(t *testing.T) {
 			assert.Equal(t, tt.wantState, instance.State)
 		})
 	}
+}
+
+func TestEngine_CreatedAt(t *testing.T) {
+	t.Parallel()
+
+	made := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+
+	// clocked is an engine whose clock says made, and then a minute on each
+	// time it is read again.
+	clocked := func() *Engine {
+		var lock sync.Mutex
+
+		now := made.Add(-time.Minute)
+
+		return New(WithClock(func() time.Time {
+			lock.Lock()
+			defer lock.Unlock()
+
+			now = now.Add(time.Minute)
+
+			return now
+		}))
+	}
+
+	t.Run("an instance says when it was made, whatever is done to it after", func(t *testing.T) {
+		t.Parallel()
+
+		e := clocked()
+
+		created, err := e.Create(t.Context(), machine("vm-1"))
+		require.NoError(t, err)
+		assert.Equal(t, made, created.CreatedAt)
+
+		require.NoError(t, e.Stop(t.Context(), "vm-1"))
+		require.NoError(t, e.Start(t.Context(), "vm-1"))
+		require.NoError(t, e.Restart(t.Context(), "vm-1"))
+
+		var archived bytes.Buffer
+		_, err = e.Snapshot(t.Context(), "vm-1", &archived)
+		require.NoError(t, err)
+
+		restored, err := e.Restore(t.Context(), machine("vm-1"), &archived)
+		require.NoError(t, err)
+		assert.Equal(t, made, restored.CreatedAt, "a restore replaces its disk, not it")
+
+		listed, err := e.List(t.Context())
+		require.NoError(t, err)
+		require.Len(t, listed, 1)
+		assert.Equal(t, made, listed[0].CreatedAt)
+	})
+
+	t.Run("one deleted and made again under its name says when it was made again, and one restored with nothing to replace when it was restored", func(t *testing.T) {
+		t.Parallel()
+
+		e := clocked()
+
+		_, err := e.Create(t.Context(), machine("vm-1"))
+		require.NoError(t, err)
+
+		var archived bytes.Buffer
+		_, err = e.Snapshot(t.Context(), "vm-1", &archived)
+		require.NoError(t, err)
+
+		require.NoError(t, e.Delete(t.Context(), "vm-1"))
+
+		again, err := e.Create(t.Context(), machine("vm-1"))
+		require.NoError(t, err)
+		assert.True(t, again.CreatedAt.After(made), "made again since")
+
+		restored, err := e.Restore(t.Context(), machine("vm-2"), &archived)
+		require.NoError(t, err)
+		assert.True(t, restored.CreatedAt.After(again.CreatedAt))
+	})
 }
 
 func TestEngine_Capacity(t *testing.T) {

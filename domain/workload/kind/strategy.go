@@ -196,6 +196,18 @@ type Attacher interface {
 	Attach(ctx context.Context, action string, uuid string, owner string) (Session, error)
 }
 
+// Maker is a node strategy that says when its node made each instance it
+// holds, by the node's own clock. The delete of what nobody keeps a record of
+// (ActOnResource.Orphaned) is refused of what it made later than its node
+// first said it: that is another, made under its uuid since, a VM its graph
+// made again once its record went, whatever reached its node first. A
+// strategy that is not one deletes whatever it holds under the uuid.
+type Maker interface {
+	// Made is when the instance uuid names was made on this node, and false
+	// when the node holds none, or does not know when it made it.
+	Made(ctx context.Context, uuid string) (time.Time, bool, error)
+}
+
 // Prompt is a node strategy some of whose changes somebody waits on as they
 // happen: a code-runner snippet ending, which whoever ran it is watching its
 // page for. Its node asks it what it holds between beats too, as often as

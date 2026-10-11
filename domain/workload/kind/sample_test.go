@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
@@ -252,6 +253,30 @@ func (n *attachingBoxNode) Endpoint(_ context.Context, slug string, p port.Port)
 	}
 
 	return Endpoint{Port: 8080, Address: "vmhost-01:20000"}, nil
+}
+
+// makingBoxNode is a box's node strategy that says when its node made what it
+// holds: at made, when it knows, or what failure says.
+type makingBoxNode struct {
+	boxNode
+
+	made    time.Time
+	known   bool
+	failure error
+
+	asked []string
+}
+
+var _ Maker = &makingBoxNode{}
+
+func (n *makingBoxNode) Made(_ context.Context, uuid string) (time.Time, bool, error) {
+	n.asked = append(n.asked, uuid)
+
+	if n.failure != nil {
+		return time.Time{}, false, n.failure
+	}
+
+	return n.made, n.known, nil
 }
 
 // boxIngress finds the one box there is.

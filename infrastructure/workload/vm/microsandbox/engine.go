@@ -484,6 +484,7 @@ func (e *engine) view(i *instance, status msb.SandboxStatus, exists bool) vm.Ins
 		ID:        i.id,
 		Labels:    maps.Clone(r.Spec.Labels),
 		StartedAt: r.StartedAt,
+		CreatedAt: r.CreatedAt,
 	}
 
 	switch r.kind(e.dockerImage) {

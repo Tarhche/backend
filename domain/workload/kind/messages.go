@@ -48,6 +48,13 @@ type ActOnResource struct {
 	// Resource is the manifest as the control plane recorded it. Its spec
 	// and status stay raw until the kind's own strategy reads them.
 	Resource Raw `json:"resource"`
+
+	// Orphaned is, for the delete of what nobody keeps a record of (an
+	// orphan), when its node first said it, by the node's own clock: what the
+	// node made later than that under its uuid is not what it said, but
+	// another made since, and is not deleted (Maker). Any other command has
+	// none.
+	Orphaned time.Time `json:"orphaned,omitzero"`
 }
 
 // ResourceActedOn is what came of an ActOnResource.

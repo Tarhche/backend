@@ -439,6 +439,94 @@ func TestNode_Execute(t *testing.T) {
 	})
 }
 
+// TestNode_Made holds the delete of a VM nobody keeps a record of, an orphan,
+// to deleting only what the node's engine made no later than its node first
+// said it: a VM made again under its uuid since, by a command that reached the
+// node before the orphan's delete, is left.
+func TestNode_Made(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// orphaned carries out on f the delete of the VM uuid names, which
+	// nobody keeps a record of, as the control plane sends it: once its node
+	// has said it since said, by its own clock.
+	orphaned := func(f *fixture, uuid string, said time.Time) kind.ResourceActedOn {
+		return kind.BindNode[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), f.node).Execute(ctx, kind.ActOnResource{
+			ID:       "orphan-" + uuid,
+			Kind:     vmKind.Name,
+			UUID:     uuid,
+			Action:   vmKind.ActionDelete,
+			Node:     nodeName,
+			Resource: kind.Raw{Kind: vmKind.Name, Metadata: kind.Metadata{UUID: uuid, Node: nodeName}},
+			Orphaned: said,
+		})
+	}
+
+	t.Run("one made again under its uuid after its node first said the one it is asked to delete is refused, and stays", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+
+		// its node said the VM, which was deleted since, and the VM was made
+		// again a moment later, before the orphan's delete reached the node.
+		said := f.now()
+		f.pass(time.Second)
+		f.made(t, aVM("01", vmKind.Scheduled))
+
+		result := orphaned(f, "01", said)
+		assert.False(t, result.OK)
+		assert.True(t, result.Refused, result.Reason)
+
+		held, err := f.engine.Inspect(ctx, "01")
+		require.NoError(t, err, "the vm made again is left, disk and all")
+		assert.Equal(t, vm.InstanceRunning, held.State)
+		assert.Empty(t, f.connections.forgotten(), "and so is what is open into it")
+	})
+
+	t.Run("one made no later than its node first said it is what it said, and is deleted, disk and all", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		f.made(t, aVM("01", vmKind.Scheduled))
+
+		f.pass(time.Minute)
+
+		result := orphaned(f, "01", f.now())
+		assert.True(t, result.OK, result.Reason)
+
+		_, err := f.engine.Inspect(ctx, "01")
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	t.Run("one the node holds nothing of is gone already", func(t *testing.T) {
+		t.Parallel()
+
+		result := orphaned(newFixture(t), "01", time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC))
+		assert.True(t, result.OK, result.Reason)
+	})
+
+	t.Run("made says when the engine made a vm, and nothing of one it holds none of", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		f.made(t, aVM("01", vmKind.Scheduled))
+		made := f.now()
+
+		f.pass(time.Minute)
+		f.execute(t, aVM("01", vmKind.Restarting), vmKind.ActionRestart, nil)
+
+		at, known, err := f.node.Made(ctx, "01")
+		require.NoError(t, err)
+		assert.True(t, known)
+		assert.Equal(t, made, at, "a restart does not make it again")
+
+		_, known, err = f.node.Made(ctx, "02")
+		require.NoError(t, err)
+		assert.False(t, known)
+	})
+}
+
 func TestNode_Query(t *testing.T) {
 	t.Parallel()
 

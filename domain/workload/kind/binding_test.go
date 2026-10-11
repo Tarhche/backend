@@ -392,6 +392,84 @@ func TestNodeBinding_Execute(t *testing.T) {
 		assert.False(t, failed.Refused, "what merely failed was not refused")
 	})
 
+	t.Run("the delete of what nobody keeps a record of deletes only what its node made no later than it first said it", func(t *testing.T) {
+		t.Parallel()
+
+		said := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+
+		orphan := func(t *testing.T) ActOnResource {
+			c := aCommand(t, "delete", "")
+			c.Orphaned = said
+
+			return c
+		}
+
+		for name, tt := range map[string]struct {
+			strategy *makingBoxNode
+			command  func(t *testing.T) ActOnResource
+			ok       bool
+			refused  bool
+			asked    []string
+			executed []string
+		}{
+			"one made later than its node first said it is another, made since under its uuid, and is refused": {
+				strategy: &makingBoxNode{made: said.Add(time.Millisecond), known: true},
+				command:  orphan,
+				refused:  true,
+				asked:    []string{"box-uuid"},
+			},
+			"one made before is what its node said, and is deleted": {
+				strategy: &makingBoxNode{made: said.Add(-time.Minute), known: true},
+				command:  orphan,
+				ok:       true,
+				asked:    []string{"box-uuid"},
+				executed: []string{"delete box-uuid"},
+			},
+			"and so is one made as it said it": {
+				strategy: &makingBoxNode{made: said, known: true},
+				command:  orphan,
+				ok:       true,
+				asked:    []string{"box-uuid"},
+				executed: []string{"delete box-uuid"},
+			},
+			"one whose making its node cannot tell, or that it holds nothing of, is deleted as ever": {
+				strategy: &makingBoxNode{},
+				command:  orphan,
+				ok:       true,
+				asked:    []string{"box-uuid"},
+				executed: []string{"delete box-uuid"},
+			},
+			"one whose making cannot be read is not deleted, and fails": {
+				strategy: &makingBoxNode{failure: errors.New("the vmhost is not answering")},
+				command:  orphan,
+				asked:    []string{"box-uuid"},
+			},
+			"and nothing else is held to when it was made": {
+				strategy: &makingBoxNode{made: said.Add(time.Hour), known: true},
+				command:  func(t *testing.T) ActOnResource { return aCommand(t, "delete", "") },
+				ok:       true,
+				executed: []string{"delete box-uuid"},
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				result := BindNode[boxSpec, boxStatus](box(), tt.strategy).Execute(context.Background(), tt.command(t))
+
+				assert.Equal(t, tt.ok, result.OK, result.Reason)
+				assert.Equal(t, tt.refused, result.Refused, "refused")
+				assert.Equal(t, tt.asked, tt.strategy.asked, "asked when it was made")
+				assert.Equal(t, tt.executed, tt.strategy.executed, "executed")
+			})
+		}
+
+		plain := &boxNode{}
+		result := BindNode[boxSpec, boxStatus](box(), plain).Execute(context.Background(), orphan(t))
+
+		assert.True(t, result.OK, "a strategy that cannot say when it made what it holds deletes it")
+		assert.Equal(t, []string{"delete box-uuid"}, plain.executed)
+	})
+
 	t.Run("the strategy is given the payload as its action's own", func(t *testing.T) {
 		t.Parallel()
 

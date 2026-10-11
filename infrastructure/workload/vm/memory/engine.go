@@ -140,6 +140,10 @@ type instance struct {
 	reason    string
 	startedAt time.Time
 
+	// createdAt is when it was made: created, or restored with nothing to
+	// replace.
+	createdAt time.Time
+
 	// hostPorts is the host port each guest port was given. It is kept for as
 	// long as the instance is, so a restart or a restore keeps its ports.
 	hostPorts map[port.Port]int
@@ -237,6 +241,7 @@ func (e *Engine) Create(ctx context.Context, spec vm.Spec) (vm.Instance, error) 
 
 	i := &instance{
 		spec:      cloneSpec(spec),
+		createdAt: e.now(),
 		hostPorts: make(map[port.Port]int),
 		sessions:  make(map[*Session]struct{}),
 	}
@@ -462,7 +467,7 @@ func (e *Engine) Snapshot(ctx context.Context, id string, writer io.Writer) (vm.
 
 // Restore replaces the instance spec.ID names with what the archive holds, or
 // creates it. A replaced instance keeps its host ports, as a restored VM keeps
-// its ports.
+// its ports, and when it was made.
 func (e *Engine) Restore(ctx context.Context, spec vm.Spec, reader io.Reader) (vm.Instance, error) {
 	if len(spec.ID) == 0 {
 		return vm.Instance{}, errors.New("an instance is restored under an id")
@@ -490,7 +495,7 @@ func (e *Engine) Restore(ctx context.Context, spec vm.Spec, reader io.Reader) (v
 		i.logs = nil
 		i.stats = vm.Stats{}
 	} else {
-		i = &instance{hostPorts: make(map[port.Port]int), sessions: make(map[*Session]struct{})}
+		i = &instance{createdAt: e.now(), hostPorts: make(map[port.Port]int), sessions: make(map[*Session]struct{})}
 		e.instances[spec.ID] = i
 	}
 
@@ -741,6 +746,7 @@ func (e *Engine) view(id string, i *instance) vm.Instance {
 		Labels:    maps.Clone(i.spec.Labels),
 		Reason:    i.reason,
 		StartedAt: i.startedAt,
+		CreatedAt: i.createdAt,
 	}
 
 	switch vm.KindOf(i.spec.Image, e.dockerImage) {

@@ -75,9 +75,10 @@ type Dispatcher struct {
 
 // orphan is what a node holds that nobody keeps a record of: since when, and
 // until when, its node has said it, by the node's clock, in a run of
-// heartbeats each said within orphanAfter of the one before; when it was last
-// heard of, and when its node was last asked to delete it, by the control
-// plane's.
+// heartbeats each said within orphanAfter of the one before, which starts
+// again from the last word of it once its node is asked to delete it; when it
+// was last heard of, and when its node was last asked to delete it, by the
+// control plane's.
 type orphan struct {
 	since time.Time
 	said  time.Time
@@ -101,8 +102,9 @@ func PollEvery(interval time.Duration) Option {
 // own clock, with no longer than that without a word of it: what it says of
 // a resource whose record was deleted a moment before, in a heartbeat it took
 // before the delete removed it, is said no more after, and nothing is asked
-// of what was made again under its uuid since. With none, it is asked at
-// once.
+// of what was made again under its uuid since, but by a backlog of such
+// heartbeats as long, whose delete its node refuses of what it made since
+// (Orphaned). With none, it is asked at once.
 func OrphansAfter(after time.Duration) Option {
 	return func(d *Dispatcher) {
 		d.orphanAfter = after
@@ -547,8 +549,20 @@ func requested(r *resource.Record, state kind.State, now time.Time) {
 // not its node's to delete then, whenever the two commands reach it. Its node
 // is asked at most once a minute for one resource, however often it reports
 // it, and what came of it is heard as nobody's.
+//
+// The delete says when its node first said what it is asked to delete
+// (kind.ActOnResource.Orphaned), by the node's own clock, and the node
+// deletes only what it made no later than that (kind.Maker): heartbeats heard
+// so late that they alone span as long, a backlog of them, say a VM its node
+// deleted before its graph made it again, and that is left. The node is the
+// last to say, since only it knows when it made what it holds. Once its node
+// is asked, what it says of the resource from then on is a run of its own, so
+// that one made again under its uuid with no record, which its node refuses
+// to delete as what it said before, is asked for once it has said that one
+// for as long.
 func (d *Dispatcher) Orphaned(ctx context.Context, desc kind.Descriptor, nodeName string, uuid string, at time.Time) error {
-	if !d.orphan(nodeName, uuid, at) {
+	since, asked := d.orphan(nodeName, uuid, at)
+	if !asked {
 		return nil
 	}
 
@@ -567,17 +581,19 @@ func (d *Dispatcher) Orphaned(ctx context.Context, desc kind.Descriptor, nodeNam
 			Kind:     desc.Name,
 			Metadata: kind.Metadata{UUID: uuid, Node: nodeName},
 		},
+		Orphaned: since,
 	}, 0)
 
 	return err
 }
 
 // orphan reports whether a node that said it holds an orphan, as of a
-// moment by its clock, is to be asked to delete it now, and writes down that
-// it is: once its node has said it for orphanAfter, and once a minute at
-// most, for one resource. What was neither heard of nor asked for a minute is
-// let go of.
-func (d *Dispatcher) orphan(nodeName string, uuid string, at time.Time) bool {
+// moment by its clock, is to be asked to delete it now, and since when its
+// node has said it, and writes down that it is: once its node has said it
+// for orphanAfter, and once a minute at most, for one resource. Once it is
+// asked, its run starts again from the last word of it. What was neither
+// heard of nor asked for a minute is let go of.
+func (d *Dispatcher) orphan(nodeName string, uuid string, at time.Time) (time.Time, bool) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -602,14 +618,17 @@ func (d *Dispatcher) orphan(nodeName string, uuid string, at time.Time) bool {
 
 	o.heard = now
 
+	since := o.since
+
 	asked := o.said.Sub(o.since) >= d.orphanAfter && (o.asked.IsZero() || now.Sub(o.asked) >= orphanEvery)
 	if asked {
 		o.asked = now
+		o.since = o.said
 	}
 
 	d.orphans[key] = o
 
-	return asked
+	return since, asked
 }
 
 // Forget takes a resource's record away, when there is nothing of it left

@@ -267,6 +267,7 @@ func (e *engine) instanceFor(spec vm.Spec) (*instance, bool, error) {
 		Image:     e.imageOf(spec),
 		HostPorts: hostPorts,
 		Creating:  true,
+		CreatedAt: time.Now(),
 	}
 
 	if err := e.store.save(spec.ID, r); err != nil {

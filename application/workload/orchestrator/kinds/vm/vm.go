@@ -18,7 +18,9 @@
 //   - stop, restart, reconfigure and restore do what they say to the
 //     instance, a restore streaming the snapshot's archive into the engine,
 //     which replaces the instance's disk with it;
-//   - delete removes the instance, disk and all.
+//   - delete removes the instance, disk and all: but of a VM nobody keeps a
+//     record of, an orphan, only one its engine made no later than its node
+//     first said it (Made), and not one made again under its uuid since.
 //
 // Whatever is open into a VM, a Docker VM's dockerd connections, is let go
 // of when it goes down. What came of a command is what the instance is doing
@@ -113,6 +115,7 @@ var (
 	_ kind.Node[vmKind.Spec, vmKind.Status] = &Node{}
 	_ kind.Attacher                         = &Node{}
 	_ kind.Exposer                          = &Node{}
+	_ kind.Maker                            = &Node{}
 )
 
 // New is the strategy that runs VMs on engine, restores them from what
@@ -300,6 +303,24 @@ func (n *Node) delete(ctx context.Context, v vmKind.VM) error {
 	defer n.connections.Forget(v.Metadata.UUID)
 
 	return n.engine.Delete(ctx, v.Metadata.UUID)
+}
+
+// Made is when the engine made the VM uuid names, by this node's clock: what
+// the delete of a VM nobody keeps a record of is held to, so that one made
+// again under its uuid since its node said the one deleted is left. One the
+// engine holds nothing of, or does not know the making of, made before it
+// kept that, says nothing.
+func (n *Node) Made(ctx context.Context, uuid string) (time.Time, bool, error) {
+	held, err := n.engine.Inspect(ctx, uuid)
+
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		return time.Time{}, false, nil
+	case err != nil:
+		return time.Time{}, false, err
+	}
+
+	return held.CreatedAt, !held.CreatedAt.IsZero(), nil
 }
 
 // restored gives the instance spec names the disk a snapshot holds: the

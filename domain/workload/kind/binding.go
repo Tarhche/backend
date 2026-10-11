@@ -405,6 +405,10 @@ func (b *nodeBinding[Spec, Status, S]) Execute(ctx context.Context, command ActO
 		return failed(err)
 	}
 
+	if err := b.disowned(ctx, command); err != nil {
+		return failed(err)
+	}
+
 	outcome, err := b.strategy.Execute(ctx, r, command.Action, value)
 	result.Output = tail(outcome.Output)
 
@@ -426,6 +430,31 @@ func (b *nodeBinding[Spec, Status, S]) Execute(ctx context.Context, command ActO
 	result.OK = true
 
 	return result
+}
+
+// disowned is why the delete of what nobody keeps a record of (an orphan,
+// ActOnResource.Orphaned) is refused, or nothing: what the node holds under
+// its uuid was made later than its node first said it, as the strategy says
+// (Maker), and is another, made since, which somebody keeps a record of. A
+// strategy that cannot say deletes what it holds, as it always did. It is
+// asked under the resource's lock, as the command is carried out, so that
+// nothing is made between the two.
+func (b *nodeBinding[Spec, Status, S]) disowned(ctx context.Context, command ActOnResource) error {
+	if command.Orphaned.IsZero() {
+		return nil
+	}
+
+	maker, makes := b.strategy.(Maker)
+	if !makes {
+		return nil
+	}
+
+	made, known, err := maker.Made(ctx, command.UUID)
+	if err != nil || !known || !made.After(command.Orphaned) {
+		return err
+	}
+
+	return fmt.Errorf("%w: the %s %q this node holds was made at %s, after its node first said the one it is asked to delete, which nobody keeps a record of, at %s", ErrRefused, b.descriptor.Name, command.UUID, made.Format(time.RFC3339Nano), command.Orphaned.Format(time.RFC3339Nano))
 }
 
 func (b *nodeBinding[Spec, Status, S]) Query(ctx context.Context, query Query) (json.RawMessage, error) {

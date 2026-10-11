@@ -849,6 +849,7 @@ func TestDispatcher_Orphaned(t *testing.T) {
 		assert.Equal(t, kindstest.NodeName, sent[0].Node)
 		assert.Equal(t, kindstest.Kind, sent[0].Resource.Kind)
 		assert.Equal(t, kind.Metadata{UUID: "orphan", Node: kindstest.NodeName}, sent[0].Resource.Metadata, "carrying nothing but what it is and where")
+		assert.Equal(t, kindstest.Moment, sent[0].Orphaned, "and since when its node said it, by its own clock")
 
 		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), "node-2", "orphan", kindstest.Moment))
 
@@ -925,6 +926,52 @@ func TestDispatcher_Orphaned(t *testing.T) {
 				assert.Equal(t, tt.asked, asked(t, f))
 			})
 		}
+	})
+
+	t.Run("a backlog of heartbeats its node took before a vm's delete, as long as it waits for, has its node asked as of the first of them, which a vm made again since was made after", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		f.dispatch = dispatch.New(f.resources, f.producer, f.waiters, f.clock.Now, dispatch.OrphansAfter(30*time.Second))
+
+		// the node's beats of the vm over the 35 s before its delete removed
+		// it are heard one after another once its record went, the heartbeats
+		// lagging by as much; its graph makes it again under its uuid
+		// meanwhile, which its node knows it made after them (kind.Maker).
+		removed := kindstest.Moment.Add(35 * time.Second)
+		for at := kindstest.Moment; at.Before(removed); at = at.Add(time.Second) {
+			require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "vm-made-again", at))
+		}
+
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
+		require.NoError(t, err)
+		require.Len(t, sent, 1)
+		assert.Equal(t, kindstest.Moment, sent[0].Orphaned, "as of the first late heartbeat, before the vm was made again")
+	})
+
+	t.Run("once its node is asked, what it says from then on is a run of its own, asked for as of its own first word", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		f.dispatch = dispatch.New(f.resources, f.producer, f.waiters, f.clock.Now, dispatch.OrphansAfter(30*time.Second))
+
+		// its node says it every 10 s, heard as soon as it is said; it is
+		// asked to delete it once it has said it for 30 s, and refuses, having
+		// made what it holds under the uuid since the first word of it, and
+		// goes on saying it.
+		for s := 0; s <= 90; s += 10 {
+			if s > 0 {
+				f.clock.Advance(10 * time.Second)
+			}
+
+			require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan", kindstest.Moment.Add(time.Duration(s)*time.Second)))
+		}
+
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
+		require.NoError(t, err)
+		require.Len(t, sent, 2)
+		assert.Equal(t, kindstest.Moment, sent[0].Orphaned)
+		assert.Equal(t, kindstest.Moment.Add(30*time.Second), sent[1].Orphaned, "as of the last word of it heard when its node was asked before")
 	})
 }
 

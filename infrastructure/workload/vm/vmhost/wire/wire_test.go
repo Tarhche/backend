@@ -99,6 +99,7 @@ func TestInstance(t *testing.T) {
 				{Port: 443, Address: "10.89.1.10:20001"},
 			},
 			StartedAt: time.Date(2026, 10, 5, 12, 30, 1, 123456789, time.UTC),
+			CreatedAt: time.Date(2026, 10, 5, 12, 30, 0, 987654321, time.UTC),
 		},
 		{
 			ID:       "run-1",

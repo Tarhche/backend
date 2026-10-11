@@ -129,6 +129,13 @@ type Instance struct {
 
 	Reason    string
 	StartedAt time.Time
+
+	// CreatedAt is when its engine made it, by its node's clock, made by a
+	// create or by a restore that had nothing to replace: what its node says
+	// of an instance from before then was said of another, deleted since, that
+	// was under the same name. It is nothing for one made before its engine
+	// kept it.
+	CreatedAt time.Time
 }
 
 // Endpoint is a guest port and the address this node dials to reach it.

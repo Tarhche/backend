@@ -41,6 +41,7 @@ func TestStore(t *testing.T) {
 			MainRunning: true,
 			Exit:        &exit{Code: -1, Reason: "lost", At: at},
 			StartedAt:   at,
+			CreatedAt:   at.Add(-time.Minute),
 		}
 
 		require.NoError(t, s.save(written.Spec.ID, written))
