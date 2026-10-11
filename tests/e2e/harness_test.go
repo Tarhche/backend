@@ -208,13 +208,13 @@ func newAccount(ctx context.Context, admin *session) (*account, error) {
 }
 
 // remove takes away everything the account made, and then the account: its
-// VMs, which take what lives in them with them, its containers and its stacks
-// among it, its snapshots, and the user and role themselves.
+// stacks, its containers and its VMs, which take what lives in them with them
+// (removeWorkloads), its snapshots, and the user and role themselves.
 func (a *account) remove(ctx context.Context, admin *session) error {
 	var errs []error
 
 	if a.session != nil {
-		errs = append(errs, a.removeVMs(ctx), a.removeSnapshots(ctx))
+		errs = append(errs, a.removeWorkloads(ctx), a.removeSnapshots(ctx))
 	}
 
 	if len(a.roleUUID) > 0 {
@@ -228,44 +228,90 @@ func (a *account) remove(ctx context.Context, admin *session) error {
 	return errors.Join(errs...)
 }
 
-func (a *account) removeVMs(ctx context.Context) error {
-	var vms page[vmView]
-	if err := a.session.do(ctx, http.MethodGet, "/api/dashboard/my/workload/vms", nil, http.StatusOK, &vms); err != nil {
-		return err
-	}
-
-	for _, v := range vms.Items {
-		// with cascade, what lives in it goes with it: a container or a stack
-		// in it would otherwise make it again, and keep the cleanup waiting
-		// for as long as it waits.
-		status, body, err := a.session.request(ctx, http.MethodDelete, "/api/dashboard/my/workload/vms/"+v.UUID+"?cascade=true", nil)
-		if err != nil {
-			return err
-		}
-
-		// a VM is deleted in its own time: asking is accepted, and it goes
-		// once its node has let it go.
-		if status != http.StatusAccepted && status != http.StatusNotFound {
-			return fmt.Errorf("deleting vm %s: %d %s", v.UUID, status, body)
-		}
-	}
-
+// removeWorkloads removes the account's stacks and containers, and then its
+// VMs, and goes on looking, and removing whatever of them it lists, until it
+// lists none of them, for five minutes at most. A stack is there before the
+// VM its graph makes for it, which may appear once the stack was asked to go,
+// its graph having begun to make it before: each look lists all three again,
+// so that nothing is left behind to be made for an account that is gone. What
+// refused to go, or to be listed, is said with what is left, when anything
+// is.
+func (a *account) removeWorkloads(ctx context.Context) error {
 	deadline := time.Now().Add(5 * time.Minute)
-	for {
-		if err := a.session.do(ctx, http.MethodGet, "/api/dashboard/my/workload/vms", nil, http.StatusOK, &vms); err != nil {
-			return err
-		}
 
-		if len(vms.Items) == 0 {
+	for {
+		left, refused := a.removeListed(ctx)
+		if len(left) == 0 && len(refused) == 0 {
 			return nil
 		}
 
 		if time.Now().After(deadline) {
-			return fmt.Errorf("%d vms are still there", len(vms.Items))
+			return errors.Join(append([]error{fmt.Errorf("still there: %s", strings.Join(left, ", "))}, refused...)...)
 		}
 
 		time.Sleep(poll)
 	}
+}
+
+// removeListed lists the account's stacks, its containers and its VMs, and
+// asks for each of them to be removed, in that order, through the blog's own
+// routes: a stack, whose graph removes its containers in its own time; a
+// container, by force, should it run; and a VM, with cascade, so that what
+// lives in it goes with it, since a container or a stack in it would
+// otherwise make it again. It is what it listed, which was there when it
+// looked, and what refused to go or to be listed.
+func (a *account) removeListed(ctx context.Context) ([]string, []error) {
+	var (
+		left    []string
+		refused []error
+	)
+
+	// remove asks for what is at path, listed as what, to go, and takes the
+	// statuses accepted says: its delete accepted or answered, or what it
+	// asks for gone already.
+	remove := func(what string, path string, accepted ...int) {
+		left = append(left, what)
+
+		status, body, err := a.session.request(ctx, http.MethodDelete, path, nil)
+
+		switch {
+		case err != nil:
+			refused = append(refused, fmt.Errorf("deleting %s: %w", what, err))
+		case !slices.Contains(accepted, status):
+			refused = append(refused, fmt.Errorf("deleting %s: %d %s", what, status, body))
+		}
+	}
+
+	var stacks page[stackView]
+	if err := a.session.do(ctx, http.MethodGet, "/api/dashboard/my/workload/stacks", nil, http.StatusOK, &stacks); err != nil {
+		refused = append(refused, err)
+	}
+
+	for _, s := range stacks.Items {
+		remove("stack "+s.UUID, "/api/dashboard/my/workload/stacks/"+url.PathEscape(s.UUID), http.StatusAccepted, http.StatusNotFound)
+	}
+
+	var containers page[containerView]
+	if err := a.session.do(ctx, http.MethodGet, "/api/dashboard/my/workload/containers", nil, http.StatusOK, &containers); err != nil {
+		refused = append(refused, err)
+	}
+
+	for _, c := range containers.Items {
+		remove("container "+c.ID+" in vm "+c.VMUUID, dockerPath(c.VMUUID, "/containers/", url.PathEscape(c.ID), "?force=true"), http.StatusNoContent, http.StatusNotFound)
+	}
+
+	var vms page[vmView]
+	if err := a.session.do(ctx, http.MethodGet, "/api/dashboard/my/workload/vms", nil, http.StatusOK, &vms); err != nil {
+		refused = append(refused, err)
+	}
+
+	// a VM is deleted in its own time: asking is accepted, and it goes once
+	// its node has let it go.
+	for _, v := range vms.Items {
+		remove("vm "+v.UUID, vmPath(v.UUID, "?cascade=true"), http.StatusAccepted, http.StatusNotFound)
+	}
+
+	return left, refused
 }
 
 func (a *account) removeSnapshots(ctx context.Context) error {
