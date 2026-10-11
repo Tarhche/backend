@@ -1158,3 +1158,56 @@ func TestDispatcher_Gone(t *testing.T) {
 		assert.False(t, f.dispatch.Gone(ctx, kindstest.Kind, "fan-uuid", 0))
 	})
 }
+
+// TestDispatcher_restores holds the dispatcher to keeping on a resource each
+// command it sends to restore it from a snapshot, every try of it, until its
+// result is taken: the record it was sent from, which alone takes it once it
+// waits on it no more.
+func TestDispatcher_restores(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// the fan's start restores it, as a VM's restore does.
+	d := kindstest.Descriptor()
+	for i := range d.Actions {
+		if d.Actions[i].Name == "start" {
+			d.Actions[i].Restores = true
+		}
+	}
+
+	restoring := kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &kindstest.Fans{Node: kindstest.NodeName})
+
+	t.Run("a command that restores its resource is kept on it, and so is each try of it", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped))
+
+		asked, invalid, err := f.dispatch.Ask(ctx, restoring, f.stored(t, "fan-uuid"), "start", json.RawMessage(`{"speed":1}`), true)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		first := asked.Command.ID
+		assert.Equal(t, []string{first}, f.stored(t, "fan-uuid").Restores)
+
+		again, err := f.dispatch.Again(ctx, f.stored(t, "fan-uuid"))
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{first, again.Command.ID}, f.stored(t, "fan-uuid").Restores, "another try at the restore is one too")
+	})
+
+	t.Run("and no other command is", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped))
+
+		_, invalid, err := f.dispatch.Ask(ctx, f.binding, f.stored(t, "fan-uuid"), "start", json.RawMessage(`{"speed":1}`), true)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		_, err = f.dispatch.Again(ctx, f.stored(t, "fan-uuid"))
+		require.NoError(t, err)
+
+		assert.Empty(t, f.stored(t, "fan-uuid").Restores)
+	})
+}

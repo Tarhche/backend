@@ -10,7 +10,8 @@
 //	{_id: <uuid>, kind, metadata: {name, slug, owner_uuid, labels, owners,
 //	 refs, node, lifetime, expires_at, generation, deletion_requested_at,
 //	 created_at, updated_at}, spec: {…}, status: {…}, version,
-//	 control: {pending, attempts, tried_at, answer, reset, reset_at}}
+//	 control: {pending, attempts, tried_at, answer, reset, reset_at,
+//	 restores}}
 //
 // Its uuid is its _id, so no two resources share one, whatever their kinds,
 // and no two share a slug either: a VM's and a task's are what the ingress
@@ -479,6 +480,7 @@ type control struct {
 	Answer   *answer    `bson:"answer,omitempty"`
 	Reset    bool       `bson:"reset,omitempty"`
 	ResetAt  *time.Time `bson:"reset_at,omitempty"`
+	Restores []string   `bson:"restores,omitempty"`
 }
 
 type pending struct {
@@ -539,6 +541,7 @@ func toDocument(record resource.Record) (document, error) {
 			TriedAt:  optional(record.TriedAt),
 			Reset:    record.Reset,
 			ResetAt:  optional(record.ResetAt),
+			Restores: slices.Clone(record.Restores),
 		},
 	}
 
@@ -616,6 +619,7 @@ func toRecord(stored document) (resource.Record, error) {
 		TriedAt:  moment(stored.Control.TriedAt),
 		Reset:    stored.Control.Reset,
 		ResetAt:  moment(stored.Control.ResetAt),
+		Restores: stored.Control.Restores,
 	}
 
 	for _, owner := range m.Owners {

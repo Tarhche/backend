@@ -72,6 +72,13 @@ type Record struct {
 	// or of a later one, is not reset again. It outlives the reset, kept once
 	// the resource is found where it lives. None is a reset that said none.
 	ResetAt time.Time
+
+	// Restores are the commands sent to restore it from a snapshot
+	// (kind.Action.Restores), by their ids, the tries of each among them,
+	// whose results are yet to be taken onto it: a result of one is taken
+	// whatever the resource was asked since, but only onto the record it was
+	// sent from, which one made again under its uuid since is not.
+	Restores []string
 }
 
 // Pending is a command a resource is waiting on.
@@ -121,6 +128,7 @@ func (r Record) Clone() Record {
 	r.Metadata.Refs = slices.Clone(r.Metadata.Refs)
 	r.Spec = slices.Clone(r.Spec)
 	r.Status = slices.Clone(r.Status)
+	r.Restores = slices.Clone(r.Restores)
 
 	if r.Pending != nil {
 		pending := *r.Pending

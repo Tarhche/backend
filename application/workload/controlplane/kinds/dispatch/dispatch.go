@@ -263,6 +263,10 @@ func (d *Dispatcher) Ask(ctx context.Context, b kind.ControlPlaneBinding, r reso
 	r.Attempts++
 	r.TriedAt = now
 
+	if a.Restores {
+		restoring(&r, id)
+	}
+
 	written, err := d.resources.Update(ctx, r)
 	if err != nil {
 		return Asked{}, nil, err
@@ -410,6 +414,11 @@ func (d *Dispatcher) Again(ctx context.Context, r resource.Record) (Asked, error
 
 	pending.SentAt = now
 
+	// another try at a restore is one too.
+	if slices.Contains(r.Restores, r.Pending.IDs[0]) {
+		restoring(&r, id)
+	}
+
 	r.Pending = &pending
 	r.Attempts++
 	r.TriedAt = now
@@ -421,6 +430,16 @@ func (d *Dispatcher) Again(ctx context.Context, r resource.Record) (Asked, error
 	}
 
 	return Asked{Record: written, Command: commandOf(written, id, pending.Action, attempt, pending.Payload)}, nil
+}
+
+// restoring keeps on r that the command id names, which restores it from a
+// snapshot, is sent to it (resource.Record.Restores): of as many tries as a
+// command is remembered by, the newest.
+func restoring(r *resource.Record, id string) {
+	r.Restores = append(slices.Clone(r.Restores), id)
+	if len(r.Restores) > maxTries {
+		r.Restores = r.Restores[len(r.Restores)-maxTries:]
+	}
 }
 
 // Desire writes down what a resource is expected to be, without asking it

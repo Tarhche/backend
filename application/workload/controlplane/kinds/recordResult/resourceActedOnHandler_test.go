@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
@@ -298,9 +299,17 @@ func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 	ctx := context.Background()
 
 	// the fan's start restores it, as a VM's restore does: what lives in it
-	// is what it holds afterwards.
+	// is what it holds afterwards. Each record waiting on a start was sent
+	// it, as the dispatcher keeps a restore's ids on the record it sends it
+	// to.
 	restoring := func(t *testing.T, told *restorer, records ...resource.Record) *fixture {
 		t.Helper()
+
+		for i := range records {
+			if records[i].Pending != nil && records[i].Pending.Action == "start" {
+				records[i].Restores = slices.Clone(records[i].Pending.IDs)
+			}
+		}
 
 		f := newFixture(t, records...)
 
@@ -448,8 +457,10 @@ func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 	t.Run("and so is one heard once its resource was asked something else", func(t *testing.T) {
 		t.Parallel()
 
+		// its delete asked as it was restored: the restore's id kept.
 		deleting := kindstest.AFan("fan-uuid", kindstest.Deleting, kind.Deleted)
 		deleting.Pending = &resource.Pending{Action: "delete", IDs: []string{"delete-1"}, SentAt: kindstest.Moment}
+		deleting.Restores = []string{"command-1"}
 
 		told := &restorer{}
 		f := restoring(t, told, deleting)
@@ -461,7 +472,38 @@ func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 		assert.Equal(t, kindstest.Deleting, kindstest.Typed(r).Status.State, "what it was asked since is as it was")
 		require.NotNil(t, r.Pending)
 		assert.Equal(t, "delete", r.Pending.Action)
-		assert.Len(t, told.restored, 1)
+		assert.Empty(t, r.Restores, "the restore is taken")
+		assert.Empty(t, told.restored, "and what lives in it, which goes with it, is not reset")
+	})
+
+	t.Run("but one heard by a record that was not sent it, made again under its uuid since, takes nothing, and resets nothing", func(t *testing.T) {
+		t.Parallel()
+
+		// made again under its uuid once the one restored went: waiting on its
+		// create, never sent the restore.
+		remade := kindstest.AFan("fan-uuid", kindstest.Pending, kindstest.Running)
+		remade.Pending = &resource.Pending{Action: "create", IDs: []string{"create-1"}, SentAt: kindstest.Moment}
+
+		told := &restorer{}
+		f := restoring(t, told, remade)
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, saying(t, restoredAt))))
+
+		r, _ := f.stored(t, "fan-uuid")
+		assert.True(t, restoreOf(t, r).IsZero(), "nothing of it is taken")
+		assert.Empty(t, told.restored, "nor is what lives in it reset")
+	})
+
+	t.Run("and one taken lets go of its id, its record waiting on the restore's other tries still", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{}
+		f := restoring(t, told, waiting(kindstest.Starting, kindstest.Running, "start"))
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, saying(t, restoredAt))))
+
+		r, _ := f.stored(t, "fan-uuid")
+		assert.Equal(t, []string{"command-0"}, r.Restores)
 	})
 
 	t.Run("but one heard again once it was taken takes nothing, and resets nothing, nor does one of a restore before the last one taken", func(t *testing.T) {

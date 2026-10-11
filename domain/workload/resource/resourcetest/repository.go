@@ -530,6 +530,7 @@ func Repository(t *testing.T, make Maker) {
 		created.TriedAt = time.Time{}
 		created.Reset = false
 		created.ResetAt = time.Time{}
+		created.Restores = nil
 		created.Metadata.Slug = ""
 		created.Metadata.Node = ""
 		created.Metadata.Labels = nil
@@ -553,6 +554,7 @@ func Repository(t *testing.T, make Maker) {
 		assert.True(t, stored.TriedAt.IsZero())
 		assert.False(t, stored.Reset)
 		assert.True(t, stored.ResetAt.IsZero())
+		assert.Empty(t, stored.Restores)
 		assert.True(t, stored.Metadata.ExpiresAt.IsZero())
 		assert.Empty(t, stored.Metadata.Owners)
 		assert.Empty(t, stored.Metadata.Refs)
@@ -604,6 +606,7 @@ func aFan(uuid string, slug string) resource.Record {
 		TriedAt:  moment(12),
 		Reset:    true,
 		ResetAt:  moment(11),
+		Restores: []string{"command-restore-0", "command-restore-1"},
 		Answer: &kind.ResourceActedOn{
 			ID:     "command-0",
 			Kind:   fans,

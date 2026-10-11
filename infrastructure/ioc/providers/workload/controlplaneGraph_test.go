@@ -318,7 +318,7 @@ func TestNewControlPlaneWorkload_restored(t *testing.T) {
 			raw, err := kind.Encode(restoring)
 			require.NoError(t, err)
 
-			_, err = stored.Create(ctx, resource.Record{Raw: raw, Pending: &resource.Pending{Action: vmKind.ActionRestore, IDs: []string{"restore-1"}, SentAt: restoredAt}})
+			_, err = stored.Create(ctx, resource.Record{Raw: raw, Pending: &resource.Pending{Action: vmKind.ActionRestore, IDs: []string{"restore-1"}, SentAt: restoredAt}, Restores: []string{"restore-1"}})
 			require.NoError(t, err)
 
 			raw, err = kind.Encode(stackKind.Stack{
@@ -805,7 +805,7 @@ func TestNewControlPlaneWorkload_restoreOfARemadeVMBeforeItsStackIsPlaced(t *tes
 	raw, err := kind.Encode(v)
 	require.NoError(t, err)
 
-	_, err = stored.Create(ctx, resource.Record{Raw: raw, Pending: &resource.Pending{Action: vmKind.ActionRestore, IDs: []string{"restore-1"}, SentAt: restoredAt.Add(-time.Minute)}})
+	_, err = stored.Create(ctx, resource.Record{Raw: raw, Pending: &resource.Pending{Action: vmKind.ActionRestore, IDs: []string{"restore-1"}, SentAt: restoredAt.Add(-time.Minute)}, Restores: []string{"restore-1"}})
 	require.NoError(t, err)
 
 	raw, err = kind.Encode(stackKind.Stack{
@@ -901,4 +901,116 @@ func TestNewControlPlaneWorkload_restoreOfARemadeVMBeforeItsStackIsPlaced(t *tes
 	s, err := stored.GetOne(ctx, stackKind.Name, "s-1")
 	require.NoError(t, err)
 	assert.False(t, s.Reset, "and the stack is held, not left waiting for ever")
+}
+
+// TestNewControlPlaneWorkload_lateRestoreRacesItsVMsDelete holds the control
+// plane to taking a Docker VM's restore, heard once the VM waits on its delete
+// instead, onto the record it was sent from alone, and to resetting nothing
+// that lives in a VM on its way out. The node carries out the restore and
+// then the delete, and the delete's result is heard by another control plane
+// as the restore's is taken here: the delete's cascade keeps the stack as gone
+// with its VM, and the stack's run makes the VM again, under its uuid, before
+// the restore is written. The VM made again never was restored, and takes
+// nothing of it; the stack is kept, not reset for a restore of a VM that is
+// gone.
+func TestNewControlPlaneWorkload_lateRestoreRacesItsVMsDelete(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	stored := resourcesMemory.NewRepository()
+	stack := graph.Ref{Kind: stackKind.Name, UUID: "s-1"}
+
+	var workload *ControlPlaneWorkload
+
+	restoredAt := time.Now().Add(-10 * time.Minute)
+
+	deleted, err := json.Marshal(kind.ResourceActedOn{ID: "delete-1", Kind: vmKind.Name, UUID: "vm-1", Action: vmKind.ActionDelete, Node: vmtest.Node, OK: true, At: restoredAt.Add(5 * time.Second)})
+	require.NoError(t, err)
+
+	var remade bool
+
+	// the other control plane hears the delete's result, and the stack's run
+	// that follows makes its vm again, as the restore is about to be written
+	// here.
+	records := &interloping{
+		Repository: stored,
+		writes: func(r resource.Record) bool {
+			return r.Kind == vmKind.Name && r.Metadata.UUID == "vm-1"
+		},
+		do: func(ctx context.Context) {
+			require.NoError(t, workload.Subscribers[kind.ResourceActedOnName].Handle(ctx, deleted))
+
+			bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
+			defer cancel()
+
+			_ = workload.Graphs.Reconcile(bounded, stack)
+
+			_, err := stored.GetOne(ctx, vmKind.Name, "vm-1")
+			remade = err == nil
+		},
+	}
+
+	stores := storesOf(stored)
+	stores.Resources = records
+	stores.Nodes = nodesMemory.NewRepository(vmtest.Alive(vmtest.Node))
+
+	workload, err = NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), stores, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	// vm-1, named builds, its delete asked while it restored: waiting on the
+	// delete, the restore it was sent kept on it.
+	deleting := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+		v.Metadata.Name = "builds"
+		v.Metadata.Slug = "builds-abcde"
+		v.Status.State = vmKind.Deleting
+		v.Status.Expected = kind.Deleted
+	})
+	raw, err := kind.Encode(deleting)
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: raw, Pending: &resource.Pending{Action: vmKind.ActionDelete, IDs: []string{"delete-1"}, SentAt: restoredAt.Add(-time.Second)}, Restores: []string{"restore-1"}})
+	require.NoError(t, err)
+
+	raw, err = kind.Encode(stackKind.Stack{
+		Kind:     stackKind.Name,
+		Metadata: kind.Metadata{UUID: "s-1", Name: "shop", Slug: "shop", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, Generation: 1, CreatedAt: restoredAt.Add(-time.Hour)},
+		Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+		Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running, Since: restoredAt.Add(-time.Hour)}},
+	})
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: raw})
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: blockstest.AContainer("c-web", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+		c.Metadata.Name = "shop_web"
+		c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "s-1"}}
+		c.Metadata.Labels = map[string]string{stackKind.LabelStack: "s-1", stackKind.LabelService: "web"}
+		c.Spec.Name = "shop_web"
+	})})
+	require.NoError(t, err)
+
+	// the restore's result, heard here.
+	status, err := json.Marshal(vmKind.Status{Status: kind.Status{State: vmKind.Running}, Restore: kind.Restore{RestoredAt: restoredAt}})
+	require.NoError(t, err)
+
+	result, err := json.Marshal(kind.ResourceActedOn{ID: "restore-1", Kind: vmKind.Name, UUID: "vm-1", Action: vmKind.ActionRestore, Node: vmtest.Node, OK: true, Status: status, At: restoredAt.Add(time.Second)})
+	require.NoError(t, err)
+
+	require.NoError(t, workload.Subscribers[kind.ResourceActedOnName].Handle(ctx, result))
+	require.True(t, records.done.Load(), "the delete was heard as the restore was written")
+	require.True(t, remade, "and the stack's run made its vm again")
+
+	s, err := stored.GetOne(ctx, stackKind.Name, "s-1")
+	require.NoError(t, err)
+	assert.False(t, s.Reset, "the stack is kept as gone with its vm, not reset for a restore of the vm that went")
+
+	v, err := stored.GetOne(ctx, vmKind.Name, "vm-1")
+	require.NoError(t, err)
+
+	made, err := kind.Decode[vmKind.Spec, vmKind.Status](v.Raw)
+	require.NoError(t, err)
+	assert.True(t, made.Status.RestoredAt.IsZero(), "and the vm made again takes nothing of a restore it was never sent: %s", made.Status.RestoredAt)
+	assert.Equal(t, "builds", made.Metadata.Name, "it is the vm as it was")
 }

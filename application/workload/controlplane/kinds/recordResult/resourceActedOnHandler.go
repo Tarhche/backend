@@ -13,12 +13,17 @@
 // says (kind.Restore), before the result is taken: told first, so that a
 // result heard again tells it again rather than not at all. And it is taken
 // whatever its resource was asked since, for as long as the resource's record
-// says an earlier restore: a resource whose node went quiet while it was being
-// restored, failed as lost, waits on nothing any more, but its disk was
-// replaced all the same, and what lives in it, reset when the result was first
-// heard, waits for its record to say so. Only what the result says of the
-// restore is taken then, nothing of what was asked since undone: what the
-// resource is doing is its node's to say next.
+// says an earlier restore, by the record it was sent from alone, which keeps
+// the restores sent to it until they are taken (resource.Record.Restores): a
+// resource whose node went quiet while it was being restored, failed as lost,
+// waits on nothing any more, but its disk was replaced all the same, and what
+// lives in it, reset when the result was first heard, waits for its record to
+// say so; while one made again under its uuid since, by a graph whose root
+// its delete kept, was never restored, and takes nothing of it. Only what the
+// result says of the restore is taken then, nothing of what was asked since
+// undone: what the resource is doing is its node's to say next. Nor is what
+// lives in one on its way out reset by a restore it waits on no more, which
+// goes with it.
 //
 // A result that will never be taken, one that cannot be read, of a kind not
 // run here, for a resource that is gone, is not failed: redelivered, it would
@@ -39,6 +44,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
@@ -206,12 +212,13 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 		}
 
 		// a restore its resource waits on no more is taken all the same,
-		// while its record says an earlier one.
+		// while its record says an earlier one, by the record it was sent
+		// from alone: one made again under its uuid since never was.
 		late := false
 
 		change, err := observe.Answer(d, &r, result, at)
 		switch {
-		case errors.Is(err, observe.ErrNotWaitedOn) && restores:
+		case errors.Is(err, observe.ErrNotWaitedOn) && restores && slices.Contains(r.Restores, result.ID):
 			taken, err := took(&r, restored)
 			switch {
 			case err != nil:
@@ -232,7 +239,11 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 			return fmt.Errorf("%w: %w", errNotTaken, err)
 		}
 
-		if restores && h.restorer != nil {
+		r.Restores = slices.DeleteFunc(slices.Clone(r.Restores), func(id string) bool { return id == result.ID })
+
+		// what lives in one on its way out goes with it: its restore is
+		// taken onto its record, and nothing in it is reset.
+		if restores && h.restorer != nil && !(late && going(after, r)) {
 			if err := h.restorer.Restored(ctx, kind.Reference{Kind: d.Name, UUID: r.Metadata.UUID}, resetAt); err != nil {
 				return err
 			}
@@ -266,6 +277,13 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 			return err
 		}
 	}
+}
+
+// going reports whether the resource r is the record of, its status's
+// common part common, is on its way out: asked to be deleted, or expected to
+// be.
+func going(common kind.Status, r resource.Record) bool {
+	return common.Expected == kind.Deleted || common.State == kind.Deleted || !r.Metadata.DeletionRequestedAt.IsZero()
 }
 
 // took takes onto r, the record of a resource that waits on none of the
