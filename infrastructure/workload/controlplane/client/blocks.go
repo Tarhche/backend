@@ -857,6 +857,10 @@ func containerOf(m containerManifest) docker.Container {
 		for _, p := range m.Spec.Ports {
 			c.Ports = append(c.Ports, docker.PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, HostIP: p.HostIP, Protocol: p.Protocol})
 		}
+
+		for _, mount := range m.Spec.Mounts {
+			c.Mounts = append(c.Mounts, docker.Mount{Type: mount.Type, Source: mount.Source, Target: mount.Target, ReadOnly: mount.ReadOnly})
+		}
 	}
 
 	switch state := m.Status.Status.State; state {
@@ -893,15 +897,16 @@ var stackLabels = []string{stackKind.LabelStack, stackKind.LabelService}
 
 // labelsOf are a container's labels: those its VM's dockerd last said it
 // has, seen, and beside them those of its record's, m's, that its node labels
-// it with (stackLabels), which say which stack's, and which of its services,
-// it is before its VM's dockerd has said anything of it. Where both say one,
-// what its VM's dockerd says is what it is.
+// it with (stackLabels), each that says something, as its node labels it,
+// which say which stack's, and which of its services, it is before its VM's
+// dockerd has said anything of it. Where both say one, what its VM's dockerd
+// says is what it is.
 func labelsOf(m kind.Metadata, seen map[string]string) map[string]string {
 	labels, cloned := seen, false
 
 	for _, key := range stackLabels {
-		value, carried := m.Labels[key]
-		if _, said := seen[key]; !carried || said {
+		value := m.Labels[key]
+		if _, said := seen[key]; len(value) == 0 || said {
 			continue
 		}
 

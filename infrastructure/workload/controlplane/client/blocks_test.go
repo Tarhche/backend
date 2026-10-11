@@ -404,6 +404,18 @@ func TestContainerOf(t *testing.T) {
 	assert.Equal(t, "s-uuid", unlabelled.Stack, "and where it says none, its record's is")
 	assert.Equal(t, "web", unlabelled.Service)
 	assert.Equal(t, map[string]string{"workload.managed": "true", stackKind.LabelStack: "s-uuid", stackKind.LabelService: "web"}, unlabelled.Labels)
+
+	// what its record says of it is read as its node would make it: its
+	// mounts as they are asked for, and only the labels that say something.
+	asked := containerOf(containerManifest{
+		Metadata: kind.Metadata{Labels: map[string]string{stackKind.LabelStack: "", stackKind.LabelService: "web"}},
+		Spec:     containerKind.Spec{Name: "shop-abcde_web", Image: "nginx:1.27", Mounts: []containerKind.Mount{{Type: containerKind.MountVolume, Source: "shop-abcde_data", Target: "/data"}, {Type: containerKind.MountBind, Source: "/srv", Target: "/srv", ReadOnly: true}}},
+		Status:   containerKind.Status{Status: kind.Status{State: containerKind.Pending}},
+	})
+
+	assert.Equal(t, []docker.Mount{{Type: containerKind.MountVolume, Source: "shop-abcde_data", Target: "/data"}, {Type: containerKind.MountBind, Source: "/srv", Target: "/srv", ReadOnly: true}}, asked.Mounts)
+	assert.Equal(t, map[string]string{stackKind.LabelService: "web"}, asked.Labels, "a label that says nothing is none")
+	assert.Empty(t, asked.Stack)
 }
 
 func TestAnswered(t *testing.T) {
