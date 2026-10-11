@@ -195,10 +195,12 @@ func (s *Sightings) In(kindName string, vmUUID string) []kind.Raw {
 // all the same, as what outlived its record is, or anything a control plane
 // that has just started hears. What a command took away, what went stale, and
 // what its node left behind (Heard) are not. Not showing what is labelled at
-// once is for showing alone: what asks whether a VM's dockerd holds a thing
-// by its name, as docker would answer it, asks Held. A heartbeat its node took
-// before a delete removed something, heard once its record went, says it is
-// held for as long as its node is not heard to have left it behind.
+// once is for showing, and for what takes a thing as there before it, which
+// a ghost would leave waiting on it for ever: what asks which thing a name
+// is, as docker would answer it, the network a container is put on or taken
+// off say, asks Held. A heartbeat its node took before a delete removed
+// something, heard once its record went, says it is held for as long as its
+// node is not heard to have left it behind.
 func (s *Sightings) Held(kindName string, vmUUID string) []kind.Raw {
 	return s.shown(kindName, s.holds, in(vmUUID))
 }

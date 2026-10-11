@@ -237,35 +237,46 @@ func TestContainers_Admit(t *testing.T) {
 			"what its records keep and its dockerd holds with nobody keeping it, but not what is on its way out, what it was asked to say, or what every dockerd has")
 	})
 
-	t.Run("and so does one whose vm's dockerd holds what is labelled as the platform's with no record, before its node has said it for as long as it waits to show it", func(t *testing.T) {
+	t.Run("but what its vm's dockerd holds labelled as the platform's with no record only once its node has said it for long enough to show it: before then, it may be a heartbeat's ghost of what a delete removed, its graph's to make", func(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 
-		// what outlived its record, which its node said a moment ago for the
-		// first time here, and is not shown yet.
-		held := func(kindName string, name string) {
-			w.Sightings.Saw(kindName, blocks.Seen{Node: vmtest.Node, At: time.Now(), Labelled: true, Manifest: kind.Raw{
-				Kind:     kindName,
-				Metadata: kind.Metadata{UUID: kindName + "-" + name, Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
-				Status:   json.RawMessage(`{"state":"present","name":"` + name + `"}`),
-			}})
+		// what its node said in a heartbeat or two, a moment ago, as one
+		// taken before its delete removed it says, heard once its record
+		// went; and what its node has said for long enough to show it, as
+		// what outlived its record is.
+		saying := func(kindName string, name string, from time.Time) {
+			for at := from; !at.After(time.Now()); at = at.Add(time.Second) {
+				w.Sightings.Heard(vmtest.Node, "vm-1", at)
+				w.Sightings.Saw(kindName, blocks.Seen{Node: vmtest.Node, At: at, Labelled: true, Manifest: kind.Raw{
+					Kind:     kindName,
+					Metadata: kind.Metadata{UUID: kindName + "-" + name, Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+					Status:   json.RawMessage(`{"state":"present","name":"` + name + `"}`),
+				}})
+			}
 		}
 
-		held(networkKind.Name, "outlived")
-		held(volumeKind.Name, "outlived-too")
+		saying(networkKind.Name, "deleted", time.Now().Add(-time.Second))
+		saying(volumeKind.Name, "deleted-too", time.Now().Add(-time.Second))
+		saying(networkKind.Name, "outlived", time.Now().Add(-blockstest.SureAfter-10*time.Second))
+		saying(volumeKind.Name, "outlived-too", time.Now().Add(-blockstest.SureAfter-10*time.Second))
 
-		require.Empty(t, w.Sightings.In(networkKind.Name, "vm-1"), "not shown yet")
+		require.Len(t, w.Sightings.Held(networkKind.Name, "vm-1"), 2, "held, both")
+		require.Len(t, w.Sightings.In(networkKind.Name, "vm-1"), 1, "one shown")
 
 		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{
 			Image:    "nginx",
-			Networks: []string{"outlived"},
-			Mounts:   []containerKind.Mount{{Type: containerKind.MountVolume, Source: "outlived-too", Target: "/data"}},
+			Networks: []string{"deleted", "outlived"},
+			Mounts: []containerKind.Mount{
+				{Type: containerKind.MountVolume, Source: "deleted-too", Target: "/data"},
+				{Type: containerKind.MountVolume, Source: "outlived-too", Target: "/more"},
+			},
 		}, kind.Reference{Kind: "vm", UUID: "vm-1"}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		assert.Equal(t, []string{"network/outlived", "volume/outlived-too"}, admitted.Spec.External, "its dockerd holds them, as docker would answer a name asked for again")
+		assert.Equal(t, []string{"network/outlived", "volume/outlived-too"}, admitted.Spec.External, "what was said for long enough to be shown is there before it, and what was said a moment ago is its graph's to make")
 	})
 
 	t.Run("and one shown in a vm whose dockerd stopped answering, as its node goes on saying what its other vms hold, until it is stale", func(t *testing.T) {

@@ -1151,3 +1151,93 @@ func TestNewControlPlaneWorkload_restoreThatSaysNotWhen(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, s.Reset, "and the stack is held by it, not left waiting for ever")
 }
+
+// TestNewControlPlaneWorkload_networkDeletedAMomentBefore holds the control
+// plane to admitting a container that names a network deleted a moment
+// before, a heartbeat its node took before it removed the network heard once
+// its record went, as one its graph makes: not as one there before it, which
+// docker no longer has, and which its graph would wait on as missing for
+// ever.
+func TestNewControlPlaneWorkload_networkDeletedAMomentBefore(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	stored := resourcesMemory.NewRepository()
+
+	stores := storesOf(stored)
+	stores.Nodes = nodesMemory.NewRepository(vmtest.Alive(vmtest.Node))
+
+	workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), stores, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	raw, err := kind.Encode(vmtest.Docker("vm-1", "owner"))
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: raw})
+	require.NoError(t, err)
+
+	// the network shared, its delete asked, and carried out a moment ago.
+	deletedAt := time.Now().Add(-time.Second)
+
+	_, err = stored.Create(ctx, resource.Record{
+		Raw:     blockstest.A[networkKind.Spec, networkKind.Status](networkKind.Name, "n-1", "vm-1", networkKind.Spec{Name: "shared"}, networkKind.Status{Status: kind.Status{State: networkKind.Present, Expected: kind.Deleted}}),
+		Pending: &resource.Pending{Action: networkKind.ActionDelete, IDs: []string{"delete-1"}, SentAt: deletedAt.Add(-time.Second)},
+	})
+	require.NoError(t, err)
+
+	deleted, err := json.Marshal(kind.ResourceActedOn{ID: "delete-1", Kind: networkKind.Name, UUID: "n-1", Action: networkKind.ActionDelete, Node: vmtest.Node, OK: true, At: deletedAt})
+	require.NoError(t, err)
+
+	require.NoError(t, workload.Subscribers[kind.ResourceActedOnName].Handle(ctx, deleted))
+
+	_, err = stored.GetOne(ctx, networkKind.Name, "n-1")
+	require.ErrorIs(t, err, domain.ErrNotExists, "its record went")
+
+	// a heartbeat its node took before it removed it, heard now.
+	status, err := json.Marshal(networkKind.Status{Status: kind.Status{State: networkKind.Present}, Docker: &networkKind.Docker{ID: "d-shared", Name: "shared", Driver: "bridge", Labels: blockKinds.Labels(networkKind.Name, "n-1")}})
+	require.NoError(t, err)
+
+	late, err := json.Marshal(kind.Heartbeat{Node: vmtest.Node, At: deletedAt.Add(-500 * time.Millisecond), Observed: kind.Observation{Kind: networkKind.Name, UUID: "n-1", Owners: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, Status: status}})
+	require.NoError(t, err)
+
+	require.NoError(t, workload.Subscribers[kind.HeartbeatName(networkKind.Name)].Handle(ctx, late))
+
+	// a container that names it, asked for now.
+	containers, registered := workload.Registry.Lookup(containerKind.Name)
+	require.True(t, registered)
+
+	asked, err := kind.Encode(containerKind.Container{
+		Kind:     containerKind.Name,
+		Metadata: kind.Metadata{OwnerUUID: "owner"},
+		Spec:     containerKind.Spec{Name: "app", Image: "nginx:1.27", Networks: []string{"shared"}, VM: stackKind.VMChoice{UUID: "vm-1"}},
+	})
+	require.NoError(t, err)
+
+	admitted, invalid, err := containers.Admit(ctx, asked)
+	require.NoError(t, err)
+	require.Empty(t, invalid)
+
+	c, err := kind.Decode[containerKind.Spec, containerKind.Status](admitted)
+	require.NoError(t, err)
+	assert.Empty(t, c.Spec.External, "the network it names is not taken as there before it")
+
+	admitted.Metadata.UUID = "c-1"
+	admitted.Metadata.Generation = 1
+	admitted.Metadata.CreatedAt = time.Now()
+
+	_, err = stored.Create(ctx, resource.Record{Raw: admitted})
+	require.NoError(t, err)
+
+	// its graph's run, bounded, since what it makes waits on a node that
+	// is not there to answer.
+	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	_ = workload.Graphs.Reconcile(bounded, graph.Ref{Kind: containerKind.Name, UUID: "c-1"})
+
+	networks, _, err := stored.GetAll(ctx, networkKind.Name, resource.Filter{Parent: kind.Reference{Kind: vmKind.Name, UUID: "vm-1"}}, 0, 0)
+	require.NoError(t, err)
+
+	assert.True(t, slices.ContainsFunc(networks, func(r resource.Record) bool { return r.Metadata.UUID != "n-1" && r.Metadata.Name == "shared" }), "its graph makes the network: %v", networks)
+}

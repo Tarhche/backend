@@ -244,11 +244,19 @@ func (s *Containers) external(ctx context.Context, vmUUID string, spec container
 }
 
 // holds reports whether the Docker VM vmUUID names has what of the named kind
-// is called name, its Docker name: kept by a record that is not on its way
-// out, which one of the same name may be about to take the place of, or held
-// by its dockerd with nobody keeping it, as its node last said, labelled as
-// the platform's or not, shown yet or not (blocks.Sightings.Held): docker
-// would have it whichever.
+// is called name, its Docker name, as what a container naming it takes as
+// there before it: kept by a record that is not on its way out, which one of
+// the same name may be about to take the place of, or held by its dockerd
+// with nobody keeping it, as its node last said, and shown
+// (blocks.Sightings.In). What the platform labelled as its own, its record
+// gone, is not, until its node has gone on saying it for long enough to show
+// it: before then it may be what a heartbeat taken before a delete removed it
+// says, heard once its record went, which docker no longer has, and which a
+// container taking it as there before it would wait on as missing for ever,
+// rather than have its graph make it. Shown, it was said for longer than such
+// a heartbeat ever says it, and is there. What a connect or a disconnect
+// names is another question, which docker answers by everything it holds
+// (networkNamed).
 func (s *Containers) holds(ctx context.Context, kindName string, vmUUID string, name string) (bool, error) {
 	kept, _, err := s.Resources.GetAll(ctx, kindName, resource.Filter{Parent: kind.Reference{Kind: containerKind.Parent, UUID: vmUUID}}, 0, 0)
 	if err != nil {
@@ -270,7 +278,7 @@ func (s *Containers) holds(ctx context.Context, kindName string, vmUUID string, 
 		}
 	}
 
-	return slices.ContainsFunc(s.Sightings.Held(kindName, vmUUID), func(r kind.Raw) bool { return called(r, name) }), nil
+	return slices.ContainsFunc(s.Sightings.In(kindName, vmUUID), func(r kind.Raw) bool { return called(r, name) }), nil
 }
 
 // owns reports whether c owns what of the named kind its Docker VM keeps a
