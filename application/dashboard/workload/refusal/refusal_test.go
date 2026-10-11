@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
@@ -43,6 +45,18 @@ func TestOf(t *testing.T) {
 			locale:  translation.EN,
 			err:     &client.ValidationError{ValidationErrors: domain.ValidationErrors{"compose.services.web.build": "unsupported_key"}},
 			refused: domain.ValidationErrors{"compose.services.web.build": "a stack's file does not take this key"},
+		},
+		{
+			name:    "and what is nested in it too deep, saying how deep a file nests at most",
+			locale:  translation.EN,
+			err:     &client.ValidationError{ValidationErrors: domain.ValidationErrors{"compose.services.web.command[0]": "too_deep"}},
+			refused: domain.ValidationErrors{"compose.services.web.command[0]": "a stack's file nests nothing deeper than " + strconv.Itoa(stackKind.MaxDepth) + " levels beneath its top"},
+		},
+		{
+			name:    "in Farsi as well",
+			locale:  translation.FA,
+			err:     &client.ValidationError{ValidationErrors: domain.ValidationErrors{"compose.services.web.command[0]": "too_deep"}},
+			refused: domain.ValidationErrors{"compose.services.web.command[0]": "فایل استک چیزی را بیش از " + strconv.Itoa(stackKind.MaxDepth) + " سطح زیر بالاترین سطح خود تودرتو نمی‌پذیرد"},
 		},
 		{
 			name:    "and in Farsi to somebody reading Farsi",

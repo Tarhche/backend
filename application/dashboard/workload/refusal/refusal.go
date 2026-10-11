@@ -14,10 +14,12 @@ package refusal
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
@@ -93,11 +95,22 @@ func Of(err error, t translator.Translator) (domain.ValidationErrors, error) {
 	return nil, err
 }
 
-// Say is a reason in the reader's language. A reason there are no words for is
-// kept as it was given: the control plane may already have put it in words,
-// and an empty message would say less than its own.
+// bounds are the numbers the words of a reason say, by the reason, which the
+// reason does not carry: how many levels deep a stack's file nests at most
+// ({depth}), which its words would say again of their own otherwise, and say
+// wrongly once it changed.
+var bounds = map[string][]func(*translator.Params){
+	stackKind.CodeTooDeep: {translator.WithAttribute("depth", strconv.Itoa(stackKind.MaxDepth))},
+}
+
+// Say is a reason in the reader's language, saying the bounds its words name
+// (bounds). A reason there are no words for is kept as it was given: the
+// control plane may already have put it in words, and an empty message would
+// say less than its own.
 func Say(t translator.Translator, field string, reason string) string {
-	if said := t.Translate(reason, translator.WithAttribute("field", field)); len(said) > 0 {
+	options := append([]func(*translator.Params){translator.WithAttribute("field", field)}, bounds[reason]...)
+
+	if said := t.Translate(reason, options...); len(said) > 0 {
 		return said
 	}
 
