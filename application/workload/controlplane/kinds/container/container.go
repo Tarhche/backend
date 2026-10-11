@@ -246,7 +246,9 @@ func (s *Containers) external(ctx context.Context, vmUUID string, spec container
 // holds reports whether the Docker VM vmUUID names has what of the named kind
 // is called name, its Docker name: kept by a record that is not on its way
 // out, which one of the same name may be about to take the place of, or held
-// by its dockerd with nobody keeping it, as its node last said.
+// by its dockerd with nobody keeping it, as its node last said, labelled as
+// the platform's or not, shown yet or not (blocks.Sightings.Held): docker
+// would have it whichever.
 func (s *Containers) holds(ctx context.Context, kindName string, vmUUID string, name string) (bool, error) {
 	kept, _, err := s.Resources.GetAll(ctx, kindName, resource.Filter{Parent: kind.Reference{Kind: containerKind.Parent, UUID: vmUUID}}, 0, 0)
 	if err != nil {
@@ -268,7 +270,7 @@ func (s *Containers) holds(ctx context.Context, kindName string, vmUUID string, 
 		}
 	}
 
-	return slices.ContainsFunc(s.Sightings.In(kindName, vmUUID), func(r kind.Raw) bool { return called(r, name) }), nil
+	return slices.ContainsFunc(s.Sightings.Held(kindName, vmUUID), func(r kind.Raw) bool { return called(r, name) }), nil
 }
 
 // owns reports whether c owns what of the named kind its Docker VM keeps a
@@ -494,7 +496,10 @@ func (s *Containers) connectable(ctx context.Context, c containerKind.Container,
 
 // networkNamed is the name a Docker VM has the network network names, by
 // its name or its Docker id, and whether it has one: what a container's
-// spec, and docker's listing of a container, name a network by.
+// spec, and docker's listing of a container, name a network by. A network
+// nobody keeps a record of is one as its node last said its dockerd holds it,
+// labelled as the platform's or not, shown yet or not
+// (blocks.Sightings.Held).
 func (s *Containers) networkNamed(ctx context.Context, vmUUID string, network string) (string, bool, error) {
 	if networkKind.Default(network) {
 		return network, true, nil
@@ -510,7 +515,7 @@ func (s *Containers) networkNamed(ctx context.Context, vmUUID string, network st
 		networks = append(networks, kept[i].Raw)
 	}
 
-	networks = append(networks, s.Sightings.In(networkKind.Name, vmUUID)...)
+	networks = append(networks, s.Sightings.Held(networkKind.Name, vmUUID)...)
 
 	for _, n := range networks {
 		var spec networkKind.Spec

@@ -155,7 +155,7 @@ func (s *Sightings) Forget(kindName string, uuid string) {
 
 // All is everything of the named kind seen lately, newest first.
 func (s *Sightings) All(kindName string) []kind.Raw {
-	return s.shown(kindName, func(kind.Raw) bool { return true })
+	return s.shown(kindName, s.shows, func(kind.Raw) bool { return true })
 }
 
 // One is what of the named kind uuid names, if it was seen lately.
@@ -174,11 +174,30 @@ func (s *Sightings) One(kindName string, uuid string) (kind.Raw, bool) {
 // In is what of the named kind was seen lately in one Docker VM, newest
 // first.
 func (s *Sightings) In(kindName string, vmUUID string) []kind.Raw {
-	return s.shown(kindName, func(manifest kind.Raw) bool {
+	return s.shown(kindName, s.shows, in(vmUUID))
+}
+
+// Held is what of the named kind its node says one Docker VM holds, newest
+// first: what is shown there (In), and what the platform labelled as its own
+// that its node has not said for long enough yet to be shown, which is there
+// all the same, as what outlived its record is, or anything a control plane
+// that has just started hears. What a command took away, what went stale, and
+// what its node left behind (Heard) are not. Not showing what is labelled at
+// once is for showing alone: what asks whether a VM's dockerd holds a thing
+// by its name, as docker would answer it, asks Held. A heartbeat its node took
+// before a delete removed something, heard once its record went, says it is
+// held for as long as its node is not heard to have left it behind.
+func (s *Sightings) Held(kindName string, vmUUID string) []kind.Raw {
+	return s.shown(kindName, s.holds, in(vmUUID))
+}
+
+// in is what lives in the Docker VM vmUUID names.
+func in(vmUUID string) func(kind.Raw) bool {
+	return func(manifest kind.Raw) bool {
 		vm, in := manifest.Metadata.Owner(blockKinds.Parent)
 
 		return in && vm.UUID == vmUUID
-	})
+	}
 }
 
 // Changed has what of the named kind uuid names be as after says, once a
@@ -204,16 +223,16 @@ func (s *Sightings) Changed(kindName string, uuid string, after *kind.Raw) {
 	s.seen[kindName][uuid] = seen
 }
 
-// shown is what of the named kind that is lets through was seen lately,
-// newest first.
-func (s *Sightings) shown(kindName string, is func(kind.Raw) bool) []kind.Raw {
+// shown is what of the named kind that is lets through was seen lately, as
+// what visible says of each, newest first.
+func (s *Sightings) shown(kindName string, visible func(Seen) bool, is func(kind.Raw) bool) []kind.Raw {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	var shown []kind.Raw
 
 	for _, seen := range s.seen[kindName] {
-		if s.shows(seen) && is(seen.Manifest) {
+		if visible(seen) && is(seen.Manifest) {
 			shown = append(shown, seen.Manifest)
 		}
 	}
@@ -228,6 +247,13 @@ func (s *Sightings) shown(kindName string, is func(kind.Raw) bool) []kind.Raw {
 // and not left behind by its node.
 func (s *Sightings) shows(seen Seen) bool {
 	return !seen.gone && !s.stale(seen) && (!seen.Labelled || (seen.said.Sub(seen.since) >= s.sureAfter && !s.left(seen)))
+}
+
+// holds reports whether what was seen is held by its VM's dockerd, as its
+// node last said, shown or not yet: seen lately, not taken away since, and,
+// when the platform labelled it as its own, not left behind by its node.
+func (s *Sightings) holds(seen Seen) bool {
+	return !seen.gone && !s.stale(seen) && (!seen.Labelled || !s.left(seen))
 }
 
 // left reports whether what was seen was left behind by its node: it went on

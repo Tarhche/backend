@@ -179,6 +179,25 @@ func TestSightings_labelled(t *testing.T) {
 			said(s, now, "node-1", 2*sure+time.Second, true)
 			assert.False(t, shown(s), "and its run starts again, by its node's clock, which another node's says nothing of")
 		},
+		"what is labelled as the platform's is held by its vm's dockerd as soon as it is said, though it is shown only once said for long enough, and not once its node left it behind": func(t *testing.T) {
+			s, now := sightings()
+
+			in := func(manifest kind.Raw) kind.Raw {
+				manifest.Metadata.Owners = []kind.Reference{{Kind: "vm", UUID: "vm-1"}}
+
+				return manifest
+			}
+
+			*now = start.Add(100 * time.Millisecond)
+			s.Saw("container", Seen{Node: "node-1", At: start, Labelled: true, Manifest: in(kind.Raw{Kind: "container", Metadata: kind.Metadata{UUID: "web"}})})
+
+			assert.Empty(t, s.In("container", "vm-1"), "not shown yet")
+			assert.Len(t, s.Held("container", "vm-1"), 1, "but held")
+			assert.Empty(t, s.Held("container", "vm-2"), "in its own vm")
+
+			s.Heard("node-1", start.Add(sure))
+			assert.Empty(t, s.Held("container", "vm-1"), "nor held once its node went on as long without it")
+		},
 		"what is not labelled as the platform's is shown until it is stale, whatever else its node says": func(t *testing.T) {
 			s, now := sightings()
 

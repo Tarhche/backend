@@ -237,6 +237,37 @@ func TestContainers_Admit(t *testing.T) {
 			"what its records keep and its dockerd holds with nobody keeping it, but not what is on its way out, what it was asked to say, or what every dockerd has")
 	})
 
+	t.Run("and so does one whose vm's dockerd holds what is labelled as the platform's with no record, before its node has said it for as long as it waits to show it", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		// what outlived its record, which its node said a moment ago for the
+		// first time here, and is not shown yet.
+		held := func(kindName string, name string) {
+			w.Sightings.Saw(kindName, blocks.Seen{Node: vmtest.Node, At: time.Now(), Labelled: true, Manifest: kind.Raw{
+				Kind:     kindName,
+				Metadata: kind.Metadata{UUID: kindName + "-" + name, Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+				Status:   json.RawMessage(`{"state":"present","name":"` + name + `"}`),
+			}})
+		}
+
+		held(networkKind.Name, "outlived")
+		held(volumeKind.Name, "outlived-too")
+
+		require.Empty(t, w.Sightings.In(networkKind.Name, "vm-1"), "not shown yet")
+
+		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{
+			Image:    "nginx",
+			Networks: []string{"outlived"},
+			Mounts:   []containerKind.Mount{{Type: containerKind.MountVolume, Source: "outlived-too", Target: "/data"}},
+		}, kind.Reference{Kind: "vm", UUID: "vm-1"}))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, []string{"network/outlived", "volume/outlived-too"}, admitted.Spec.External, "its dockerd holds them, as docker would answer a name asked for again")
+	})
+
 	t.Run("and one something owns keeps what it was asked to say of it", func(t *testing.T) {
 		t.Parallel()
 
@@ -633,6 +664,28 @@ func TestContainers_Prepare(t *testing.T) {
 				assert.Empty(t, taken.Spec.Networks, "its spec names it no more")
 			})
 		}
+	})
+
+	t.Run("a network its vm's dockerd holds labelled as the platform's with no record is found at once, before it is shown", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		w.Sightings.Saw(networkKind.Name, blocks.Seen{Node: vmtest.Node, At: time.Now(), Labelled: true, Manifest: kind.Raw{
+			Kind:     networkKind.Name,
+			Metadata: kind.Metadata{UUID: "outlived-uuid", Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+			Status:   json.RawMessage(`{"state":"present","id":"9f8e7d6c","name":"outlived"}`),
+		}})
+
+		require.Empty(t, w.Sightings.In(networkKind.Name, "vm-1"), "not shown yet")
+
+		put, _, err := w.Containers.Prepare(ctx, running, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "9f8e7d6c"})
+		require.NoError(t, err, "put on it, by its docker id")
+		assert.Equal(t, []string{"outlived"}, put.Spec.Networks, "named by its name")
+
+		taken, _, err := w.Containers.Prepare(ctx, put, containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: "outlived"})
+		require.NoError(t, err, "and taken off it")
+		assert.Empty(t, taken.Spec.Networks)
 	})
 
 	t.Run("one is not taken off a network its vm has not", func(t *testing.T) {
