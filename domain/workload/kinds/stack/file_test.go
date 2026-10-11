@@ -386,6 +386,97 @@ func TestParse_unsupportedKeys(t *testing.T) {
 	}
 }
 
+func TestParse_keys(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		file    string
+		invalid domain.ValidationErrors
+	}{
+		"a key at the top it does not take":                           {file: "services:\n  web: {image: a}\nbogus: 1\n", invalid: domain.ValidationErrors{"compose.bogus": stack.CodeUnsupportedKey}},
+		"one of a service":                                            {file: "services:\n  web: {image: a, bogus: 1}\n", invalid: domain.ValidationErrors{"compose.services.web.bogus": stack.CodeUnsupportedKey}},
+		"a healthcheck, whole":                                        {file: "services:\n  web: {image: a, healthcheck: {test: x}}\n", invalid: domain.ValidationErrors{"compose.services.web.healthcheck": stack.CodeUnsupportedKey}},
+		"one of its resources":                                        {file: "services:\n  web: {image: a, resources: {limits: {cpus: 1}, bogus: 1}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources.bogus": stack.CodeUnsupportedKey}},
+		"one of its limits":                                           {file: "services:\n  web: {image: a, resources: {limits: {cpus: 1, bogus: 1}}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources.limits.bogus": stack.CodeUnsupportedKey}},
+		"a limit of cores that is a mapping":                          {file: "services:\n  web: {image: a, resources: {limits: {cpus: {bogus: 1}}}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources.limits.cpus": stack.CodeInvalidCPUs}},
+		"one of a port in its long form":                              {file: "services:\n  web: {image: a, ports: [{target: 80, bogus: 1}]}\n", invalid: domain.ValidationErrors{"compose.services.web.ports[0].bogus": stack.CodeUnsupportedKey}},
+		"one of a volume in its long form":                            {file: "services:\n  web: {image: a, volumes: [{type: bind, source: /a, target: /b, bogus: 1}]}\n", invalid: domain.ValidationErrors{"compose.services.web.volumes[0].bogus": stack.CodeUnsupportedKey}},
+		"a bind's options":                                            {file: "services:\n  web: {image: a, volumes: [{type: bind, source: /a, target: /b, bind: {propagation: shared}}]}\n", invalid: domain.ValidationErrors{"compose.services.web.volumes[0].bind": stack.CodeUnsupportedKey}},
+		"one of what a service depended on is depended on with":       {file: "services:\n  db: {image: a}\n  web: {image: a, depends_on: {db: {condition: service_started, bogus: 1}}}\n", invalid: domain.ValidationErrors{"compose.services.web.depends_on.db.bogus": stack.CodeUnsupportedKey}},
+		"a dependency's restart":                                      {file: "services:\n  db: {image: a}\n  web: {image: a, depends_on: {db: {condition: service_started, restart: true}}}\n", invalid: domain.ValidationErrors{"compose.services.web.depends_on.db.restart": stack.CodeUnsupportedKey}},
+		"what a service says of a network it joins":                   {file: "networks: {n: ~}\nservices:\n  web: {image: a, networks: {n: {aliases: [x]}}}\n", invalid: domain.ValidationErrors{"compose.services.web.networks.n.aliases": stack.CodeUnsupportedKey}},
+		"what the file says of a network it declares":                 {file: "networks: {n: {driver: overlay}}\nservices:\n  web: {image: a}\n", invalid: domain.ValidationErrors{"compose.networks.n.driver": stack.CodeUnsupportedKey}},
+		"and of a volume":                                             {file: "volumes: {v: {external: true}}\nservices:\n  web: {image: a}\n", invalid: domain.ValidationErrors{"compose.volumes.v.external": stack.CodeUnsupportedKey}},
+		"a variable that is a mapping":                                {file: "services:\n  web: {image: a, environment: {A: {b: 1}}}\n", invalid: domain.ValidationErrors{"compose.services.web.environment.A": "invalid_value"}},
+		"a word of a command that is a mapping":                       {file: "services:\n  web: {image: a, command: [{b: 1}]}\n", invalid: domain.ValidationErrors{"compose.services.web.command[0]": "invalid_value"}},
+		"a merge of a mapping":                                        {file: "services:\n  web: {image: a, <<: {user: root}}\n", invalid: domain.ValidationErrors{"compose.services.web.<<": stack.CodeUnsupportedKey}},
+		"one tagged a merge":                                          {file: "services:\n  web: {image: a, !!merge <<: {user: root}}\n", invalid: domain.ValidationErrors{"compose.services.web.<<": stack.CodeUnsupportedKey}},
+		"and << tagged a string, which is a key it does not take":     {file: "services:\n  web: {image: a, !!str <<: {user: root}}\n", invalid: domain.ValidationErrors{"compose.services.web.<<": stack.CodeUnsupportedKey}},
+		"a key anchored":                                              {file: "services:\n  &k web: {image: a}\n", invalid: domain.ValidationErrors{"compose.services.web": stack.CodeUnsupportedAlias}},
+		"a value anchored in a flow mapping":                          {file: "services: {web: {image: &i a}}\n", invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeUnsupportedAlias}},
+		"a merge of an alias, said as an alias before as a merge":     {file: "x: &b {image: a}\nservices:\n  web: {<<: *b}\n", invalid: domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, "compose.services.web.<<": stack.CodeUnsupportedAlias}},
+		"a second document, with an alias in it":                      {file: "services:\n  web: {image: a}\n---\nx: &a 1\ny: *a\n", invalid: domain.ValidationErrors{"compose": "invalid_value"}},
+		"a second document that is empty":                             {file: "services:\n  web: {image: a}\n---\n", invalid: domain.ValidationErrors{"compose": "invalid_value"}},
+		"a key a tag of its own says is anything":                     {file: "services:\n  web: {!custom image: a}\n", invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeUnsupportedKey}},
+		"a key binary, whose text is a key it takes":                  {file: "services:\n  web: {image: a, !!binary user: root}\n", invalid: domain.ValidationErrors{"compose.services.web.user": stack.CodeUnsupportedKey}},
+		"and so of its limits":                                        {file: "services:\n  web: {image: a, resources: {limits: {!!binary cpus: 2}}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources.limits.cpus": stack.CodeUnsupportedKey}},
+		"the networks a service joins":                                {file: "networks: {n: ~}\nservices:\n  web: {image: a, !!binary networks: [n]}\n", invalid: domain.ValidationErrors{"compose.services.web.networks": stack.CodeUnsupportedKey}},
+		"the networks the file declares":                              {file: "services:\n  web: {image: a}\n!!binary networks: {front: ~}\n", invalid: domain.ValidationErrors{"compose.networks": stack.CodeUnsupportedKey}},
+		"and its services":                                            {file: "!!binary services:\n  web: {image: a}\n", invalid: domain.ValidationErrors{"compose.services": stack.CodeUnsupportedKey}},
+		"a volume's name binary, whose text is read as ../":           {file: "services:\n  web: {image: a}\nvolumes:\n  !!binary Li4v: ~\n", invalid: domain.ValidationErrors{"compose.volumes.Li4v": stack.CodeUnsupportedKey}},
+		"and a network's":                                             {file: "services:\n  web: {image: a}\nnetworks:\n  !!binary Li4v: ~\n", invalid: domain.ValidationErrors{"compose.networks.Li4v": stack.CodeUnsupportedKey}},
+		"and a service's, whose text is read as another's name":       {file: "services:\n  web: {image: a, privileged: false}\n  !!binary d2Vi: {image: a, privileged: true}\n", invalid: domain.ValidationErrors{"compose.services.d2Vi": stack.CodeUnsupportedKey}},
+		"a volume's name that is nothing":                             {file: "services:\n  web: {image: a}\nvolumes:\n  null: ~\n", invalid: domain.ValidationErrors{"compose.volumes.null": stack.CodeUnsupportedKey}},
+		"a key that is a list, under the path of its mapping's entry": {file: "services:\n  web: {image: a, ? [x, y] : 1}\n", invalid: domain.ValidationErrors{"compose.services.web.": stack.CodeUnsupportedKey}},
+		"a key given twice":                                           {file: "services:\n  web: {image: a, image: b}\n", invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeDuplicateKey}},
+		"one of limits beneath resources tagged as nothing":           {file: "services:\n  web: {image: a, resources: !!null {limits: {bogus: 1}}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources.limits.bogus": stack.CodeUnsupportedKey}},
+		"a volume's name that is a number":                            {file: "services:\n  web: {image: a}\nvolumes:\n  1: ~\n", invalid: domain.ValidationErrors{"compose.volumes.1": stack.CodeUnsupportedKey}},
+		"a network's that is a boolean":                               {file: "services:\n  web: {image: a}\nnetworks:\n  true: ~\n", invalid: domain.ValidationErrors{"compose.networks.true": stack.CodeUnsupportedKey}},
+		"a service's that is a date":                                  {file: "services:\n  2026-10-11: {image: a}\n", invalid: domain.ValidationErrors{"compose.services.2026-10-11": stack.CodeUnsupportedKey}},
+		"a variable's that is a number":                               {file: "services:\n  web: {image: a, environment: {1: a}}\n", invalid: domain.ValidationErrors{"compose.services.web.environment.1": stack.CodeUnsupportedKey}},
+		"a service depended on that is a number, in a mapping":        {file: "services:\n  web: {image: a, depends_on: {1: ~}}\n", invalid: domain.ValidationErrors{"compose.services.web.depends_on.1": stack.CodeUnsupportedKey}},
+	} {
+		t.Run("refuses "+name+", saying where", func(t *testing.T) {
+			t.Parallel()
+
+			file, invalid := stack.Parse(tt.file)
+
+			assert.Equal(t, tt.invalid, invalid)
+			assert.Empty(t, file.Services, "and is no file")
+		})
+	}
+
+	t.Run("takes a name YAML would read as anything but a string quoted, and reads it, and what names it, as it is written", func(t *testing.T) {
+		t.Parallel()
+
+		file, invalid := stack.Parse("services:\n  '1':\n    image: a\n    volumes: ['2026-10-11:/data']\n    networks: ['true']\n  web:\n    image: a\n    depends_on: [1]\n    environment: {'2': b}\nvolumes:\n  '2026-10-11':\nnetworks:\n  \"true\":\n")
+		require.Empty(t, invalid)
+
+		assert.Equal(t, []string{"1", "web"}, file.ServiceNames())
+		assert.Equal(t, []string{"2026-10-11"}, file.Volumes)
+		assert.Equal(t, []string{"true"}, file.Networks)
+		assert.Equal(t, []string{"true"}, file.Services["1"].Networks)
+		assert.Equal(t, []string{"1"}, file.Services["web"].DependsOn)
+		assert.Equal(t, []string{"2=b"}, file.Services["web"].Environment)
+	})
+
+	for name, file := range map[string]string{
+		"a file that says where its document ends":  "services:\n  web: {image: a}\n...\n",
+		"a value a tag of its own says is anything": "services:\n  web: {image: !custom a}\n",
+		"a service's mapping tagged as nothing":     "services:\n  web: !!null {image: a}\n",
+		"and values tagged as what they are":        "services:\n  web: !!map {image: !!str a}\n",
+	} {
+		t.Run("takes "+name+", as what is written, a tag on a value saying nothing of it", func(t *testing.T) {
+			t.Parallel()
+
+			parsed, invalid := stack.Parse(file)
+			require.Empty(t, invalid)
+
+			assert.Equal(t, "a", parsed.Services["web"].Image)
+		})
+	}
+}
+
 func TestParse_aliases(t *testing.T) {
 	t.Parallel()
 
@@ -663,7 +754,8 @@ func TestParse_mostInvalid(t *testing.T) {
 // whether it was refused or not, is refused or read taking a few megabytes, or
 // a few tens of them where as much is said of it as ever is; and a file as
 // large as a stack's may be, as costly as the bounds let one be, is read in a
-// few tens of them.
+// few tens of them, read into nodes once to be read, and again to be decoded
+// strictly (yaml.Decoder.KnownFields), which a file that is taken is.
 //
 // It runs alone, not in parallel, since what other tests allocated meanwhile
 // would be counted with what reading the files does.
@@ -767,6 +859,24 @@ func TestParse_bounded(t *testing.T) {
 			},
 			most: 64 * megabyte,
 		},
+		"and one service whose command is as many words as fit, one list of them, which is costlier still": {
+			file: func() string {
+				var b strings.Builder
+
+				b.WriteString("services:\n  web:\n    image: a\n    command: [a")
+				for b.Len()+len(",a]\n") <= stack.MaxFile {
+					b.WriteString(",a")
+				}
+
+				b.WriteString("]\n")
+
+				return b.String()
+			}(),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Empty(t, invalid)
+			},
+			most: 72 * megabyte,
+		},
 		"a service named by 128 KiB, its command as many words as fit, the last of them anchored, which is said under its path once": {
 			file: anchoredBeneath(128<<10, 0),
 			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
@@ -829,7 +939,7 @@ func TestParse_bounded(t *testing.T) {
 			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
 				assert.Empty(t, invalid)
 			},
-			most: 32 * megabyte,
+			most: 40 * megabyte,
 		},
 		"and over as many variables as fit": {
 			file: func() string {
@@ -851,7 +961,7 @@ func TestParse_bounded(t *testing.T) {
 			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
 				assert.Empty(t, invalid)
 			},
-			most: 32 * megabyte,
+			most: 40 * megabyte,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
