@@ -437,6 +437,72 @@ func TestParse_aliases(t *testing.T) {
 	}
 }
 
+func TestParse_depth(t *testing.T) {
+	t.Parallel()
+
+	// listed is a file whose service's command is lists, each the one item of
+	// the one around it, as many as there are, the innermost holding inner:
+	// the command is three levels beneath the file's top, services one and
+	// web two, so inner is as many levels beneath it as there are lists, and
+	// three more.
+	listed := func(lists int, inner string) string {
+		return "services:\n  web:\n    image: nginx\n    command: " + strings.Repeat("[", lists) + inner + strings.Repeat("]", lists) + "\n"
+	}
+
+	// mapped is the same of mappings, each keyed k.
+	mapped := func(mappings int, inner string) string {
+		return "services:\n  web:\n    image: nginx\n    command: " + strings.Repeat("{k: ", mappings) + inner + strings.Repeat("}", mappings) + "\n"
+	}
+
+	command := "compose.services.web.command"
+
+	for name, tt := range map[string]struct {
+		file    string
+		invalid domain.ValidationErrors
+	}{
+		"what is as deep as a file nests is read, a command of lists, which is refused for what it is": {
+			file:    listed(stack.MaxDepth-3, "a"),
+			invalid: domain.ValidationErrors{command + "[0]": "invalid_value"},
+		},
+		"and a level deeper is too deep, under the path of the first of it": {
+			file:    listed(stack.MaxDepth-2, "a"),
+			invalid: domain.ValidationErrors{command + strings.Repeat("[0]", stack.MaxDepth-2): stack.CodeTooDeep},
+		},
+		"and what is beneath that is not read, an anchor among it": {
+			file:    listed(9990, "&x a"),
+			invalid: domain.ValidationErrors{command + strings.Repeat("[0]", stack.MaxDepth-2): stack.CodeTooDeep},
+		},
+		"nor what is beside it in what holds it": {
+			file:    listed(stack.MaxDepth-3, "[a, &x b, [c]]"),
+			invalid: domain.ValidationErrors{command + strings.Repeat("[0]", stack.MaxDepth-2): stack.CodeTooDeep},
+		},
+		"but an anchor above it is said, before it": {
+			file: "services:\n  web:\n    image: &i nginx\n    command: " + strings.Repeat("[", 20) + "a" + strings.Repeat("]", 20) + "\n",
+			invalid: domain.ValidationErrors{
+				"compose.services.web.image":                      stack.CodeUnsupportedAlias,
+				command + strings.Repeat("[0]", stack.MaxDepth-2): stack.CodeTooDeep,
+			},
+		},
+		"mappings as deep as a file nests are read": {
+			file:    mapped(stack.MaxDepth-3, "a"),
+			invalid: domain.ValidationErrors{command: "invalid_value"},
+		},
+		"and a level deeper is too deep, under the path of its key": {
+			file:    mapped(stack.MaxDepth-2, "a"),
+			invalid: domain.ValidationErrors{command + strings.Repeat(".k", stack.MaxDepth-2): stack.CodeTooDeep},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			file, invalid := stack.Parse(tt.file)
+
+			assert.Equal(t, tt.invalid, invalid)
+			assert.Empty(t, file.Services, "and is no file")
+		})
+	}
+}
+
 func TestParse_caps(t *testing.T) {
 	t.Parallel()
 
@@ -592,9 +658,12 @@ func TestParse_mostInvalid(t *testing.T) {
 
 // TestParse_bounded holds what reading a stack's file takes to what the file
 // is, however it is written: each file a review found taking up to a
-// gigabyte to read, by aliases and ranges of ports, is refused, taking a few
-// megabytes; and a file as large as a stack's may be, as costly as the
-// bounds let one be, is read in a few tens of them.
+// gigabyte to read, by aliases and ranges of ports, and up to seventeen, by
+// the paths of what is beneath a long name or nested deep, each written out
+// whether it was refused or not, is refused or read taking a few megabytes, or
+// a few tens of them where as much is said of it as ever is; and a file as
+// large as a stack's may be, as costly as the bounds let one be, is read in a
+// few tens of them.
 //
 // It runs alone, not in parallel, since what other tests allocated meanwhile
 // would be counted with what reading the files does.
@@ -698,6 +767,92 @@ func TestParse_bounded(t *testing.T) {
 			},
 			most: 64 * megabyte,
 		},
+		"a service named by 128 KiB, its command as many words as fit, the last of them anchored, which is said under its path once": {
+			file: anchoredBeneath(128<<10, 0),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				require.Len(t, invalid, 1)
+
+				for path, code := range invalid {
+					assert.True(t, strings.HasPrefix(path, "compose.services."+strings.Repeat("a", 128<<10)+".command["), "%.40s...", path)
+					assert.Equal(t, stack.CodeUnsupportedAlias, code)
+				}
+			},
+			most: 32 * megabyte,
+		},
+		"and with a hundred and one anchored before the rest, which are said as many as are ever said, and nothing is read after them": {
+			file: anchoredBeneath(128<<10, stack.MaxInvalid+1),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Len(t, invalid, stack.MaxInvalid)
+
+				for path, code := range invalid {
+					assert.Equal(t, stack.CodeUnsupportedAlias, code, "%.40s...", path)
+				}
+			},
+			most: 64 * megabyte,
+		},
+		"a list nested 9990 deep, an anchor at its bottom, which is too deep to be read": {
+			file: "services:\n  web:\n    image: a\n    command: " + strings.Repeat("[", 9990) + "&x a" + strings.Repeat("]", 9990) + "\n",
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.services.web.command" + strings.Repeat("[0]", stack.MaxDepth-2): stack.CodeTooDeep}, invalid)
+			},
+			most: 16 * megabyte,
+		},
+		"mappings nested as deep as a file holds of them, of keys of twenty letters, an anchor at their bottom": {
+			file: func() string {
+				var b strings.Builder
+
+				b.WriteString("services:\n  web:\n    image: a\n    command: ")
+
+				key, depth := strings.Repeat("k", 20), 0
+				for ; b.Len()+len(key)+len("{: &x a}\n")+depth < stack.MaxFile && depth < 9990; depth++ {
+					b.WriteString("{" + key + ": ")
+				}
+
+				b.WriteString("&x a" + strings.Repeat("}", depth) + "\n")
+
+				return b.String()
+			}(),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.services.web.command" + strings.Repeat("."+strings.Repeat("k", 20), stack.MaxDepth-2): stack.CodeTooDeep}, invalid)
+			},
+			most: 16 * megabyte,
+		},
+		"a service named by 128 KiB over as many binds as fit, whose name is refused once, and nothing of it read": {
+			file: boundMounts(128 << 10),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.services." + strings.Repeat("a", 128<<10): "too_large"}, invalid)
+			},
+			most: 16 * megabyte,
+		},
+		"a service named as long as a name may be over as many binds as fit, each path of which is written out only when it is refused": {
+			file: boundMounts(stack.MaxNameLength),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Empty(t, invalid)
+			},
+			most: 32 * megabyte,
+		},
+		"and over as many variables as fit": {
+			file: func() string {
+				var b strings.Builder
+
+				b.WriteString("services:\n  ? " + strings.Repeat("a", stack.MaxNameLength) + "\n  : image: a\n    environment: {")
+				for i := 0; b.Len()+len(",K00000: v}\n") <= stack.MaxFile; i++ {
+					if i > 0 {
+						b.WriteString(",")
+					}
+
+					fmt.Fprintf(&b, "K%x: v", i)
+				}
+
+				b.WriteString("}\n")
+
+				return b.String()
+			}(),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Empty(t, invalid)
+			},
+			most: 32 * megabyte,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			require.LessOrEqual(t, len(tt.file), stack.MaxFile)
@@ -728,6 +883,43 @@ func ranges(size int) string {
 	for b.Len()+len("      - 1-1000\n") <= size {
 		b.WriteString("      - 1-1000\n")
 	}
+
+	return b.String()
+}
+
+// anchoredBeneath is a file as large as a stack's may be of one service named
+// by as many letters as length says, an explicit key's, which YAML holds to
+// no length, whose command is as many one-letter words as fit: the first
+// anchored ones anchored each, and the last of them anchored too.
+func anchoredBeneath(length int, anchored int) string {
+	var b strings.Builder
+
+	b.WriteString("services:\n  ? " + strings.Repeat("a", length) + "\n  : image: a\n    command: [")
+	for i := range anchored {
+		fmt.Fprintf(&b, "&x%d a,", i)
+	}
+
+	for b.Len()+len("a,&z a]\n") <= stack.MaxFile {
+		b.WriteString("a,")
+	}
+
+	b.WriteString("&z a]\n")
+
+	return b.String()
+}
+
+// boundMounts is a file as large as a stack's may be of one service named by
+// as many letters as length says, an explicit key's, which mounts as many
+// binds as fit.
+func boundMounts(length int) string {
+	var b strings.Builder
+
+	b.WriteString("services:\n  ? " + strings.Repeat("a", length) + "\n  : image: a\n    volumes: [/a:/b")
+	for b.Len()+len(",/a:/b]\n") <= stack.MaxFile {
+		b.WriteString(",/a:/b")
+	}
+
+	b.WriteString("]\n")
 
 	return b.String()
 }
@@ -934,6 +1126,48 @@ func TestParse_names(t *testing.T) {
 
 		assert.Equal(t, []string{"2-web_v1.0", "a"}, file.ServiceNames())
 	})
+
+	longest := strings.Repeat("a", stack.MaxNameLength)
+	long := longest + "a"
+
+	t.Run("takes names as long as a name may be, and what names them", func(t *testing.T) {
+		t.Parallel()
+
+		file, invalid := stack.Parse(strings.NewReplacer("NAME", longest).Replace(
+			"services:\n  NAME:\n    image: nginx\n    networks: [NAME]\n    volumes: [NAME:/data, {type: volume, source: NAME, target: /backup}]\n" +
+				"  web:\n    image: nginx\n    depends_on: [NAME]\n    networks: {NAME: }\n  api:\n    image: api\n    depends_on: {NAME: {condition: service_started}}\n" +
+				"networks:\n  NAME:\nvolumes:\n  NAME:\n",
+		))
+		require.Empty(t, invalid)
+
+		assert.Equal(t, []string{longest}, file.Services["web"].DependsOn)
+		assert.Equal(t, []string{longest}, file.Networks)
+		assert.Equal(t, []string{longest}, file.Volumes)
+	})
+
+	for name, tt := range map[string]struct {
+		file string
+		path string
+	}{
+		"a service":                                        {file: "services:\n  " + long + ":\n    image: nginx\n    build: .\n", path: "compose.services." + long},
+		"a volume":                                         {file: "services:\n  web:\n    image: nginx\nvolumes:\n  " + long + ":\n    driver: local\n", path: "compose.volumes." + long},
+		"a network":                                        {file: "services:\n  web:\n    image: nginx\nnetworks:\n  " + long + ":\n    driver: bridge\n", path: "compose.networks." + long},
+		"a service it depends on":                          {file: "services:\n  web:\n    image: nginx\n    depends_on: [" + long + "]\n", path: "compose.services.web.depends_on[0]"},
+		"a service it depends on in a mapping":             {file: "services:\n  web:\n    image: nginx\n    depends_on:\n      " + long + ":\n        condition: service_healthy\n", path: "compose.services.web.depends_on." + long},
+		"a network it joins":                               {file: "services:\n  web:\n    image: nginx\n    networks: [" + long + "]\n", path: "compose.services.web.networks[0]"},
+		"a network it joins in a mapping":                  {file: "services:\n  web:\n    image: nginx\n    networks:\n      " + long + ":\n        aliases: [www]\n", path: "compose.services.web.networks." + long},
+		"a volume it mounts":                               {file: "services:\n  web:\n    image: nginx\n    volumes: [" + long + ":/data]\n", path: "compose.services.web.volumes[0]"},
+		"a volume it mounts in its long form":              {file: "services:\n  web:\n    image: nginx\n    volumes: [{type: volume, source: " + long + ", target: /data}]\n", path: "compose.services.web.volumes[0]"},
+		"a service of a name docker would not take either": {file: "services:\n  -" + longest + ":\n    image: nginx\n", path: "compose.services.-" + longest},
+	} {
+		t.Run("refuses "+name+" named longer than a name may be, once, and reads nothing beneath it", func(t *testing.T) {
+			t.Parallel()
+
+			_, invalid := stack.Parse(tt.file)
+
+			assert.Equal(t, domain.ValidationErrors{tt.path: "too_large"}, invalid)
+		})
+	}
 }
 
 func TestFile_Levels(t *testing.T) {
