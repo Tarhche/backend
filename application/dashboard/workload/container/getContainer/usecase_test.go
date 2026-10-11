@@ -85,6 +85,14 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.NotContains(t, shown, "stack", "its stack is not named")
 		assert.NotContains(t, shown, "stack_uuid", "nor linked")
 		assert.Equal(t, "web", shown["service"], "though it says which service it is")
+
+		labels, ok := shown["labels"].(map[string]any)
+		require.True(t, ok, "%v", shown)
+		assert.NotContains(t, labels, "workload.stack", "nor does its labels' uuid of it")
+		assert.Equal(t, "web", labels["workload.stack.service"], "which say its service all the same")
+		assert.Equal(t, "container-uuid", labels["workload.container"], "and the rest of them")
+
+		assert.Equal(t, "stack-uuid", workloadtest.Container().Labels["workload.stack"], "what it was read as is left as it was")
 	})
 
 	t.Run("a container no stack deployed asks nothing about stacks", func(t *testing.T) {

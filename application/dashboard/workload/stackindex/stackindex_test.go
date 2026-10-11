@@ -64,10 +64,16 @@ func TestOf(t *testing.T) {
 func TestIndex_Link(t *testing.T) {
 	t.Parallel()
 
+	// labelled as the platform labels a stack's container, its stack's uuid
+	// and its service.
+	labelled := func(stackUUID string) map[string]string {
+		return map[string]string{"workload.managed": "true", "workload.stack": stackUUID, "workload.stack.service": "web"}
+	}
+
 	containers := []docker.Container{
-		{ID: "a", Stack: "shop-uuid", Service: "web"},
-		{ID: "b"},
-		{ID: "c", Stack: "unseen-uuid", Service: "web"},
+		{ID: "a", Stack: "shop-uuid", Service: "web", Labels: labelled("shop-uuid")},
+		{ID: "b", Labels: map[string]string{"made": "by hand"}},
+		{ID: "c", Stack: "unseen-uuid", Service: "web", Labels: labelled("unseen-uuid")},
 	}
 
 	presented := presenter.NewContainers(containers)
@@ -76,13 +82,18 @@ func TestIndex_Link(t *testing.T) {
 
 	assert.Equal(t, "shop", presented[0].Stack, "named by its slug")
 	assert.Equal(t, "shop-uuid", presented[0].StackUUID, "and its uuid")
+	assert.Equal(t, labelled("shop-uuid"), presented[0].Labels, "as its labels say")
 
 	assert.Empty(t, presented[1].Stack, "no stack made it")
 	assert.Empty(t, presented[1].StackUUID)
+	assert.Equal(t, map[string]string{"made": "by hand"}, presented[1].Labels)
 
 	assert.Empty(t, presented[2].Stack, "whoever asked cannot see its stack, which is neither named nor linked")
 	assert.Empty(t, presented[2].StackUUID)
+	assert.Equal(t, map[string]string{"workload.managed": "true", "workload.stack.service": "web"}, presented[2].Labels, "nor said by its labels")
 	assert.Equal(t, "web", presented[2].Service, "though it says which service it is, as its labels do")
+
+	assert.Equal(t, labelled("unseen-uuid"), containers[2].Labels, "and what it was read as is left as it was")
 }
 
 func TestIndex_Name(t *testing.T) {

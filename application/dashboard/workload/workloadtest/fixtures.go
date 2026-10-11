@@ -98,17 +98,24 @@ const SnapshotJSON = `{
 }`
 
 // Container is a container of VM, which Stack's graph made of its web
+// service, labelled as the platform labels the container of a stack's
 // service.
 func Container() docker.Container {
 	return docker.Container{
-		ID:        "c0ffee",
-		Name:      "shop-abcde_web",
-		Image:     "nginx:1.27",
-		State:     "running",
-		Status:    "Up 3 minutes",
-		Command:   "nginx -g 'daemon off;'",
-		Ports:     []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}},
-		Networks:  []string{"shop-abcde_default"},
+		ID:       "c0ffee",
+		Name:     "shop-abcde_web",
+		Image:    "nginx:1.27",
+		State:    "running",
+		Status:   "Up 3 minutes",
+		Command:  "nginx -g 'daemon off;'",
+		Ports:    []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}},
+		Networks: []string{"shop-abcde_default"},
+		Labels: map[string]string{
+			"workload.managed":       "true",
+			"workload.container":     "container-uuid",
+			"workload.stack":         "stack-uuid",
+			"workload.stack.service": "web",
+		},
 		Stack:     "stack-uuid",
 		Service:   "web",
 		CreatedAt: At,
@@ -127,6 +134,12 @@ const ContainerJSON = `{
 	"ports": [{"container_port": 80, "host_port": 8080, "protocol": "tcp"}],
 	"networks": ["shop-abcde_default"],
 	"mounts": [],
+	"labels": {
+		"workload.managed": "true",
+		"workload.container": "container-uuid",
+		"workload.stack": "stack-uuid",
+		"workload.stack.service": "web"
+	},
 	"stack": "shop-abcde",
 	"stack_uuid": "stack-uuid",
 	"service": "web",

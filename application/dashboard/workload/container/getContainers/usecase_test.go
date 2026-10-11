@@ -50,6 +50,7 @@ func TestUseCase_Execute(t *testing.T) {
 			assert.Equal(t, "docker-1", items[0]["vm_name"])
 			assert.Equal(t, "shop-abcde", items[0]["stack"])
 			assert.Equal(t, "stack-uuid", items[0]["stack_uuid"])
+			assert.Equal(t, "stack-uuid", items[0]["labels"].(map[string]any)["workload.stack"], "as its labels say, to whoever can see it")
 		})
 	}
 
@@ -84,6 +85,11 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.NotContains(t, items[0], "stack", "its stack is not named")
 		assert.NotContains(t, items[0], "stack_uuid", "nor linked")
 		assert.Equal(t, "web", items[0]["service"], "though it says which service it is")
+
+		labels, ok := items[0]["labels"].(map[string]any)
+		require.True(t, ok, "%v", items[0])
+		assert.NotContains(t, labels, "workload.stack", "nor does its labels' uuid of it")
+		assert.Equal(t, "web", labels["workload.stack.service"], "which say its service all the same")
 	})
 
 	t.Run("one VM's, and the stacks of that VM only", func(t *testing.T) {

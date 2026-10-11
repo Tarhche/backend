@@ -9,10 +9,12 @@ package stackindex
 
 import (
 	"context"
+	"maps"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 )
 
 // maxPages bounds how much of a listing of stacks is read for one request.
@@ -61,17 +63,22 @@ func (i Index) Link(presented []presenter.Container, containers []docker.Contain
 }
 
 // Name names the stack whose uuid a container says made it, its slug and its
-// uuid, when the index has it; a container no stack made, or one of a stack
-// whoever asked cannot see, is left as it was.
+// uuid, when the index has it. A container no stack made names none; and one
+// of a stack whoever asked cannot see names none either, not even by the
+// label that carries its stack's uuid, which is left out of its labels, as
+// its stack is: the service of the stack's file it is, which its labels say
+// too, is said all the same.
 func (i Index) Name(container *presenter.Container, stackUUID string) {
-	if len(stackUUID) == 0 {
+	if slug, seen := i[stackUUID]; seen && len(stackUUID) > 0 {
+		container.Stack, container.StackUUID = slug, stackUUID
+
 		return
 	}
 
-	slug, seen := i[stackUUID]
-	if !seen {
-		return
-	}
+	if _, labelled := container.Labels[stackKind.LabelStack]; labelled {
+		labels := maps.Clone(container.Labels)
+		delete(labels, stackKind.LabelStack)
 
-	container.Stack, container.StackUUID = slug, stackUUID
+		container.Labels = labels
+	}
 }
