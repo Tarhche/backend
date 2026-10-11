@@ -48,6 +48,30 @@ func TestBlocks_Recorded(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "other-web", r.Metadata.UUID, "in the vm asked about alone")
+
+	t.Run("and of two that are not on their way out, the one its vm's restore did not reset", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		// web made again since the snapshot, under another uuid, which the
+		// restore reset, listed first; and the one the restored disk holds,
+		// taken in from it.
+		_, err := w.Memory.Create(ctx, resource.Record{Raw: blockstest.AContainer("z-made-since", "vm-1", containerKind.Running, containerKind.Running), Reset: true})
+		require.NoError(t, err)
+
+		r, found, err := w.Containers.Recorded(ctx, "vm-1", "web")
+		require.NoError(t, err)
+		require.True(t, found)
+		assert.Equal(t, "z-made-since", r.Metadata.UUID, "the one reset, when there is no other")
+
+		w.Keep(blockstest.AContainer("a-taken-in", "vm-1", containerKind.Running, containerKind.Running))
+
+		r, found, err = w.Containers.Recorded(ctx, "vm-1", "web")
+		require.NoError(t, err)
+		require.True(t, found)
+		assert.Equal(t, "a-taken-in", r.Metadata.UUID, "the one the restored disk holds")
+	})
 }
 
 func TestBlocks_Ready(t *testing.T) {

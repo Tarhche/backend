@@ -713,6 +713,18 @@ func TestNewControlPlaneWorkload_firstLookHeardAgain(t *testing.T) {
 	_, err = stored.Create(ctx, resource.Record{Raw: raw, Reset: true, ResetAt: resetAt})
 	require.NoError(t, err)
 
+	// its network, which the restored disk holds, found there.
+	network, err := kind.Encode(kind.Resource[networkKind.Spec, networkKind.Status]{
+		Kind:     networkKind.Name,
+		Metadata: kind.Metadata{UUID: "n-default", Name: "shop_default", OwnerUUID: "owner", Owners: []kind.Reference{{Kind: stackKind.Name, UUID: "s-1"}}, Refs: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, Node: vmtest.Node, CreatedAt: restoredAt.Add(-time.Hour)},
+		Spec:     networkKind.Spec{Name: "shop_default"},
+		Status:   networkKind.Status{Status: kind.Status{State: networkKind.Present, Expected: networkKind.Present, ObservedAt: time.Now()}, Docker: &networkKind.Docker{ID: "n-shop", Name: "shop_default"}},
+	})
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: network})
+	require.NoError(t, err)
+
 	// the web server made again since the snapshot, which the restored disk
 	// does not hold.
 	_, err = stored.Create(ctx, resource.Record{Raw: blockstest.AContainer("made-since", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
@@ -768,6 +780,14 @@ func TestNewControlPlaneWorkload_firstLookHeardAgain(t *testing.T) {
 	s, err := stored.GetOne(ctx, stackKind.Name, "s-1")
 	require.NoError(t, err, "the stack is kept")
 	assert.False(t, s.Reset, "held by what the restored disk holds of it")
+
+	// its run, the one made since still kept, reset, beside the one taken
+	// in, runs it with the one taken in: the one made since is forgotten
+	// once its node goes on without a word of it.
+	ran, err := kind.Decode[stackKind.Spec, stackKind.Status](s.Raw)
+	require.NoError(t, err)
+	require.Len(t, ran.Status.Services, 1)
+	assert.Equal(t, []stackKind.ContainerStatus{{ID: "from-the-snapshot", Name: "shop_web", State: "running"}}, ran.Status.Services[0].Containers, "its web service's container is the one the restored disk holds")
 }
 
 // TestNewControlPlaneWorkload_restoreOfARemadeVMBeforeItsStackIsPlaced holds

@@ -19,14 +19,20 @@ import (
 // Recorded is the record of the kind kept in the Docker VM vmUUID names that
 // was asked for under name, its Docker name, which is what a graph knows it
 // by, and whether there is one: one that is not on its way out before one
-// that is, which one of the same name may be about to take the place of.
+// that is, which one of the same name may be about to take the place of; and
+// of those, one its VM's restore did not reset before one it did
+// (resource.Record.Reset). One found in the restored disk, or taken in from
+// it, is there, while one reset beside it, made since the snapshot under
+// another uuid say, is what the disk does not hold, forgotten once its node
+// goes on without a word of it, maybe in the middle of a run that took it as
+// what the graph knows by the name.
 func (b *Blocks) Recorded(ctx context.Context, vmUUID string, name string) (resource.Record, bool, error) {
 	kept, _, err := b.Resources.GetAll(ctx, b.descriptor.Name, resource.Filter{Parent: kind.Reference{Kind: blockKinds.Parent, UUID: vmUUID}}, 0, 0)
 	if err != nil {
 		return resource.Record{}, false, err
 	}
 
-	going := -1
+	going, reset := -1, -1
 
 	for i := range kept {
 		if !b.kind.Named(kept[i].Raw, name) {
@@ -38,20 +44,28 @@ func (b *Blocks) Recorded(ctx context.Context, vmUUID string, name string) (reso
 			return resource.Record{}, false, err
 		}
 
-		if !requirements.Going(common) {
+		switch {
+		case requirements.Going(common):
+			if going < 0 {
+				going = i
+			}
+		case kept[i].Reset:
+			if reset < 0 {
+				reset = i
+			}
+		default:
 			return kept[i], true, nil
 		}
-
-		if going < 0 {
-			going = i
-		}
 	}
 
-	if going < 0 {
-		return resource.Record{}, false, nil
+	switch {
+	case reset >= 0:
+		return kept[reset], true, nil
+	case going >= 0:
+		return kept[going], true, nil
 	}
 
-	return kept[going], true, nil
+	return resource.Record{}, false, nil
 }
 
 // Ready is nothing when what lives in the Docker VM vmUUID names can be made
