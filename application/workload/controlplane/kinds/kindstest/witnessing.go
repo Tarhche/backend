@@ -31,6 +31,10 @@ type Witnessing struct {
 	// by its action: nothing lets it through.
 	Refuse func(action string) error
 
+	// Fails, when set, is what taking in each instance it is told of fails
+	// with, once it is kept as heard.
+	Fails error
+
 	lock  sync.Mutex
 	heard []Heard
 }
@@ -58,7 +62,7 @@ func (w *Witnessing) Witnessed(_ context.Context, nodeName string, instance kind
 
 	w.heard = append(w.heard, Heard{Node: nodeName, Instance: instance, Kept: kept, At: at})
 
-	return nil
+	return w.Fails
 }
 
 // Heard is every instance it was told of, in turn.

@@ -3,6 +3,7 @@ package observe_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -862,4 +863,40 @@ func TestObserver_Heartbeat_witness(t *testing.T) {
 	all, _, err := repository.GetAll(ctx, kindstest.Kind, resource.Filter{}, 0, 0)
 	require.NoError(t, err)
 	assert.Len(t, all, 1, "and nothing is kept of what has none")
+
+	t.Run("what it cannot take in fails nothing, but for what it asks to be heard again", func(t *testing.T) {
+		t.Parallel()
+
+		for name, tt := range map[string]struct {
+			fails  error
+			failed bool
+		}{
+			"what it could not take in, which the next beat says again, fails nothing": {
+				fails: errors.New("the database is gone"),
+			},
+			"what it asks to be heard again for, which no later beat says again, fails the heartbeat": {
+				fails:  fmt.Errorf("%w: the database is gone", kind.ErrHearAgain),
+				failed: true,
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				repository := resourcesMemory.NewRepository()
+				failing := &kindstest.Witnessing{Fans: &kindstest.Fans{}, Records: repository, Fails: tt.fails}
+
+				registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+				require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), failing)))
+
+				err := observe.NewObserver(registry, repository, slog.New(slog.DiscardHandler)).Heartbeat(ctx, kindstest.NodeName, later, unrecorded)
+				if tt.failed {
+					assert.ErrorIs(t, err, kind.ErrHearAgain)
+
+					return
+				}
+
+				assert.NoError(t, err)
+			})
+		}
+	})
 }

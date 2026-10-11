@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
 	controlPlaneContainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/container"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -390,7 +392,7 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.Equal(t, blockKinds.ManagedByNobody, extras[0].Metadata.Labels[blockKinds.LabelManagedBy])
 	})
 
-	t.Run("and what telling whether its stack went meanwhile fails with is said, what was taken in kept as it was", func(t *testing.T) {
+	t.Run("and what telling whether its stack went meanwhile fails with, and letting it go again fails with, is said, to be heard again, what was taken in kept as it was", func(t *testing.T) {
 		t.Parallel()
 
 		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
@@ -423,12 +425,92 @@ func TestBlocks_Witnessed(t *testing.T) {
 
 		err = containers.Witnessed(ctx, vmtest.Node, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "shop-abcde_web", State: "running", Labels: labels}), false, at)
 		assert.ErrorIs(t, err, gone)
+		assert.ErrorIs(t, err, kind.ErrHearAgain)
 
 		w.Memory.Fail = nil
 
 		adopted, kept := w.Kept(containerKind.Name, "from-the-snapshot")
 		require.True(t, kept)
 		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}, adopted.Metadata.Owners)
+	})
+
+	t.Run("the first look's heartbeat that could not take in what it found is to be heard again, and heard again takes it in", func(t *testing.T) {
+		t.Parallel()
+
+		for name, blink := range map[string]func(b *blinking){
+			"the stack's containers not listed, the database gone for a moment": func(b *blinking) {
+				b.arm("list " + containerKind.Name)
+			},
+			"the look not kept on its vm's record": func(b *blinking) {
+				b.arm("update " + vmKind.Name)
+			},
+			"its stack not read again once what it took in is kept, which is let go of again": func(b *blinking) {
+				b.after("create "+containerKind.Name, "get "+stackKind.Name)
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
+				w := blockstest.New(vmtest.WithVMs(restored))
+
+				shop, err := kind.Encode(stackKind.Stack{
+					Kind:     stackKind.Name,
+					Metadata: kind.Metadata{UUID: "stack-uuid", Name: "shop", Slug: "shop-abcde", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+					Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+					Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running}},
+				})
+				require.NoError(t, err)
+
+				w.Keep(shop)
+
+				blinks := &blinking{Repository: w.Resources}
+				blink(blinks)
+
+				records := records.New(blinks)
+				containers := controlPlaneContainers.New(blocks.Dependencies{Resources: blinks, VMs: records, Chooser: w.Chooser, Requester: w.Requester, Sightings: w.Sightings})
+
+				labels := labelled(t, "from-the-snapshot")
+				labels[stackKind.LabelStack] = "stack-uuid"
+				labels[stackKind.LabelService] = "web"
+
+				web := seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "shop-abcde_web", State: "running", Labels: labels})
+
+				err = containers.Witnessed(ctx, vmtest.Node, web, false, at)
+				require.ErrorIs(t, err, kind.ErrHearAgain)
+
+				_, kept := w.Kept(containerKind.Name, "from-the-snapshot")
+				assert.False(t, kept, "nothing is taken in yet")
+
+				require.NoError(t, containers.Witnessed(ctx, vmtest.Node, web, false, at), "heard again")
+
+				adopted, kept := w.Kept(containerKind.Name, "from-the-snapshot")
+				require.True(t, kept, "it is taken in, the look's heartbeat as it was")
+				assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}, adopted.Metadata.Owners, "as the stack's")
+
+				v, _ := w.Stored("vm-1")
+				assert.True(t, v.Status.LookedAt.Equal(at), "the look kept as of its beat")
+			})
+		}
+	})
+
+	t.Run("but what a heartbeat of a later beat could not do is said, and not to be heard again", func(t *testing.T) {
+		t.Parallel()
+
+		looked := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+			v.Status.RestoredAt = at.Add(-time.Minute)
+			v.Status.LookedAt = at.Add(-time.Second)
+		})
+		w := blockstest.New(vmtest.WithVMs(looked))
+
+		blinks := &blinking{Repository: w.Resources}
+		blinks.arm("update " + vmKind.Name)
+		blinks.arm("list " + containerKind.Name)
+
+		containers := controlPlaneContainers.New(blocks.Dependencies{Resources: blinks, VMs: records.New(blinks), Chooser: w.Chooser, Requester: w.Requester, Sightings: w.Sightings})
+
+		err := containers.Witnessed(ctx, vmtest.Node, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-snapshot")}), false, at)
+		assert.NotErrorIs(t, err, kind.ErrHearAgain)
 	})
 
 	t.Run("the first look into a vm since its disk was restored is kept on its record, and no look before its restore, nor one after the first", func(t *testing.T) {
@@ -595,6 +677,108 @@ func (c *creating) Create(ctx context.Context, r resource.Record) (resource.Reco
 	c.before(ctx, r)
 
 	return c.Repository.Create(ctx, r)
+}
+
+// blinking keeps records as the repository it wraps does, but for failing
+// the next of each call armed, once, as the database gone for a moment: a
+// call is named by what it does, get, list, create, update or delete, and the
+// kind it does it to.
+type blinking struct {
+	resource.Repository
+
+	lock  sync.Mutex
+	armed map[string]bool
+
+	// then are what is armed once each call named is done.
+	then map[string]string
+}
+
+// arm has the next call op names fail.
+func (b *blinking) arm(op string) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	if b.armed == nil {
+		b.armed = make(map[string]bool)
+	}
+
+	b.armed[op] = true
+}
+
+// after has the call next names armed once a call op names is done.
+func (b *blinking) after(op string, next string) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	if b.then == nil {
+		b.then = make(map[string]string)
+	}
+
+	b.then[op] = next
+}
+
+// blinks reports whether the call op names fails, which it does once when it
+// is armed.
+func (b *blinking) blinks(op string) error {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	if !b.armed[op] {
+		return nil
+	}
+
+	delete(b.armed, op)
+
+	return errors.New("the database is gone for a moment")
+}
+
+// done arms what is to be armed once the call op names is done.
+func (b *blinking) done(op string) {
+	b.lock.Lock()
+	next, then := b.then[op]
+	delete(b.then, op)
+	b.lock.Unlock()
+
+	if then {
+		b.arm(next)
+	}
+}
+
+func (b *blinking) GetOne(ctx context.Context, kindName string, uuid string) (resource.Record, error) {
+	if err := b.blinks("get " + kindName); err != nil {
+		return resource.Record{}, err
+	}
+
+	return b.Repository.GetOne(ctx, kindName, uuid)
+}
+
+func (b *blinking) GetAll(ctx context.Context, kindName string, filter resource.Filter, offset uint, limit uint) ([]resource.Record, uint, error) {
+	if err := b.blinks("list " + kindName); err != nil {
+		return nil, 0, err
+	}
+
+	return b.Repository.GetAll(ctx, kindName, filter, offset, limit)
+}
+
+func (b *blinking) Create(ctx context.Context, r resource.Record) (resource.Record, error) {
+	if err := b.blinks("create " + r.Kind); err != nil {
+		return resource.Record{}, err
+	}
+
+	made, err := b.Repository.Create(ctx, r)
+	if err == nil {
+		b.done("create " + r.Kind)
+	}
+
+	return made, err
+}
+
+func (b *blinking) Update(ctx context.Context, r resource.Record) (resource.Record, error) {
+	if err := b.blinks("update " + r.Kind); err != nil {
+		return resource.Record{}, err
+	}
+
+	return b.Repository.Update(ctx, r)
 }
 
 // created keeps records as the repository it wraps does, but for doing what

@@ -3,6 +3,7 @@ package workload
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"maps"
 	"slices"
@@ -644,4 +645,126 @@ func TestNewControlPlaneWorkload_restoredWhileItsDockerdComesUp(t *testing.T) {
 			assert.False(t, s.Reset, "held by what the restored disk holds of it")
 		})
 	}
+}
+
+// blinking keeps records as the repository it wraps does, but fails, once
+// armed, the one listing of the containers a stack owns: the database gone
+// for a moment as a heartbeat is taken.
+type blinking struct {
+	resource.Repository
+
+	stack string
+	armed atomic.Bool
+}
+
+func (b *blinking) GetAll(ctx context.Context, kindName string, filter resource.Filter, offset uint, limit uint) ([]resource.Record, uint, error) {
+	if kindName == containerKind.Name && filter.Parent.Kind == stackKind.Name && filter.Parent.UUID == b.stack && b.armed.CompareAndSwap(true, false) {
+		return nil, 0, errors.New("the database is gone for a moment")
+	}
+
+	return b.Repository.GetAll(ctx, kindName, filter, offset, limit)
+}
+
+// TestNewControlPlaneWorkload_firstLookHeardAgain holds the control plane to
+// failing a heartbeat of the first look into a restored Docker VM that could
+// not take in what that look found with no record, the database gone for a
+// moment: heard again, as JetStream redelivers what was failed, it takes it
+// in, as the stack's whose container it is, which is held by it. The stack's
+// web server was made again since the VM's snapshot, under another uuid, so
+// the restored disk's own is one no record speaks for.
+func TestNewControlPlaneWorkload_firstLookHeardAgain(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	stored := resourcesMemory.NewRepository()
+	records := &blinking{Repository: stored, stack: "s-1"}
+
+	stores := storesOf(stored)
+	stores.Resources = records
+	stores.Nodes = nodesMemory.NewRepository(vmtest.Alive(vmtest.Node))
+
+	workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), stores, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	restoredAt := time.Now().Add(-10 * time.Minute)
+	first := restoredAt.Add(3 * time.Minute)
+	resetAt := restoredAt.Truncate(time.Millisecond)
+
+	v := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+		v.Status.RestoredAt = restoredAt
+		v.Status.ObservedAt = time.Now()
+	})
+	raw, err := kind.Encode(v)
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: raw})
+	require.NoError(t, err)
+
+	raw, err = kind.Encode(stackKind.Stack{
+		Kind:     stackKind.Name,
+		Metadata: kind.Metadata{UUID: "s-1", Name: "shop", Slug: "shop", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, CreatedAt: restoredAt.Add(-time.Hour)},
+		Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+		Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running, Since: restoredAt.Add(-time.Hour)}},
+	})
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: raw, Reset: true, ResetAt: resetAt})
+	require.NoError(t, err)
+
+	// the web server made again since the snapshot, which the restored disk
+	// does not hold.
+	_, err = stored.Create(ctx, resource.Record{Raw: blockstest.AContainer("made-since", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+		c.Metadata.Name = "shop_web"
+		c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "s-1"}}
+		c.Metadata.Labels = map[string]string{stackKind.LabelStack: "s-1", stackKind.LabelService: "web"}
+		c.Spec.Name = "shop_web"
+		c.Status.Docker.Name = "shop_web"
+		c.Status.ObservedAt = restoredAt
+	}), Reset: true, ResetAt: resetAt})
+	require.NoError(t, err)
+
+	// the one the restored disk holds, under the uuid it had then.
+	spec, err := containerKind.SpecLabel(containerKind.Spec{Name: "shop_web", Image: "nginx:1.27"})
+	require.NoError(t, err)
+
+	labels := blockKinds.Labels(containerKind.Name, "from-the-snapshot")
+	labels[containerKind.LabelSpec] = spec
+	labels[stackKind.LabelStack] = "s-1"
+	labels[stackKind.LabelService] = "web"
+
+	status, err := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Running}, Docker: &containerKind.Docker{ID: "d-web", Name: "shop_web", State: "running", Labels: labels}})
+	require.NoError(t, err)
+
+	heartbeat, err := json.Marshal(kind.Heartbeat{Node: vmtest.Node, At: first, Observed: kind.Observation{Kind: containerKind.Name, UUID: "from-the-snapshot", Owners: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, Status: status}})
+	require.NoError(t, err)
+
+	handler := workload.Subscribers[kind.HeartbeatName(containerKind.Name)]
+
+	// the first look's heartbeat of it, the database gone for a moment as it
+	// is taken in.
+	records.armed.Store(true)
+
+	err = handler.Handle(ctx, heartbeat)
+	require.ErrorIs(t, err, kind.ErrHearAgain, "failed, to be heard again")
+	require.False(t, records.armed.Load())
+
+	_, err = stored.GetOne(ctx, containerKind.Name, "from-the-snapshot")
+	require.ErrorIs(t, err, domain.ErrNotExists, "nothing taken in yet")
+
+	// heard again.
+	require.NoError(t, handler.Handle(ctx, heartbeat))
+
+	adopted, err := stored.GetOne(ctx, containerKind.Name, "from-the-snapshot")
+	require.NoError(t, err, "taken in, heard again")
+	assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "s-1"}}, adopted.Metadata.Owners, "as the stack's")
+
+	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	_ = workload.Graphs.Reconcile(bounded, graph.Ref{Kind: stackKind.Name, UUID: "s-1"})
+
+	s, err := stored.GetOne(ctx, stackKind.Name, "s-1")
+	require.NoError(t, err, "the stack is kept")
+	assert.False(t, s.Reset, "held by what the restored disk holds of it")
 }

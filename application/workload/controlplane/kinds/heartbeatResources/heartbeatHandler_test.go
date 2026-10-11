@@ -3,6 +3,8 @@ package heartbeatResources_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -26,17 +28,21 @@ type heard struct {
 	instance kind.Observation
 }
 
-// recording is an observer that keeps what it is handed.
+// recording is an observer that keeps what it is handed, and fails each with
+// failure.
 type recording struct {
-	lock  sync.Mutex
-	heard []heard
+	lock    sync.Mutex
+	heard   []heard
+	failure error
 }
 
-func (r *recording) Heartbeat(_ context.Context, nodeName string, at time.Time, instance kind.Observation) {
+func (r *recording) Heartbeat(_ context.Context, nodeName string, at time.Time, instance kind.Observation) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	r.heard = append(r.heard, heard{node: nodeName, at: at, instance: instance})
+
+	return r.failure
 }
 
 func message(t *testing.T, heartbeat kind.Heartbeat) []byte {
@@ -177,4 +183,46 @@ func TestHeartbeatHandler_Handle(t *testing.T) {
 			assert.True(t, untouched.Status.ObservedAt.IsZero(), name)
 		}
 	})
+}
+
+// TestHeartbeatHandler_Handle_hearAgain holds a heartbeat to being failed, to
+// be heard again, only when its observer says it is to be: the first look
+// into a restored parent, which no later beat says again.
+func TestHeartbeatHandler_Handle_hearAgain(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	for name, tt := range map[string]struct {
+		failure error
+		failed  bool
+	}{
+		"one written down is let go of": {},
+		"and so is one that could not be, which the next beat says again": {
+			failure: errors.New("the database is gone"),
+		},
+		"but one to be heard again is failed, and heard again": {
+			failure: fmt.Errorf("%w: the database is gone", kind.ErrHearAgain),
+			failed:  true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			observer := &recording{failure: tt.failure}
+			if !tt.failed {
+				observer.failure = nil
+			}
+
+			err := heartbeatResources.NewHeartbeatHandler(observer, slog.New(slog.DiscardHandler)).Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, At: kindstest.Moment, Observed: kind.Observation{Kind: kindstest.Kind, UUID: "fan-uuid"}}))
+
+			if tt.failed {
+				assert.ErrorIs(t, err, kind.ErrHearAgain)
+
+				return
+			}
+
+			assert.NoError(t, err)
+		})
+	}
 }

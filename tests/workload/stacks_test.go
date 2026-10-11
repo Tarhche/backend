@@ -1351,3 +1351,129 @@ func TestAStackWhoseVMIsRestoredTwiceInARow(t *testing.T) {
 
 	assert.False(t, slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") }), "nothing of it is made again: %v", w.dockerd.Did(vmUUID)[did:])
 }
+
+// failingOnce keeps records as the repository it wraps does, but fails the
+// next container record created, once armed: the database gone for a moment.
+type failingOnce struct {
+	resource.Repository
+
+	armed *atomic.Bool
+}
+
+func (f *failingOnce) Create(ctx context.Context, r resource.Record) (resource.Record, error) {
+	if r.Kind == containerKind.Name && f.armed.CompareAndSwap(true, false) {
+		return resource.Record{}, errors.New("the database is gone for a moment")
+	}
+
+	return f.Repository.Create(ctx, r)
+}
+
+// TestAStackWhoseRestoredVMsFirstLookFailsOnce restores a stack's Docker VM
+// to a snapshot taken while the stack ran, after one of its containers was
+// deleted and made again, the VM's dockerd listing nothing of what it holds
+// for longer than what lives in a VM may go unheard, and the first look's
+// taking in of the container the disk holds with no record failing once, the
+// database gone for a moment: the stack is never forgotten, the records of
+// what it owns are kept until the look, which finds them, and the heartbeat
+// whose taking in failed is heard again, and takes the container in, as the
+// stack's. The stack runs with what the restored disk holds of it, nothing of
+// it made again.
+func TestAStackWhoseRestoredVMsFirstLookFailsOnce(t *testing.T) {
+	t.Parallel()
+
+	var blink atomic.Bool
+
+	w := start(t, throughResources(func(r resource.Repository) resource.Repository { return &failingOnce{Repository: r, armed: &blink} }))
+	ctx := t.Context()
+
+	vmUUID := w.dockerVM(t, "builds")
+
+	deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+		Name:      "store",
+		Compose:   storeCompose,
+		VMUUID:    vmUUID,
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, deployed.ValidationErrors)
+	require.NotNil(t, deployed.Stack)
+
+	stackUUID, slug := deployed.Stack.UUID, deployed.Stack.Slug
+	named := func(name string) string { return slug + "_" + name }
+
+	w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+	db := w.containerRecord(t, vmUUID, named("db"))
+	snapshotted := w.containerRecord(t, vmUUID, named("web"))
+	snapshotUUID := w.snapshot(t, vmUUID, "with the stack")
+
+	deleted, err := deleteContainer.NewUseCase(w.client, w.translator).Execute(ctx, &deleteContainer.Request{VMUUID: vmUUID, ID: named("web"), Force: true, OwnerUUID: ownerUUID})
+	require.NoError(t, err)
+	require.Empty(t, deleted.ValidationErrors)
+
+	since := w.containerKept(t, vmUUID, named("web"), "made again", func(c containerKind.Container) bool {
+		return c.Metadata.UUID != snapshotted.Metadata.UUID && c.Status.Status.State == containerKind.Running
+	})
+
+	w.stack(t, stackUUID, "running with what was made again", func(s presenter.StackDetail) bool {
+		return s.State == "running" && w.servedBy(ctx, stackUUID, "web") == since.Metadata.UUID
+	})
+
+	// whether the stack's record went at any moment from here on.
+	var forgotten atomic.Bool
+
+	watching, cancel := context.WithCancel(ctx)
+	watched := make(chan struct{})
+
+	go func() {
+		defer close(watched)
+
+		for watching.Err() == nil {
+			if _, err := w.resources.GetOne(watching, stackKind.Name, stackUUID); errors.Is(err, domain.ErrNotExists) {
+				forgotten.Store(true)
+			}
+
+			time.Sleep(beat / 5)
+		}
+	}()
+
+	w.dockerd.Hide(vmUUID)
+	w.restore(t, vmUUID, snapshotUUID)
+	did := len(w.dockerd.Did(vmUUID))
+
+	assert.Never(t, func() bool {
+		return slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") })
+	}, 2*patience.ResourceSilentAfter, beat, "something of it was made before its restored disk was looked into")
+
+	_, err = w.resources.GetOne(ctx, containerKind.Name, db.Metadata.UUID)
+	require.NoError(t, err, "the record of its database is kept until the look, however long it went unheard")
+
+	// the first look's taking in of the web server the restored disk holds
+	// fails once.
+	blink.Store(true)
+	w.dockerd.Show(vmUUID)
+
+	w.stack(t, stackUUID, "running with what the restored disk holds", func(s presenter.StackDetail) bool {
+		return s.State == "running" && w.servedBy(ctx, stackUUID, "web") == snapshotted.Metadata.UUID && w.servedBy(ctx, stackUUID, "db") == db.Metadata.UUID
+	})
+
+	cancel()
+	<-watched
+
+	assert.False(t, blink.Load(), "taking the web server in failed once")
+	assert.False(t, forgotten.Load(), "the stack was forgotten in between")
+
+	for _, uuid := range []string{db.Metadata.UUID, snapshotted.Metadata.UUID} {
+		r, err := w.resources.GetOne(ctx, containerKind.Name, uuid)
+		require.NoError(t, err)
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: stackUUID}}, r.Metadata.Owners, "%s is the stack's", r.Metadata.Name)
+	}
+
+	require.Eventually(t, func() bool {
+		_, err := w.resources.GetOne(ctx, containerKind.Name, since.Metadata.UUID)
+
+		return errors.Is(err, domain.ErrNotExists)
+	}, settle, beat, "what the restored disk does not hold was never forgotten")
+
+	assert.False(t, slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") }), "nothing of it is made again: %v", w.dockerd.Did(vmUUID)[did:])
+}

@@ -371,17 +371,25 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 		return nil
 	}
 
+	// what the first look into a restored VM found is taken in by its own
+	// heartbeats alone: one that could not keep the look, or take in what
+	// it found, is to be heard again (kind.ErrHearAgain).
+	first := unlooked(v, at)
+
 	v, failed := b.looked(ctx, v, at)
+	if first {
+		failed = hearAgain(failed)
+	}
 
 	if len(instance.UUID) > 0 && adoptable(v, at) {
 		adopted, err := b.adopt(ctx, nodeName, v, instance, at)
 		if adopted {
 			b.Sightings.Forget(b.descriptor.Name, instance.UUID)
 
-			return errors.Join(failed, err)
+			return errors.Join(failed, hearAgain(err))
 		}
 
-		failed = errors.Join(failed, err)
+		failed = errors.Join(failed, hearAgain(err))
 	}
 
 	keepers, err := b.keepers(ctx, nodeName, at)
@@ -503,8 +511,11 @@ func adoptable(v vmKind.VM, at time.Time) bool {
 // as the kind reads it off what was observed of it, living in the VM, owned
 // by what the kind says owns it, its spec its first generation, and reports
 // whether it did. One another control plane took in first is taken in. What
-// telling whether what it was taken in as owned by went meanwhile fails with
-// is an error beside it, its record kept as taken in (orphaned).
+// it was taken in as owned by is read again once its record is kept
+// (orphaned): when that cannot be told, the record is let go of again, so
+// that the heartbeat heard again takes it in again and tells; and only when
+// the record cannot be let go of either is it kept as taken in, beside what
+// that failed with.
 func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instance kind.Observation, at time.Time) (bool, error) {
 	adoption, ok, err := b.kind.Adopt(ctx, instance)
 	if err != nil || !ok {
@@ -549,12 +560,31 @@ func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instan
 	case err == nil:
 		b.Logger.InfoContext(ctx, "took in what a restored vm holds labelled as the platform's", "kind", b.descriptor.Name, "uuid", instance.UUID, "vm", v.Metadata.UUID, "owners", adoption.Owners)
 
-		return true, b.orphaned(ctx, instance.UUID, adoption.Owners)
+		told := b.orphaned(ctx, instance.UUID, adoption.Owners)
+		if told == nil {
+			return true, nil
+		}
+
+		if err := b.Resources.Delete(ctx, b.descriptor.Name, instance.UUID); err != nil {
+			return true, errors.Join(told, err)
+		}
+
+		return false, told
 	case errors.Is(err, domain.ErrAlreadyExists):
 		return true, nil
 	}
 
 	return false, err
+}
+
+// hearAgain is err as what a heartbeat is to be heard again for
+// (kind.ErrHearAgain), and nothing for nothing.
+func hearAgain(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	return fmt.Errorf("%w: %w", kind.ErrHearAgain, err)
 }
 
 // orphaned forgets the record of what was just taken in, by its uuid, as

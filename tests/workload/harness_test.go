@@ -34,6 +34,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	providers "github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
@@ -136,11 +137,12 @@ type workload struct {
 type option func(*settings)
 
 // settings are what options change: how patient the control plane's
-// reconcile loop is, and whether every root is queued as often as that loop
-// runs, as a resync does.
+// reconcile loop is, whether every root is queued as often as that loop
+// runs, as a resync does, and what the control plane keeps resources through.
 type settings struct {
 	reconcile kindsReconcileResources.Config
 	resync    bool
+	resources func(resource.Repository) resource.Repository
 }
 
 // silentAfter has the control plane give up on a node that has said nothing
@@ -156,6 +158,14 @@ func silentAfter(d time.Duration) option {
 func withoutResync() option {
 	return func(s *settings) {
 		s.resync = false
+	}
+}
+
+// throughResources has the control plane keep resources through what wrap
+// makes of the workload's own records, which a test reads as they are.
+func throughResources(wrap func(resource.Repository) resource.Repository) option {
+	return func(s *settings) {
+		s.resources = wrap
 	}
 }
 
@@ -257,8 +267,13 @@ func start(t *testing.T, options ...option) *workload {
 	controlPlaneMessages, err := produceConsumer.NewProduceConsumer(controlPlaneConnection, "workload-controlplane", logger)
 	require.NoError(t, err)
 
+	var resources resource.Repository = w.resources
+	if set.resources != nil {
+		resources = set.resources(resources)
+	}
+
 	controlPlane, err := providers.NewControlPlaneWorkload(controlPlaneConfigs, providers.ControlPlaneStores{
-		Resources:  w.resources,
+		Resources:  resources,
 		Nodes:      w.nodes,
 		TaskLogs:   logsMock.NewInMemoryRepository(),
 		Executions: w.executions,

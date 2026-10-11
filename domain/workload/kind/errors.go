@@ -39,6 +39,13 @@ var (
 	// say: nothing was done, and asked again it would be refused again. What
 	// wraps it says why.
 	ErrRefused = errors.New("refused")
+
+	// ErrHearAgain is what a heartbeat could not be taken in for that no
+	// later beat says again: the first look into a parent restored from a
+	// snapshot, whose own heartbeats alone take in what it found with no
+	// record. The heartbeat is failed, to be heard again, rather than let go
+	// of as the next beat would say it. What wraps it says why.
+	ErrHearAgain = errors.New("to be heard again")
 )
 
 // InvalidError is a payload that was read and refused, with what is wrong

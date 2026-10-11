@@ -153,18 +153,20 @@ func NewObserver(registry *kind.Registry[kind.ControlPlaneBinding], resources re
 // or whose state is not its nodes' to say, is not listened to.
 //
 // Nothing here fails the heartbeat: what could not be written down is
-// reported, and the next beat says it all again.
-func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time, instance kind.Observation) {
+// reported, and the next beat says it all again; but for what a witness could
+// not take in of the first look into a restored parent, which no later beat
+// says again, and which it asks to be heard again for (kind.ErrHearAgain).
+func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time, instance kind.Observation) error {
 	binding, registered := o.registry.Lookup(instance.Kind)
 	if !registered {
 		o.logger.DebugContext(ctx, "a node reported a kind the control plane does not run", "node", nodeName, "kind", instance.Kind)
 
-		return
+		return nil
 	}
 
 	d := binding.Descriptor()
 	if d.StateBy != kind.OnNode {
-		return
+		return nil
 	}
 
 	kept := false
@@ -186,7 +188,7 @@ func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time,
 		case !errors.Is(err, domain.ErrNotExists):
 			o.logger.ErrorContext(ctx, "could not read what a node said it holds", "error", err, "node", nodeName, "kind", d.Name, "uuid", instance.UUID)
 
-			return
+			return nil
 		}
 	}
 
@@ -201,8 +203,14 @@ func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time,
 	if witness, witnesses := binding.Witness(); witnesses {
 		if err := witness.Witnessed(ctx, nodeName, instance, kept, at); err != nil {
 			o.logger.WarnContext(ctx, "a kind could not take in what a node reported of it", "error", err, "node", nodeName, "kind", d.Name)
+
+			if errors.Is(err, kind.ErrHearAgain) {
+				return err
+			}
 		}
 	}
+
+	return nil
 }
 
 // Unheard writes down, at a moment, what its node's silence says of a

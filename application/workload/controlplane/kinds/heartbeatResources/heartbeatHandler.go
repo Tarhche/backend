@@ -9,8 +9,11 @@
 // heard in its own heartbeat (node/heartbeatNode), and the heartbeats of one
 // beat, the node's and its instances', are heard in no particular order.
 //
-// A heartbeat is never failed: the next beat says it all again. One that
-// cannot be read, or that names no node or no kind, is let go of.
+// A heartbeat is failed only when what it says is to be heard again
+// (kind.ErrHearAgain): the first look into a restored parent, which no later
+// beat says again. Any other is let go of once it is handed on, since the
+// next beat says it all again; and one that cannot be read, or that names no
+// node or no kind, is let go of as it is.
 package heartbeatResources
 
 import (
@@ -24,9 +27,10 @@ import (
 )
 
 // Observer writes down what a node's heartbeat at a moment says of one
-// instance it holds. It fails nothing: the next beat says it all again.
+// instance it holds. It fails nothing, the next beat saying it all again, but
+// what is to be heard again (kind.ErrHearAgain).
 type Observer interface {
-	Heartbeat(ctx context.Context, nodeName string, at time.Time, instance kind.Observation)
+	Heartbeat(ctx context.Context, nodeName string, at time.Time, instance kind.Observation) error
 }
 
 // HeartbeatHandler hands what an instance's heartbeat says to the observer.
@@ -65,7 +69,6 @@ func (h *HeartbeatHandler) Handle(ctx context.Context, data []byte) error {
 		at = time.Now()
 	}
 
-	h.observer.Heartbeat(ctx, heartbeat.Node, at, heartbeat.Observed)
-
-	return nil
+	// what is to be heard again is asked for again.
+	return h.observer.Heartbeat(ctx, heartbeat.Node, at, heartbeat.Observed)
 }
