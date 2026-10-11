@@ -87,6 +87,39 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, released.NextAt, response.Lease.NextAt)
 	})
 
+	t.Run("a node the plan of a later generation no longer has is none of its nodes, though it is kept as the run before left it", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("web", kindstest.Running, kindstest.Running, func(fan *kindstest.Fan) { fan.Metadata.Generation = 2 }))
+
+		// its first generation needed a house and a shed, and its second
+		// the house alone.
+		for _, e := range []graph.Execution{
+			{Root: root, Generation: 1, Node: "house/house-1", Kind: "house", Action: graph.ActionCreate, Level: 0, State: graph.StateDone},
+			{Root: root, Generation: 1, Node: "shed/shed-1", Kind: "shed", Action: graph.ActionCreate, Level: 0, State: graph.StateDone},
+			{Root: root, Generation: 1, Node: "fan/web", Kind: kindstest.Kind, Action: graph.ActionCreate, Level: 1, State: graph.StateDone},
+			{Root: root, Generation: 2, Node: "house/house-1", Kind: "house", Action: graph.ActionCreate, Level: 0, State: graph.StateDone},
+			{Root: root, Generation: 2, Node: "fan/web", Kind: kindstest.Kind, Action: graph.ActionCreate, Level: 1, State: graph.StateDone},
+		} {
+			require.NoError(t, f.executions.Save(ctx, e))
+		}
+
+		response, err := f.useCase.Execute(ctx, &getPlan.Request{Kind: kindstest.Kind, UUID: "web"})
+		require.NoError(t, err)
+
+		var nodes []graph.NodeID
+		for _, e := range response.Executions {
+			nodes = append(nodes, e.Node)
+			assert.Equal(t, int64(2), e.Generation, "%s", e.Node)
+		}
+
+		assert.Equal(t, []graph.NodeID{"house/house-1", "fan/web"}, nodes)
+
+		kept, err := f.executions.GetByRoot(ctx, "web")
+		require.NoError(t, err)
+		assert.Len(t, kept, 3, "the shed's is kept, as its last run left it")
+	})
+
 	t.Run("one never carried out has no nodes, and no lease", func(t *testing.T) {
 		t.Parallel()
 
