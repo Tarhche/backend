@@ -215,11 +215,9 @@ func TestReconciler_Reconcile_unplanned(t *testing.T) {
 
 		require.Eventually(t, func() bool { return slices.Contains(kinds.Asked(graphtest.Delete), web) }, settle, tick)
 
-		// lapsed, and taken by another control plane.
-		f.clock.Advance(time.Minute)
+		f.lapse(t, store, "another")
 
-		_, err := f.leases.Take(ctx, store.Name(), "another", time.Minute)
-		require.NoError(t, err)
+		var err error
 
 		select {
 		case err = <-done:

@@ -196,6 +196,23 @@ func (f *fixture) lease(t *testing.T, id graph.NodeID) graph.Lease {
 	return lease
 }
 
+// lapse has the lease of the root the node id names lapse, its clock moved on
+// a minute, and taken by holder, another control plane, as one would take it
+// once it lapsed. Its holder's renewals run on a ticker of their own, which
+// may renew it between the clock moving on and holder taking it: the clock
+// is moved on again until holder takes it.
+func (f *fixture) lapse(t *testing.T, id graph.NodeID, holder string) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		f.clock.Advance(time.Minute)
+
+		_, err := f.leases.Take(context.Background(), id.Name(), holder, time.Minute)
+
+		return err == nil
+	}, settle, tick, "%s never took the lease of %s once it lapsed", holder, id)
+}
+
 // kept is how each node of the root the node id names went, as it is kept.
 func (f *fixture) kept(t *testing.T, id graph.NodeID) []graph.Execution {
 	t.Helper()
