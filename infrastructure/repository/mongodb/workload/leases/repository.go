@@ -2,10 +2,11 @@
 // document for a root,
 //
 //	{_id: "<root uuid>", holder, expires_at, failures, reason, next_at,
-//	 updated_at}
+//	 poked, updated_at}
 //
-// holder and expires_at null while nobody holds it, and next_at while
-// nothing backs its root off.
+// holder and expires_at null while nobody holds it, next_at while nothing
+// backs its root off, and poked false but while another control plane asked
+// for it while it was held.
 //
 // When a lease expires, and when a root's backoff is over, is judged by the
 // database's clock, $$NOW, in the pipelines that write them, never by a
@@ -19,12 +20,14 @@
 // leaves it as it was otherwise, and makes a new one when there is none. The
 // condition is the pipeline's rather than the query's because MongoDB takes
 // no $expr in an upsert's query, and the database's clock is read in an
-// expression alone. What it is left as says what came of it: held by its taker, it was taken; held by
-// another, it is held; and held by nobody, its root is backed off, since a
-// failure lets go of a lease as it backs its root off, so that a lease held
-// is never backed off. Two control planes that make a new one at once leave
-// one of them a duplicate key, should MongoDB not take its upsert up again:
-// the other made it, and holds it.
+// expression alone. What it is left as says what came of it: held by its
+// taker, it was taken; held by another, it is held, and poked in the same
+// write, so that its holder carries its root out again once it lets go of
+// it; and held by nobody, its root is backed off, since a failure lets go of
+// a lease as it backs its root off, so that a lease held is never backed
+// off. Taken, it is poked no more. Two control planes that make a new one at
+// once leave one of them a duplicate key, should MongoDB not take its upsert
+// up again: the other made it, and holds it.
 //
 // Only its holder renews it or lets go of it, which a write matched by its
 // holder says, and a failure backs its root off for as long as the backoff
@@ -94,8 +97,16 @@ func (r *Repository) Take(ctx context.Context, rootUUID string, holder string, t
 		bson.D{{Key: "$not", Value: bson.A{bson.D{{Key: "$gt", Value: bson.A{"$next_at", now}}}}}},
 	}}}
 
-	// what is taken is held by holder from now, and what is not is left as
-	// it was; a new one has no failures, and nothing backing it off.
+	// held by another and not taken, it is poked, so that its holder carries
+	// the root out again; poked before, it stays so.
+	poked := bson.D{{Key: "$or", Value: bson.A{
+		bson.D{{Key: "$ne", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$holder", ""}}}, ""}}},
+		bson.D{{Key: "$ifNull", Value: bson.A{"$poked", false}}},
+	}}}
+
+	// what is taken is held by holder from now, and poked no more, and what
+	// is not is left as it was but for being poked; a new one has no
+	// failures, and nothing backing it off.
 	take := mongo.Pipeline{
 		{{Key: "$set", Value: bson.D{{Key: "taken", Value: takeable}}}},
 		{{Key: "$set", Value: bson.D{
@@ -104,6 +115,7 @@ func (r *Repository) Take(ctx context.Context, rootUUID string, holder string, t
 			{Key: "failures", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$failures", 0}}}},
 			{Key: "reason", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$reason", ""}}}},
 			{Key: "next_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$next_at", nil}}}},
+			{Key: "poked", Value: ifTaken(false, poked)},
 			{Key: "updated_at", Value: ifTaken(now, "$updated_at")},
 		}}},
 		{{Key: "$unset", Value: "taken"}},
@@ -246,6 +258,7 @@ type document struct {
 	Failures  int        `bson:"failures"`
 	Reason    string     `bson:"reason"`
 	NextAt    *time.Time `bson:"next_at"`
+	Poked     bool       `bson:"poked"`
 	UpdatedAt *time.Time `bson:"updated_at"`
 }
 
@@ -257,6 +270,7 @@ func toLease(stored document) graph.Lease {
 		Failures:  stored.Failures,
 		Reason:    stored.Reason,
 		NextAt:    moment(stored.NextAt),
+		Poked:     stored.Poked,
 		UpdatedAt: moment(stored.UpdatedAt),
 	}
 }

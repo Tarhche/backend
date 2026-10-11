@@ -89,6 +89,48 @@ func Repository(t *testing.T, make Maker) {
 		assert.Equal(t, 2*time.Minute, again.ExpiresAt.Sub(again.UpdatedAt))
 	})
 
+	t.Run("asked for while another holds it, it is poked, which its holder's letting go of it says, and taken again it is not", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t)
+
+		taken, err := repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+		assert.False(t, taken.Poked, "a lease taken is poked by nothing")
+
+		held, err := repository.Take(ctx, shop, another, time.Minute)
+		require.ErrorIs(t, err, graph.ErrHeld)
+		assert.True(t, held.Poked, "held, it is poked as it is asked for")
+		assert.Equal(t, one, held.Holder)
+
+		again, err := repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err, "its holder takes it again")
+		assert.False(t, again.Poked, "which a run that reads its root after it covers")
+
+		_, err = repository.Take(ctx, shop, another, time.Minute)
+		require.ErrorIs(t, err, graph.ErrHeld)
+
+		released, err := repository.Release(ctx, shop, one, graph.Ended{State: graph.StateFailed, Reason: "broken", Backoff: loops})
+		require.NoError(t, err)
+		assert.True(t, released.Poked, "let go of, it says it was poked, for its holder to carry its root out again")
+		assert.Empty(t, released.Holder)
+
+		backedOff, err := repository.Take(ctx, shop, another, time.Minute)
+		require.ErrorIs(t, err, graph.ErrBackedOff, "a poke holds back none of a backoff")
+		assert.True(t, backedOff.Poked, "and is not taken away by it")
+
+		require.NoError(t, repository.Forget(ctx, shop))
+
+		forgotten, err := repository.Take(ctx, shop, another, time.Minute)
+		require.NoError(t, err)
+		assert.False(t, forgotten.Poked)
+
+		read, err := repository.Get(ctx, shop)
+		require.NoError(t, err)
+		assert.False(t, read.Poked, "a lease is poked by nothing but its being asked for while another holds it")
+	})
+
 	t.Run("one that expired is taken by another, its failures as they were", func(t *testing.T) {
 		t.Parallel()
 

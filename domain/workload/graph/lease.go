@@ -48,6 +48,12 @@ type Lease struct {
 	Reason   string
 	NextAt   time.Time
 
+	// Poked says the root was asked to be carried out while another control
+	// plane held its lease (Leases.Take, ErrHeld): what asked may have come
+	// after its holder's run read the root, so its holder carries it out
+	// again once it lets go of it, as Release says. Taking it clears it.
+	Poked bool
+
 	// UpdatedAt is when it was written last.
 	UpdatedAt time.Time
 }
@@ -100,11 +106,15 @@ type Leases interface {
 	// Take takes the root's lease for holder, until ttl from now, and is the
 	// lease as it is then: one nobody holds, one that expired and one holder
 	// holds already is taken, its failures, and when the root may be carried
-	// out next, kept as they were. One whose root is backed off is not
-	// taken, whoever holds it, and is ErrBackedOff; one another holds, and
-	// has not let expire, is ErrHeld; and either is beside the lease as it
-	// is. A root's uuid or a holder that is nothing is an error, and so is a
-	// ttl shorter than a millisecond, and nothing is taken.
+	// out next, kept as they were, and poked no more, since the run it is
+	// taken for reads the root after whatever poked it. One whose root is
+	// backed off is not taken, whoever holds it, and is ErrBackedOff; one
+	// another holds, and has not let expire, is ErrHeld, and is poked, in
+	// the same write, so that its holder carries the root out again once it
+	// lets go of it, and the wake-up it was asked for is never lost; and
+	// either is beside the lease as it is. A root's uuid or a holder that is
+	// nothing is an error, and so is a ttl shorter than a millisecond, and
+	// nothing is taken.
 	Take(ctx context.Context, rootUUID string, holder string, ttl time.Duration) (Lease, error)
 
 	// Renew has the root's lease, which holder holds, expire ttl from now,
@@ -117,9 +127,11 @@ type Leases interface {
 	// the run that held it ended, and is the lease as it is left: a run
 	// done clears its failures, a run that waits leaves them as they were,
 	// and a run that failed is one more, which backs the root off from now,
-	// for as long as its Backoff says of so many in a row. One holder does
-	// not hold is ErrLost, an end that is none of those three, and a root's
-	// uuid that is nothing, are errors, and none of them changes anything.
+	// for as long as its Backoff says of so many in a row; and it is poked
+	// still when it was while holder held it, which holder carries the root
+	// out again for. One holder does not hold is ErrLost, an end that is
+	// none of those three, and a root's uuid that is nothing, are errors,
+	// and none of them changes anything.
 	Release(ctx context.Context, rootUUID string, holder string, ended Ended) (Lease, error)
 
 	// Forget removes the root's lease, its failures with it, once the root

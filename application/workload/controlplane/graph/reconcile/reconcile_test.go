@@ -371,6 +371,49 @@ func TestReconciler_Reconcile(t *testing.T) {
 		assert.False(t, kept, "and its lease, its failures with it, forgotten, as it is gone")
 	})
 
+	t.Run("and so is a stack a person asked something of since its plan failed, its restart say, carried out at once", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := stacked()
+		kinds.Hold(vm, network, store)
+
+		f := newFixture(t, kinds, aStack(stackKind.Restarting))
+
+		_, err := f.leases.Take(ctx, store.Name(), "another", time.Minute)
+		require.NoError(t, err)
+
+		_, err = f.leases.Release(ctx, store.Name(), "another", graph.Ended{State: graph.StateFailed, Reason: "broken", Backoff: reconcile.DefaultConfig().Backoff})
+		require.NoError(t, err)
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), stackKind.Name)
+
+		require.NoError(t, r.Reconcile(ctx, refOf(store)), "not backed off")
+		assert.Contains(t, kinds.Asked(graphtest.Exists), store, "its graph is carried out")
+
+		lease := f.lease(t, store)
+		assert.Zero(t, lease.Failures, "its failures forgotten")
+		assert.True(t, lease.NextAt.IsZero())
+	})
+
+	t.Run("but one at rest, asked nothing since, is left until its backoff is over", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := stacked()
+		f := newFixture(t, kinds, aStack(stackKind.Failed))
+
+		_, err := f.leases.Take(ctx, store.Name(), "another", time.Minute)
+		require.NoError(t, err)
+
+		backedOff, err := f.leases.Release(ctx, store.Name(), "another", graph.Ended{State: graph.StateFailed, Reason: "broken", Backoff: reconcile.DefaultConfig().Backoff})
+		require.NoError(t, err)
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), stackKind.Name)
+
+		assert.ErrorIs(t, r.Reconcile(ctx, refOf(store)), graph.ErrBackedOff)
+		assert.Equal(t, backedOff, f.lease(t, store))
+		assert.Empty(t, kinds.Calls())
+	})
+
 	t.Run("what something owns now is a root no more: its lease is forgotten, and its graph is not carried out", func(t *testing.T) {
 		t.Parallel()
 
@@ -455,6 +498,44 @@ func TestReconciler_Reconcile_lease(t *testing.T) {
 		// let go of, another takes it, and finds it made.
 		require.NoError(t, another.Reconcile(ctx, refOf(web)))
 		assert.Equal(t, []graph.NodeID{web}, kinds.Asked(graphtest.Create), "made once")
+	})
+
+	t.Run("a root another reconciler is asked for while one carries it out is carried out again by the one, once its run ends", func(t *testing.T) {
+		t.Parallel()
+
+		gate := newGate()
+
+		kinds := container()
+		kinds.Hold(vm, network, volume)
+		kinds.On(graphtest.Create, web, gate.wait)
+
+		f := newFixture(t, kinds, root())
+
+		one := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
+		another := f.reconciler(t, "another", reconcile.DefaultConfig(), containerKind.Name)
+
+		done := make(chan error, 1)
+		go func() { done <- one.Reconcile(ctx, refOf(web)) }()
+
+		require.Eventually(t, func() bool { return slices.Contains(kinds.Asked(graphtest.Create), web) }, settle, tick, "one is making the root")
+
+		// what changed under the root is told to another, which cannot carry
+		// it out while one holds the root's lease.
+		require.ErrorIs(t, another.Reconcile(ctx, refOf(web)), graph.ErrHeld)
+		assert.True(t, f.lease(t, web).Poked)
+		assert.Empty(t, another.Queued(), "another keeps nothing of it")
+
+		gate.Open()
+		require.NoError(t, <-done)
+
+		assert.Equal(t, []graph.Ref{refOf(web)}, one.Queued(), "one carries it out again once its run ends")
+		assert.True(t, f.lease(t, web).Poked, "until it takes the lease again")
+
+		exists := len(kinds.Asked(graphtest.Exists))
+
+		require.NoError(t, one.Reconcile(ctx, refOf(web)))
+		assert.Greater(t, len(kinds.Asked(graphtest.Exists)), exists, "and does")
+		assert.False(t, f.lease(t, web).Poked, "which takes the lease, poked no more")
 	})
 
 	t.Run("a reconciler asked to reconcile a root it is reconciling skips it, though the lease is its own", func(t *testing.T) {

@@ -95,6 +95,7 @@ func TestRepository_stored(t *testing.T) {
 			"failures":   int32(0),
 			"reason":     "",
 			"next_at":    nil,
+			"poked":      false,
 			"updated_at": "a time",
 		}, kept)
 		assert.Equal(t, map[string]bool{"expires_at": true, "next_at": false, "updated_at": true}, times)
@@ -117,9 +118,30 @@ func TestRepository_stored(t *testing.T) {
 			"failures":   int32(1),
 			"reason":     "$failures is a reason, not a field",
 			"next_at":    "a time",
+			"poked":      false,
 			"updated_at": "a time",
 		}, kept, "a reason is kept as it is said, whatever it starts with")
 		assert.Equal(t, map[string]bool{"expires_at": false, "next_at": true, "updated_at": true}, times)
+	})
+
+	t.Run("one asked for while another holds it is kept poked, and taken, it is not", func(t *testing.T) {
+		require.NoError(t, repository.Forget(ctx, "s-uuid"))
+
+		_, err := repository.Take(ctx, "s-uuid", "two", time.Minute)
+		require.NoError(t, err)
+
+		_, err = repository.Take(ctx, "s-uuid", "three", time.Minute)
+		require.ErrorIs(t, err, graph.ErrHeld)
+
+		kept, _ := stored(t)
+		assert.Equal(t, true, kept["poked"])
+		assert.Equal(t, "two", kept["holder"])
+
+		_, err = repository.Take(ctx, "s-uuid", "two", time.Minute)
+		require.NoError(t, err)
+
+		kept, _ = stored(t)
+		assert.Equal(t, false, kept["poked"])
 	})
 
 	t.Run("indexed by nothing but its _id", func(t *testing.T) {

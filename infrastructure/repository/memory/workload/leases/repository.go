@@ -1,8 +1,9 @@
 // Package leases keeps each root's lease in memory, the way the MongoDB
 // repository keeps it: one lease for a root, by the root's uuid, taken when
 // nobody holds it, it expired or its taker holds it, and its root is not
-// backed off, as its clock judges; a failure in a row backing its root off
-// twice as long as the last; and times to the millisecond, in UTC.
+// backed off, as its clock judges, and poked when another holds it; a
+// failure in a row backing its root off twice as long as the last; and times
+// to the millisecond, in UTC.
 package leases
 
 import (
@@ -63,11 +64,15 @@ func (r *Repository) Take(_ context.Context, rootUUID string, holder string, ttl
 	case lease.NextAt.After(now):
 		return lease, graph.ErrBackedOff
 	case len(lease.Holder) > 0 && lease.Holder != holder && lease.ExpiresAt.After(now):
+		lease.Poked = true
+		r.leases[rootUUID] = lease
+
 		return lease, graph.ErrHeld
 	}
 
 	lease.Holder = holder
 	lease.ExpiresAt = now.Add(ttl.Truncate(time.Millisecond))
+	lease.Poked = false
 	lease.UpdatedAt = now
 
 	r.leases[rootUUID] = lease
