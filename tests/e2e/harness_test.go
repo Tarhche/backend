@@ -208,8 +208,8 @@ func newAccount(ctx context.Context, admin *session) (*account, error) {
 }
 
 // remove takes away everything the account made, and then the account: its
-// VMs, which take their stacks with them, its snapshots, and the user and
-// role themselves.
+// VMs, which take what lives in them with them, its containers and its stacks
+// among it, its snapshots, and the user and role themselves.
 func (a *account) remove(ctx context.Context, admin *session) error {
 	var errs []error
 
@@ -235,7 +235,10 @@ func (a *account) removeVMs(ctx context.Context) error {
 	}
 
 	for _, v := range vms.Items {
-		status, body, err := a.session.request(ctx, http.MethodDelete, "/api/dashboard/my/workload/vms/"+v.UUID, nil)
+		// with cascade, what lives in it goes with it: a container or a stack
+		// in it would otherwise make it again, and keep the cleanup waiting
+		// for as long as it waits.
+		status, body, err := a.session.request(ctx, http.MethodDelete, "/api/dashboard/my/workload/vms/"+v.UUID+"?cascade=true", nil)
 		if err != nil {
 			return err
 		}

@@ -24,10 +24,11 @@ type containerView struct {
 		HostPort      uint   `json:"host_port"`
 		Protocol      string `json:"protocol"`
 	} `json:"ports"`
-	Stack   string `json:"stack"`
-	Service string `json:"service"`
-	VMUUID  string `json:"vm_uuid"`
-	VMName  string `json:"vm_name"`
+	Stack     string `json:"stack"`
+	StackUUID string `json:"stack_uuid"`
+	Service   string `json:"service"`
+	VMUUID    string `json:"vm_uuid"`
+	VMName    string `json:"vm_name"`
 }
 
 type chosenVM struct {
