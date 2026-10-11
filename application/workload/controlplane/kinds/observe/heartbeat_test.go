@@ -439,6 +439,76 @@ func TestObserver_Unheard(t *testing.T) {
 		assert.False(t, there, "the restored house does not have it")
 	})
 
+	t.Run("one whose restored parent says when what lives in it was looked into is forgotten only once its node went on without a word of it since that look", func(t *testing.T) {
+		t.Parallel()
+
+		resetAt := later.Truncate(time.Millisecond)
+
+		// reset is the fan reset for the house's restore, at later, and last
+		// heard of then.
+		reset := func(t *testing.T, repository *resourcesMemory.Repository) resource.Record {
+			t.Helper()
+
+			r := kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later))
+			r.Reset, r.ResetAt = true, resetAt
+			create(t, repository, r)
+
+			kept, _ := stored(t, repository, "fan-uuid")
+
+			return kept
+		}
+
+		for name, tt := range map[string]struct {
+			looked looks
+		}{
+			"not looked into since its restore at all, its dockerd slow to come up": {
+				looked: looks{kindstest.House: {}},
+			},
+			"nor since the restore it was reset for, though looked into after one before": {
+				looked: looks{kindstest.House: later.Add(-time.Hour)},
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				repository := resourcesMemory.NewRepository()
+				r := reset(t, repository)
+
+				observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithParents(tt.looked))
+
+				for _, beat := range []time.Time{silence, silence.Add(time.Hour)} {
+					require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, beat))
+
+					kept, there := stored(t, repository, "fan-uuid")
+					require.True(t, there, "its silence says nothing before the look")
+					assert.Equal(t, r.Version, kept.Version, "nothing of it is written")
+				}
+			})
+		}
+
+		t.Run("and once it was looked into since, its silence counts from the look, which it is taken to have been heard of as of", func(t *testing.T) {
+			t.Parallel()
+
+			repository := resourcesMemory.NewRepository()
+			r := reset(t, repository)
+
+			look := silence.Add(time.Minute)
+			observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithParents(looks{kindstest.House: look}))
+
+			require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, look.Add(time.Hour)))
+
+			kept, there := stored(t, repository, "fan-uuid")
+			require.True(t, there, "silence since the restore, before the look, says nothing")
+			assert.True(t, kept.Reset, "it is reset still")
+			assert.Equal(t, look, kindstest.Typed(kept).Status.ObservedAt, "heard of as of the look, which its silence counts from")
+
+			require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), kept, look.Add(time.Hour)))
+
+			_, there = stored(t, repository, "fan-uuid")
+			assert.False(t, there, "once its node went on without a word of it since the look, the restored house does not have it")
+		})
+	})
+
 	t.Run("silence older than what was last heard of it, or than the command it is on its way to, says nothing", func(t *testing.T) {
 		t.Parallel()
 
@@ -634,12 +704,37 @@ type parents map[string]kind.State
 
 var _ observe.Parents = parents{}
 
+// Looked says nothing of when what lives in a house was looked into: a
+// house is never restored.
+func (p parents) Looked(context.Context, kind.Reference) (time.Time, bool, error) {
+	return time.Time{}, false, nil
+}
+
 func (p parents) Down(_ context.Context, parent kind.Reference) (kind.State, error) {
 	if parent.Kind != kindstest.Parent {
 		return "", nil
 	}
 
 	return p[parent.UUID], nil
+}
+
+// looks are houses, each restored and looked into since as a moment says,
+// none when it was not looked into since.
+type looks map[string]time.Time
+
+var _ observe.Parents = looks{}
+
+func (l looks) Down(context.Context, kind.Reference) (kind.State, error) {
+	return "", nil
+}
+
+func (l looks) Looked(_ context.Context, parent kind.Reference) (time.Time, bool, error) {
+	looked, says := l[parent.UUID]
+	if parent.Kind != kindstest.Parent {
+		return time.Time{}, false, nil
+	}
+
+	return looked, says, nil
 }
 
 // orphans are told of what a node holds that nobody keeps a record of, and

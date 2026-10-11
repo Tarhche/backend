@@ -1162,12 +1162,12 @@ func TestAStackMadeSinceItsVMsSnapshot(t *testing.T) {
 // snapshot taken while the stack ran, the VM's dockerd listing nothing of what
 // it holds for longer than what lives in a VM may go unheard, as one slow to
 // come up after a restore lists nothing: until the restored disk is looked
-// into, nothing forgets the stack, though the records of what it owns go
-// unheard and are forgotten, and nothing of it is made in its VM. Once the
-// disk is looked into, what it holds of the stack is taken in again, its
-// containers as its own, under the uuids they had, and its network linked as
-// its own once its graph is carried out, and the stack runs with them,
-// nothing of it made again beside them.
+// into, nothing forgets the stack, nor the records of what it owns, unheard as
+// they go, and nothing of it is made in its VM. Once the disk is looked into,
+// what it holds of the stack is found by those records, its containers its
+// own under the uuids they had, and its network its own once its graph is
+// carried out, and the stack runs with them, nothing of it made again beside
+// them.
 func TestAStackBeforeItsRestoredVMIsLookedInto(t *testing.T) {
 	t.Parallel()
 
@@ -1231,6 +1231,8 @@ func TestAStackBeforeItsRestoredVMIsLookedInto(t *testing.T) {
 			return slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") })
 		}, 2*patience.ResourceSilentAfter, beat, "the stack was forgotten, or something of it made, before its restored disk was looked into")
 
+		assert.Equal(t, snapshotted, kept(), "and the records of what it owns are kept, however long they go unheard before the look")
+
 		s := w.stackRecord(t, stackUUID)
 		assert.Equal(t, stackKind.Running, s.Status.Expected, "it is still to run, once it can be")
 	})
@@ -1240,7 +1242,7 @@ func TestAStackBeforeItsRestoredVMIsLookedInto(t *testing.T) {
 	t.Run("once it is looked into, what it holds of the stack is the stack's again, and the stack runs with it, nothing of it made again", func(t *testing.T) {
 		w.stack(t, stackUUID, "running again", func(s presenter.StackDetail) bool { return s.State == "running" })
 
-		assert.Equal(t, snapshotted, kept(), "what the restored disk holds is taken in under the uuids it had")
+		assert.Equal(t, snapshotted, kept(), "what the restored disk holds is found under the uuids it had")
 
 		for _, c := range w.containerRecords(t, vmUUID) {
 			assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: stackUUID}}, c.Metadata.Owners, "%s is the stack's", c.Spec.Name)

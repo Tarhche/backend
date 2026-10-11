@@ -29,13 +29,21 @@ const (
 
 // Parents say what the resources others live in are doing, when what lives
 // in them cannot be looked at because of it: a Docker VM that is stopped,
-// whose containers nobody can read until it runs again.
+// whose containers nobody can read until it runs again; and when what lives
+// in one restored from a snapshot was first looked into since.
 type Parents interface {
 	// Down is the state parent is in, in its kind's own word, when what lives
 	// in it cannot be looked at because of that state; and nothing when it
 	// can be, or when that is not known, and what lives in it is then judged
 	// as anything else is.
 	Down(ctx context.Context, parent kind.Reference) (kind.State, error)
+
+	// Looked is when what lives in parent was first looked into since the
+	// parent was last restored from a snapshot, none when it was not since,
+	// and whether parent says so at all: a Docker VM does
+	// (vmKind.Status.LookedAt). What lives in a parent that says nothing of
+	// it is judged as anything else is.
+	Looked(ctx context.Context, parent kind.Reference) (time.Time, bool, error)
 }
 
 // Orphans are told of what a node holds that nobody keeps a record of: a VM
@@ -211,8 +219,13 @@ func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time,
 //     taken to be up;
 //   - one whose parent was restored since it was last heard of is not on the
 //     disk the parent was given back, and is not made again but forgotten
-//     (kind.CascadeReset); silence from before the restore says nothing of
-//     it, either way;
+//     (kind.CascadeReset), once the restored parent was looked into since it
+//     was reset for that restore (Parents.Looked), and its node went on as
+//     long without a word of it since that look: its silence counts from the
+//     look, which decides what of it the restored disk holds, found there and
+//     kept, or not; before the look, its silence says nothing, however long
+//     the parent's dockerd takes to come up, and silence from before the
+//     restore says nothing of it either way;
 //   - and anything else is missing from its node, inside its parent or
 //     inside none, as its kind's machine takes that.
 //
@@ -240,8 +253,25 @@ func (o *Observer) Unheard(ctx context.Context, d kind.Descriptor, r resource.Re
 	if r.Reset {
 		// silence from before its parent was restored says nothing of what
 		// the restored parent holds.
-		if recorded, err := r.Common(); err != nil || !at.After(recorded.ObservedAt) {
+		recorded, err := r.Common()
+		if err != nil || !at.After(recorded.ObservedAt) {
 			return err
+		}
+
+		// nor does silence from before the restored parent was looked into
+		// since, which counts from that look.
+		if len(parent.UUID) > 0 && o.parents != nil {
+			looked, says, err := o.parents.Looked(ctx, parent)
+
+			switch {
+			case err != nil:
+				return err
+			case !says:
+			case looked.Before(r.ResetAt):
+				return nil
+			case recorded.ObservedAt.Before(looked):
+				return o.silentSince(ctx, r, looked)
+			}
 		}
 
 		o.logger.InfoContext(ctx, "forgetting a resource its restored parent does not have", "kind", d.Name, "uuid", r.Metadata.UUID, "parent", parent.UUID)
@@ -256,6 +286,32 @@ func (o *Observer) Unheard(ctx context.Context, d kind.Descriptor, r resource.Re
 	}
 
 	return o.take(ctx, d, r.Metadata.Node, r, missingIn(parent), at, unsaid)
+}
+
+// silentSince has the record r, of a resource its parent's restore reset,
+// taken to have been heard of as of the first look into the restored parent
+// since, looked: what the look found of it is known by then, and its silence
+// counts from the look rather than from the restore, which the reconcile loop
+// goes by. One written in the meantime is judged again at the loop's next
+// pass, and one that is gone is let be.
+func (o *Observer) silentSince(ctx context.Context, r resource.Record, looked time.Time) error {
+	common, err := r.Common()
+	if err != nil {
+		return err
+	}
+
+	common.ObservedAt = looked
+
+	if err := r.SetCommon(common); err != nil {
+		return err
+	}
+
+	_, err = o.resources.Update(ctx, r)
+	if errors.Is(err, resource.ErrConflict) || errors.Is(err, domain.ErrNotExists) {
+		return nil
+	}
+
+	return err
 }
 
 // Take writes down what was observed at a moment of one resource its node

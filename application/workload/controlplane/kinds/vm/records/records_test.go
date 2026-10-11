@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,6 +137,57 @@ func TestRecords_Down(t *testing.T) {
 		t.Parallel()
 
 		_, err := records.New(unreadable{}).Down(ctx, kind.Reference{Kind: vmKind.Name, UUID: "running"})
+		assert.Error(t, err)
+	})
+}
+
+func TestRecords_Looked(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	restoredAt := time.Now().Add(-time.Hour)
+	looked := restoredAt.Add(time.Minute)
+
+	r := recordsOf(t,
+		vmtest.Docker("never-restored", "owner"),
+		vmtest.In(vmtest.Docker("looked-into", "owner"), func(v *vmKind.VM) {
+			v.Status.RestoredAt = restoredAt
+			v.Status.LookedAt = looked
+		}),
+		vmtest.In(vmtest.Docker("not-looked-into", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = restoredAt }),
+		vmtest.In(vmtest.Docker("looked-into-before", "owner"), func(v *vmKind.VM) {
+			v.Status.RestoredAt = restoredAt
+			v.Status.LookedAt = restoredAt.Add(-time.Minute)
+		}),
+	)
+
+	for name, tt := range map[string]struct {
+		parent kind.Reference
+		looked time.Time
+		says   bool
+	}{
+		"a vm says when what lives in it was first looked into since its restore": {parent: kind.Reference{Kind: vmKind.Name, UUID: "looked-into"}, looked: looked, says: true},
+		"and none when it was not since":                                          {parent: kind.Reference{Kind: vmKind.Name, UUID: "not-looked-into"}, says: true},
+		"nor when it was looked into only before its restore":                     {parent: kind.Reference{Kind: vmKind.Name, UUID: "looked-into-before"}, says: true},
+		"or when it was never restored":                                           {parent: kind.Reference{Kind: vmKind.Name, UUID: "never-restored"}, says: true},
+		"one that is gone says nothing: it is gone":                               {parent: kind.Reference{Kind: vmKind.Name, UUID: "gone"}},
+		"a parent that is not a vm is not for it to say":                          {parent: kind.Reference{Kind: stackKind.Name, UUID: "looked-into"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			at, says, err := r.Looked(ctx, tt.parent)
+			require.NoError(t, err)
+			assert.Equal(t, tt.says, says)
+			assert.True(t, tt.looked.Equal(at), "%s", at)
+		})
+	}
+
+	t.Run("records that cannot be read are said", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := records.New(unreadable{}).Looked(ctx, kind.Reference{Kind: vmKind.Name, UUID: "looked-into"})
 		assert.Error(t, err)
 	})
 }

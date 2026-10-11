@@ -39,8 +39,8 @@
 //     VM's dockerd, cannot say anything of for that long looks missing until
 //     it is heard again. What it is missing is asked for at the next pass;
 //   - one whose parent was restored from a snapshot waits to be heard of,
-//     which keeps it as it is found, or to go unheard, which forgets it
-//     (kind.CascadeReset);
+//     which keeps it as it is found, or to go unheard since the restored
+//     parent was looked into, which forgets it (kind.CascadeReset);
 //   - one that has been tried for already, and is not yet what it is
 //     expected to be, is left alone for longer each time: its backoff. The
 //     tries are forgotten once it has been what it is expected to be for as

@@ -3,13 +3,15 @@
 //
 // It is what the vm kind's control-plane strategy, its quota and its
 // placement read VMs with, and what the kinds that live in VMs, or are taken
-// of them, read their parent with (Records.Down, as the observer's Parents).
+// of them, read their parent with (Records.Down and Records.Looked, as the
+// observer's Parents).
 package records
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -102,6 +104,28 @@ func (r *Records) Down(ctx context.Context, parent kind.Reference) (kind.State, 
 	}
 
 	return v.Status.State, nil
+}
+
+// Looked is when what lives in a Docker VM was first looked into since its
+// disk was last restored, none when it was not since, as its record keeps it
+// (vmKind.Status.LookedAt): a look before its last restore is none. A VM that
+// is gone, and a parent that is not a VM, say nothing of it.
+func (r *Records) Looked(ctx context.Context, parent kind.Reference) (time.Time, bool, error) {
+	if parent.Kind != vmKind.Name {
+		return time.Time{}, false, nil
+	}
+
+	v, err := r.GetOne(ctx, parent.UUID)
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		return time.Time{}, false, nil
+	case err != nil:
+		return time.Time{}, false, err
+	case v.Status.LookedAt.Before(v.Status.RestoredAt):
+		return time.Time{}, true, nil
+	}
+
+	return v.Status.LookedAt, true, nil
 }
 
 // Going reports whether a VM is on its way out: being deleted, or expected

@@ -100,6 +100,12 @@ func newFixtureWith(t *testing.T, options []reconcileResources.Option, records .
 // fan in one cannot be looked at, as a container in a VM that is stopped.
 type houses map[string]kind.State
 
+// Looked says nothing of when what lives in a house was looked into: a
+// house is never restored.
+func (h houses) Looked(context.Context, kind.Reference) (time.Time, bool, error) {
+	return time.Time{}, false, nil
+}
+
 func (h houses) Down(_ context.Context, parent kind.Reference) (kind.State, error) {
 	if parent.Kind != kindstest.Parent {
 		return "", nil
