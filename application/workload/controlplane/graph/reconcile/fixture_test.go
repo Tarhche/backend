@@ -361,6 +361,16 @@ func (c *counting) Delete(ctx context.Context, kindName string, uuid string) err
 	return c.Repository.Delete(ctx, kindName, uuid)
 }
 
+func (c *counting) DeleteAt(ctx context.Context, kindName string, uuid string, version int64) error {
+	if err := c.stalled(ctx, "delete"); err != nil {
+		return err
+	}
+
+	c.wrote("delete", kindName, uuid)
+
+	return c.Repository.DeleteAt(ctx, kindName, uuid, version)
+}
+
 func (c *counting) GetOne(ctx context.Context, kindName string, uuid string) (resource.Record, error) {
 	c.read()
 
@@ -524,6 +534,15 @@ func (k *resetting) Restored(ctx context.Context, _ kind.Raw, _ time.Time) (grap
 	}
 
 	return found, fails
+}
+
+// finds has the kind find each root in the restored parent as found says from
+// now on.
+func (k *resetting) finds(found graph.Restoration) {
+	k.lock.Lock()
+	defer k.lock.Unlock()
+
+	k.found = found
 }
 
 // Asked is how many times the kind was asked what a restored parent holds of

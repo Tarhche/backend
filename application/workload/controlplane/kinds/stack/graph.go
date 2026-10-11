@@ -62,8 +62,8 @@ const tries = 3
 // A restore of its VM's disk resets it, as it resets what lives in the VM
 // (graph.ResetKind): once the restored disk was looked into, and every word
 // of that look heard, it is carried out again when the disk holds any of its
-// containers, and forgotten, with what it owns, when it holds none of them
-// (Restored).
+// containers, and forgotten, with what it owns, once it is known to hold none
+// of them, no record of one left (Restored).
 type Graph struct {
 	records *requirements.Records
 
@@ -687,7 +687,7 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 // Restored is what the restored Docker VM of the stack the record r is was
 // found to hold of it, once the VM's restore reset it (graph.ResetKind): what
 // the restored disk holds of the stack's containers, which is known once the
-// VM was looked into since its restore and its VM was heard of for longer
+// VM, running, was looked into since its restore, and was heard of for longer
 // than what lives in it may go unheard since (silence), so that every
 // heartbeat of that look has been heard, and what it found, or took in, is
 // kept:
@@ -695,9 +695,15 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 //   - held, when a container the stack owns is no longer reset: one that
 //     look found in the restored disk, or one taken in from it, which is the
 //     stack's again (kinds/container's Adopt);
-//   - lost, when none is: what that look did not find is not there. Its
-//     containers' records may be there still, reset, which their own kind's
-//     reset forgets once they go unheard for as long.
+//   - not known still while one is reset: what the disk holds of a container
+//     its record says, kept as it is found there, or forgotten once its node
+//     goes on beating for as long as what lives in a VM may go unheard
+//     without a word of it, while its VM runs (observe's Unheard), and a
+//     heartbeat of it heard late keeps it reset as long;
+//   - and lost once none is left: each forgotten by its own silence, none
+//     found, none taken in. The restored disk is known not to hold the stack
+//     then, and only then: a stack is forgotten on nothing less, since a
+//     wait, which it shows as one, loses nothing of it.
 //
 // Until then it is not known, whatever its containers' records say: a stack
 // none of whose containers was heard of since its VM's restore is never lost
@@ -706,7 +712,9 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 // look is heard, which would make again, beside what the restored disk holds,
 // what was yet to be taken in from it. A container made since the restore
 // would say the stack is held too, which is why nothing is made for a stack
-// its VM's restore reset until this says.
+// its VM's restore reset until this says. Nor is it known while its VM does
+// not run, restoring, stopped or failed: nothing in it can be heard of then,
+// and what lives in it waits on it, unheard and kept.
 //
 // Nor is it known while its VM's record says a restore before the one the
 // stack was reset for, resetAt, the moment the VM's node says it carried that
@@ -715,17 +723,14 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 // record says what the restore before it said, nothing when it is the VM's
 // first, which would hold the stack, its graph making again all of it on a
 // disk that holds none of it; or, the restore before looked into long ago,
-// would lose the stack, all of whose containers that reset just reset,
-// though the restored disk may hold them. The record takes that restore in
-// the end, the result heard again, whatever its VM was asked, or failed as,
-// meanwhile. Nor is it known while the VM's record says it is restoring: a
-// restore asked again while the stack is reset by the one before has it wait
-// for its own look too. A reset that says no restore, made before resets said
-// which, waits only while the record says it is restoring.
+// would have the stack decided on a look into the disk before this one. The
+// record takes that restore in the end, the result heard again, whatever its
+// VM was asked, or failed as, meanwhile.
 //
 // One whose VM is gone, which nothing will look into again, or whose VM's
-// record says nothing of a restore, is held: what lives in it is its graph's
-// to make again, as when its VM is deleted under it.
+// record and reset say nothing of a restore, the reset made before resets
+// said which, is held: what lives in it is its graph's to make again, as when
+// its VM is deleted under it.
 func (g *Graph) Restored(ctx context.Context, r kind.Raw, resetAt time.Time) (graph.Restoration, error) {
 	if r.Kind != stackKind.Name {
 		return graph.RestorationUnknown, fmt.Errorf("%w: a %s is not a stack", kind.ErrUnknownKind, r.Kind)
@@ -750,9 +755,11 @@ func (g *Graph) Restored(ctx context.Context, r kind.Raw, resetAt time.Time) (gr
 	}
 
 	switch looked := v.Status.LookedAt; {
-	case v.Status.RestoredAt.Before(resetAt), v.Status.State == vmKind.Restoring:
+	case v.Status.RestoredAt.Before(resetAt):
 		// the restore it was reset for is yet to be taken onto its VM's
 		// record, which says the one before, if any.
+		return graph.RestorationUnknown, nil
+	case v.Status.State != vmKind.Running:
 		return graph.RestorationUnknown, nil
 	case v.Status.RestoredAt.IsZero():
 		return graph.RestorationHeld, nil
@@ -765,8 +772,11 @@ func (g *Graph) Restored(ctx context.Context, r kind.Raw, resetAt time.Time) (gr
 		return graph.RestorationUnknown, err
 	}
 
-	if slices.ContainsFunc(containers, func(c resource.Record) bool { return !c.Reset }) {
+	switch {
+	case slices.ContainsFunc(containers, func(c resource.Record) bool { return !c.Reset }):
 		return graph.RestorationHeld, nil
+	case len(containers) > 0:
+		return graph.RestorationUnknown, nil
 	}
 
 	return graph.RestorationLost, nil

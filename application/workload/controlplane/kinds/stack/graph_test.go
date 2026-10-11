@@ -930,6 +930,16 @@ func TestGraph_Restored(t *testing.T) {
 
 	looked := restoredAt.Add(time.Second)
 
+	// stopped and failed are vm-1 as v has it, but stopped, or failed, its
+	// node heard of as long.
+	stopped := func(v vmKind.VM) vmKind.VM {
+		return vmtest.In(v, func(v *vmKind.VM) { v.Status.State = vmKind.Stopped })
+	}
+
+	failed := func(v vmKind.VM) vmKind.VM {
+		return vmtest.In(v, func(v *vmKind.VM) { v.Status.State = vmKind.Failed })
+	}
+
 	// vm-1 as its record is while a restore of it is carried out, before
 	// that restore is taken onto it, its record saying what v says of a
 	// restore before it.
@@ -983,14 +993,27 @@ func TestGraph_Restored(t *testing.T) {
 			containers: []resource.Record{container("c-1", true)},
 			restored:   graph.RestorationUnknown,
 		},
-		"lost once its node was heard of it for longer since, none of its containers found": {
+		"but not known still while a container of it is reset, which its own silence is yet to forget, or a heartbeat of it heard late to find": {
 			vms:        []vmKind.VM{restored(looked, silence+time.Second)},
 			containers: []resource.Record{container("c-1", true), container("c-2", true)},
-			restored:   graph.RestorationLost,
+			restored:   graph.RestorationUnknown,
 		},
-		"and so is one none of whose containers is kept at all": {
+		"lost once none of its containers is left, each forgotten by its own silence, none found nor taken in": {
 			vms:      []vmKind.VM{restored(looked, silence+time.Second)},
 			restored: graph.RestorationLost,
+		},
+		"but not while its vm is stopped, which no container of it can be heard from, nor forgotten by its silence": {
+			vms:        []vmKind.VM{stopped(restored(looked, silence+time.Second))},
+			containers: []resource.Record{container("c-1", true)},
+			restored:   graph.RestorationUnknown,
+		},
+		"nor though none of them is left": {
+			vms:      []vmKind.VM{stopped(restored(looked, silence+time.Second))},
+			restored: graph.RestorationUnknown,
+		},
+		"nor while its vm failed": {
+			vms:      []vmKind.VM{failed(restored(looked, silence+time.Second))},
+			restored: graph.RestorationUnknown,
 		},
 		"held when its vm is gone, which nothing looks into again: its graph makes it again": {
 			containers: []resource.Record{container("c-1", true)},

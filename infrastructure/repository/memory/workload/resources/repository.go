@@ -115,6 +115,27 @@ func (r *Repository) Delete(_ context.Context, kindName string, uuid string) err
 	return nil
 }
 
+func (r *Repository) DeleteAt(_ context.Context, kindName string, uuid string, version int64) error {
+	if r.Fail != nil {
+		return r.Fail
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	current, exists := r.of()[uuid]
+	switch {
+	case !exists || current.Kind != kindName:
+		return domain.ErrNotExists
+	case current.Version != version:
+		return resource.ErrConflict
+	}
+
+	delete(r.records, uuid)
+
+	return nil
+}
+
 func (r *Repository) GetOne(_ context.Context, kindName string, uuid string) (resource.Record, error) {
 	return r.one(kindName, func(record resource.Record) bool {
 		return record.Metadata.UUID == uuid

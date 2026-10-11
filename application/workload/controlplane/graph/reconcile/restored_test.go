@@ -6,11 +6,13 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
@@ -190,6 +192,162 @@ func TestReconciler_Reconcile_restored(t *testing.T) {
 		_, kept := f.leases.Lease("web")
 		assert.False(t, kept)
 		assert.Empty(t, kinds.Asked(graphtest.Delete))
+	})
+
+	t.Run("one something of which is found in the restored parent once it was found lost, before what it owns is forgotten, is decided again, and forgotten not at all", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container()
+		kinds.Hold(vm, network, volume, web)
+
+		f := newFixture(t, kinds, record(refOf(vm), nil, nil), in(refOf(network), refOf(web)), reset(root()))
+
+		found := graph.Ref{Kind: containerKind.Name, UUID: "found-meanwhile"}
+
+		// the look's heartbeat of one of its containers, heard as it is found
+		// lost: kept as found, no longer reset, which its kind finds then.
+		k := f.resetting(graph.RestorationLost)
+
+		var once sync.Once
+		k.first = func(ctx context.Context) {
+			once.Do(func() {
+				_, err := f.records.Create(ctx, in(found, refOf(web)))
+				require.NoError(t, err)
+
+				k.finds(graph.RestorationHeld)
+			})
+		}
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
+		require.NoError(t, r.Reconcile(ctx, refOf(web)))
+
+		for _, ref := range []graph.Ref{found, refOf(web), refOf(network)} {
+			_, err := f.records.GetOne(ctx, ref.Kind, ref.UUID)
+			assert.NoError(t, err, "%s is kept", ref)
+		}
+
+		rec, err := f.records.GetOne(ctx, containerKind.Name, "web")
+		require.NoError(t, err)
+		assert.False(t, rec.Reset, "held, and carried out")
+
+		assert.Equal(t, 3, k.Asked(), "found lost, found otherwise once what it owns was looked for, and held")
+	})
+
+	t.Run("one written once what it owns was forgotten, before its record is, another restore of its parent resetting it again, is decided again on what it is now, and is not forgotten", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container()
+		kinds.Hold(vm, network, volume, web)
+
+		f := newFixture(t, kinds, record(refOf(vm), nil, nil), in(refOf(network), refOf(web)), reset(root()))
+		k := f.resetting(graph.RestorationLost)
+
+		var once sync.Once
+		f.resources.Stall("delete", func(ctx context.Context) error {
+			once.Do(func() {
+				rec, err := f.records.GetOne(ctx, containerKind.Name, "web")
+				require.NoError(t, err)
+
+				rec.ResetAt = kindstest.Moment.Add(time.Hour)
+
+				_, err = f.records.Update(ctx, rec)
+				require.NoError(t, err)
+
+				k.finds(graph.RestorationUnknown)
+			})
+
+			return nil
+		})
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
+		require.NoError(t, r.Reconcile(ctx, refOf(web)))
+
+		rec, err := f.records.GetOne(ctx, containerKind.Name, "web")
+		require.NoError(t, err, "it is kept, written as it was being forgotten")
+		assert.True(t, rec.Reset, "and waits for its parent's other restore")
+
+		lease := f.lease(t, web)
+		assert.Zero(t, lease.Failures, "waiting is no failure")
+	})
+
+	t.Run("and so is one written once what it owns was looked for, before anything is forgotten", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container()
+		kinds.Hold(vm, network, volume, web)
+
+		f := newFixture(t, kinds, record(refOf(vm), nil, nil), in(refOf(network), refOf(web)), reset(root()))
+		k := f.resetting(graph.RestorationLost)
+
+		var once sync.Once
+		f.resources.Stall("list", func(ctx context.Context) error {
+			if k.Asked() == 0 {
+				return nil
+			}
+
+			once.Do(func() {
+				rec, err := f.records.GetOne(ctx, containerKind.Name, "web")
+				require.NoError(t, err)
+
+				rec.ResetAt = kindstest.Moment.Add(time.Hour)
+
+				_, err = f.records.Update(ctx, rec)
+				require.NoError(t, err)
+
+				k.finds(graph.RestorationUnknown)
+			})
+
+			return nil
+		})
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
+		require.NoError(t, r.Reconcile(ctx, refOf(web)))
+
+		for _, ref := range []graph.Ref{refOf(web), refOf(network)} {
+			_, err := f.records.GetOne(ctx, ref.Kind, ref.UUID)
+			assert.NoError(t, err, "%s is kept: nothing is forgotten", ref)
+		}
+	})
+
+	t.Run("what is taken in for it from the restored parent as it is forgotten, once it was found lost again, is forgotten after it, and never removed from where it lives", func(t *testing.T) {
+		t.Parallel()
+
+		late := graph.ID(containerKind.Name, "adopted-late")
+
+		kinds := container()
+		kinds.Hold(vm, network, volume, web, late)
+
+		f := newFixture(t, kinds, record(refOf(vm), nil, nil), in(refOf(network), refOf(web)), reset(root()))
+		f.resetting(graph.RestorationLost)
+
+		// an adoption that read it before its record went, and wrote what it
+		// took in for it, owned by it, as its record was about to go.
+		var once sync.Once
+		f.resources.Stall("delete", func(ctx context.Context) error {
+			if _, err := f.records.GetOne(ctx, networkKind.Name, "s_default"); err == nil {
+				return nil
+			}
+
+			once.Do(func() {
+				_, err := f.records.Create(ctx, in(refOf(late), refOf(web)))
+				require.NoError(t, err)
+			})
+
+			return nil
+		})
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
+		require.NoError(t, r.Reconcile(ctx, refOf(web)))
+
+		_, err := f.records.GetOne(ctx, containerKind.Name, "web")
+		require.ErrorIs(t, err, domain.ErrNotExists, "it is forgotten")
+
+		_, err = f.records.GetOne(ctx, containerKind.Name, late.Name())
+		assert.ErrorIs(t, err, domain.ErrNotExists, "and so is what was taken in for it, after it")
+
+		require.NoError(t, r.Resync(ctx))
+
+		assert.Empty(t, kinds.Asked(graphtest.Delete), "and nothing is removed from where it lives")
 	})
 
 	t.Run("one asked to go is removed as any root is, its kind not asked what the restored parent holds of it", func(t *testing.T) {

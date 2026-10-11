@@ -234,6 +234,40 @@ func (r *Repository) Delete(ctx context.Context, kindName string, uuid string) e
 	return err
 }
 
+func (r *Repository) DeleteAt(ctx context.Context, kindName string, uuid string, version int64) error {
+	collection, err := r.collection(kindName)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	// only the version it was read at is taken away: one written since is at
+	// another, and matches nothing; nor does one of another kind.
+	ofItsKind := bson.D{{Key: "_id", Value: uuid}, {Key: "kind", Value: kindName}}
+
+	deleted, err := collection.DeleteOne(ctx, slices.Concat(ofItsKind, bson.D{{Key: "version", Value: version}}))
+	if err != nil {
+		return err
+	}
+
+	if deleted.DeletedCount == 0 {
+		exists, err := collection.CountDocuments(ctx, ofItsKind)
+		if err != nil {
+			return err
+		}
+
+		if exists == 0 {
+			return domain.ErrNotExists
+		}
+
+		return resource.ErrConflict
+	}
+
+	return nil
+}
+
 func (r *Repository) GetOne(ctx context.Context, kindName string, uuid string) (resource.Record, error) {
 	return r.findOne(ctx, kindName, bson.D{{Key: "_id", Value: uuid}})
 }

@@ -226,6 +226,12 @@ type Repository interface {
 	// not there, as one of the kind, is gone already.
 	Delete(ctx context.Context, kindName string, uuid string) error
 
+	// DeleteAt takes away the resource of the kind that uuid names only at
+	// version, the version it was read at, as Update writes one back only
+	// over that: it is ErrConflict when something wrote it since, and
+	// domain.ErrNotExists when it is gone, or was never one of its kind.
+	DeleteAt(ctx context.Context, kindName string, uuid string, version int64) error
+
 	// GetOne is the resource of the kind that uuid names, or
 	// domain.ErrNotExists.
 	GetOne(ctx context.Context, kindName string, uuid string) (Record, error)

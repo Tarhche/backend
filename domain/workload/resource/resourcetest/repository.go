@@ -169,6 +169,39 @@ func Repository(t *testing.T, make Maker) {
 		assert.NoError(t, repository.Delete(ctx, fans, "fan-uuid"), "what is gone is gone already")
 	})
 
+	t.Run("a resource is taken away at the version it was read at, and only at that", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t, fans, lights)
+
+		created, err := repository.Create(ctx, aFan("fan-uuid", "kitchen-abcde"))
+		require.NoError(t, err)
+
+		heartbeat := created.Clone()
+		heartbeat.Status = json.RawMessage(`{"state":"running","speed":2}`)
+		written, err := repository.Update(ctx, heartbeat)
+		require.NoError(t, err)
+
+		assert.ErrorIs(t, repository.DeleteAt(ctx, fans, "fan-uuid", created.Version), resource.ErrConflict, "a copy read before the heartbeat was written cannot take it away")
+
+		stored, err := repository.GetOne(ctx, fans, "fan-uuid")
+		require.NoError(t, err, "and it is kept")
+		assert.Equal(t, written.Version, stored.Version)
+
+		assert.ErrorIs(t, repository.DeleteAt(ctx, lights, "fan-uuid", written.Version), domain.ErrNotExists, "no light is kept under the fan's uuid")
+
+		require.NoError(t, repository.DeleteAt(ctx, fans, "fan-uuid", written.Version), "read again, it is taken away")
+
+		_, err = repository.GetOne(ctx, fans, "fan-uuid")
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+
+		assert.ErrorIs(t, repository.DeleteAt(ctx, fans, "fan-uuid", written.Version), domain.ErrNotExists, "what is gone is said to be")
+
+		_, err = repository.Create(ctx, aFan("another-uuid", "kitchen-abcde"))
+		assert.NoError(t, err, "and its slug is free")
+	})
+
 	t.Run("nor be given a slug another has, of whatever kind", func(t *testing.T) {
 		t.Parallel()
 

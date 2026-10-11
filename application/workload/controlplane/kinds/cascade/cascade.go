@@ -133,6 +133,24 @@ func (r *Repository) Delete(ctx context.Context, kindName string, uuid string) e
 	return r.cascade.changed(ctx, touched)
 }
 
+// DeleteAt takes away what lives in a resource, by its kind's rules, as Delete
+// does, and then the resource, only at the version it was read at, and then
+// tells the graphs of roots what of it was kept or taken away. One written
+// since is ErrConflict, and one that is not there domain.ErrNotExists, what
+// lived in it taken away all the same, as a delete cut short leaves it.
+func (r *Repository) DeleteAt(ctx context.Context, kindName string, uuid string, version int64) error {
+	touched, err := r.cascade.deleted(ctx, kind.Reference{Kind: kindName, UUID: uuid})
+	if err != nil {
+		return err
+	}
+
+	if err := r.Repository.DeleteAt(ctx, kindName, uuid, version); err != nil {
+		return err
+	}
+
+	return r.cascade.changed(ctx, touched)
+}
+
 // Deleted is what deleting parent does to what lives in it, kind by kind:
 // the records of a kind that goes with its parent are taken away, but for
 // what the graphs of roots make again, when they are kept made, which is kept
