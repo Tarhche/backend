@@ -29,6 +29,9 @@ type containerView struct {
 	Service   string `json:"service"`
 	VMUUID    string `json:"vm_uuid"`
 	VMName    string `json:"vm_name"`
+
+	// Unmanaged says nobody keeps it.
+	Unmanaged bool `json:"unmanaged"`
 }
 
 type chosenVM struct {

@@ -2,6 +2,7 @@ package workload_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -567,6 +569,75 @@ func connect(t *testing.T, url string) *nats.Conn {
 	t.Cleanup(connection.Close)
 
 	return connection
+}
+
+// heartbeats are what the node says of the instances of a kind, as the
+// control plane hears it, the last heartbeat of each kept by its uuid, from
+// the moment they are listened to until the test ends.
+type heartbeats struct {
+	subject  string
+	producer domain.Producer
+
+	lock sync.Mutex
+	last map[string][]byte
+}
+
+// heartbeats listens to what the node says of the instances of the named
+// kind, as it is said: what JetStream keeps of a subject reaches a core
+// subscriber of it too.
+func (w *workload) heartbeats(t *testing.T, kindName string) *heartbeats {
+	t.Helper()
+
+	connection := connect(t, w.natsURL)
+
+	producer, err := produceConsumer.NewProduceConsumer(connection, "workload-heartbeats-again", slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	h := &heartbeats{subject: kind.HeartbeatName(kindName), producer: producer, last: make(map[string][]byte)}
+
+	subscription, err := connection.Subscribe(h.subject, func(message *nats.Msg) {
+		var heartbeat kind.Heartbeat
+		if err := json.Unmarshal(message.Data, &heartbeat); err != nil || len(heartbeat.UUID) == 0 {
+			return
+		}
+
+		h.lock.Lock()
+		defer h.lock.Unlock()
+
+		h.last[heartbeat.UUID] = slices.Clone(message.Data)
+	})
+	require.NoError(t, err)
+	require.NoError(t, connection.Flush())
+
+	t.Cleanup(func() { _ = subscription.Unsubscribe() })
+
+	return h
+}
+
+// heard waits until the node has said something of the instance uuid names.
+func (h *heartbeats) heard(t *testing.T, uuid string) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		h.lock.Lock()
+		defer h.lock.Unlock()
+
+		return len(h.last[uuid]) > 0
+	}, settle, beat, "the node said nothing of %s", uuid)
+}
+
+// late says the last heartbeat the node said of the instance uuid names
+// again, as it was said: one its node took then, which the control plane
+// hears late, once whatever happened since has.
+func (h *heartbeats) late(t *testing.T, uuid string) {
+	t.Helper()
+
+	h.lock.Lock()
+	said := h.last[uuid]
+	h.lock.Unlock()
+
+	require.NotEmpty(t, said, "the node said nothing of %s", uuid)
+	require.NoError(t, h.producer.Produce(t.Context(), h.subject, said))
 }
 
 // every runs do every interval until ctx ends, and closes what it returns once

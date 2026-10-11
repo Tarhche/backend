@@ -237,13 +237,16 @@ func NewControlPlaneWorkload(
 	// what the building blocks of Docker VMs share: what the nodes report of
 	// them that nobody keeps a record of, which each control plane keeps from
 	// the heartbeats it hears, shown for twice as long as a record goes
-	// unheard before it is taken to be gone, and the Docker VMs they go into.
+	// unheard before it is taken to be gone, and what is labelled as the
+	// platform's only once its node has said it for as long as that, which a
+	// heartbeat its node took before a record's delete removed it, heard
+	// after, never is; and the Docker VMs they go into.
 	buildingBlocks := blocks.Dependencies{
 		Resources: kinds.Resources,
 		VMs:       vms,
 		Chooser:   chooser,
 		Requester: requester,
-		Sightings: blocks.NewSightings(2 * settings.reconcile.ResourceSilentAfter),
+		Sightings: blocks.NewSightings(2*settings.reconcile.ResourceSilentAfter, settings.reconcile.ResourceSilentAfter),
 		Logger:    logger,
 	}
 

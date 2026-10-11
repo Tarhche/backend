@@ -710,6 +710,12 @@ func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
 	before := w.containerRecord(t, vmUUID, web)
 	did := len(w.dockerd.Did(vmUUID))
 
+	// what its node says of web, the last of which is heard again once web
+	// and its record are gone: a heartbeat its node took before it removed
+	// web, heard late.
+	heartbeats := w.heartbeats(t, containerKind.Name)
+	heartbeats.heard(t, before.Metadata.UUID)
+
 	// its registry is down, and its VM holds no copy of its image.
 	w.dockerd.Refuse("nginx:alpine")
 	w.dockerd.Forget(t, vmUUID, "nginx:alpine")
@@ -717,6 +723,33 @@ func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
 	deleted, err := deleteContainer.NewUseCase(w.client, w.translator).Execute(ctx, &deleteContainer.Request{VMUUID: vmUUID, ID: web, Force: true, OwnerUUID: ownerUUID})
 	require.NoError(t, err)
 	require.Empty(t, deleted.ValidationErrors)
+
+	require.Eventually(t, func() bool {
+		_, err := w.resources.GetOne(ctx, containerKind.Name, before.Metadata.UUID)
+
+		return errors.Is(err, domain.ErrNotExists)
+	}, settle, beat, "the web server deleted was never forgotten")
+
+	heartbeats.late(t, before.Metadata.UUID)
+
+	// the web server deleted is never listed again, as nobody's, for what a
+	// heartbeat its node took before it went says of it: neither in its vm,
+	// nor by the stack's detail.
+	listed := func(c presenter.Container) bool { return c.ID == before.Status.Docker.ID }
+
+	assert.Never(t, func() bool {
+		containers, err := getVMContainers.NewUseCase(w.client, w.translator).Execute(ctx, &getVMContainers.Request{VMUUID: vmUUID, OwnerUUID: ownerUUID})
+		if err != nil {
+			return false
+		}
+
+		detail, err := w.readStack(ctx, stackUUID)
+		if err != nil {
+			return false
+		}
+
+		return slices.ContainsFunc(containers.Items, listed) || slices.ContainsFunc(detail.Containers, listed)
+	}, patience.ResourceSilentAfter, beat, "the web server deleted is listed again, as a heartbeat its node took before it went says")
 
 	failed := w.containerKept(t, vmUUID, web, "made again, and failed", func(c containerKind.Container) bool {
 		return c.Metadata.UUID != before.Metadata.UUID && c.Status.Status.State == containerKind.Failed
@@ -727,13 +760,14 @@ func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
 
 	// being made again, which its vm's dockerd has said nothing of, it is
 	// listed by the stack's detail all the same, as its record says it is
-	// the stack's. What a heartbeat taken before the one deleted went says
-	// of it may be shown beside it for a while, as nobody's.
+	// the stack's, beside db, and nothing else: not the one deleted.
 	detail, err := w.readStack(ctx, stackUUID)
 	require.NoError(t, err)
+	require.Len(t, detail.Containers, 2, "%+v", detail.Containers)
 
-	remade := slices.IndexFunc(detail.Containers, func(c presenter.Container) bool { return c.Name == web && !c.Unmanaged })
+	remade := slices.IndexFunc(detail.Containers, func(c presenter.Container) bool { return c.Name == web })
 	require.GreaterOrEqual(t, remade, 0, "the stack's detail lists %s, being made again: %+v", web, detail.Containers)
+	assert.False(t, detail.Containers[remade].Unmanaged, "as its record")
 	assert.Empty(t, detail.Containers[remade].ID, "which docker never had")
 	assert.Equal(t, "web", detail.Containers[remade].Service)
 	assert.Equal(t, stackUUID, detail.Containers[remade].StackUUID)

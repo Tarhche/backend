@@ -20,6 +20,18 @@ import (
 // gone, so what was seen longer ago than they are shown for is not shown at
 // all: that is how what went from its VM's dockerd, or what lives in a VM that
 // stopped, is let go of.
+//
+// What the platform labelled as its own (Seen.Labelled) is shown only once
+// its node has gone on saying it for long enough, by the node's own clock:
+// from the first heartbeat of a run of them, each said soon enough after the
+// one before, to the latest. A heartbeat its node took before it removed a
+// container, a network or a volume, heard once the delete's result has
+// deleted its record, says it of a moment before it went, and nothing says it
+// after: its run is only as long as the heartbeats that were on their way when
+// the record went, far less than a record may go unheard, and it is never
+// shown, here or by another control plane, which hears other heartbeats of
+// it. What outlived its record, or is on a disk restored long ago, is said
+// beat after beat, and is shown once it has been said for long enough.
 type Sightings struct {
 	lock sync.RWMutex
 
@@ -30,7 +42,13 @@ type Sightings struct {
 	prunedAt time.Time
 
 	staleAfter time.Duration
-	now        func() time.Time
+
+	// sureAfter is how long a node goes on saying what the platform
+	// labelled as its own before it is shown, and how long it may go
+	// without a word of it in between.
+	sureAfter time.Duration
+
+	now func() time.Time
 }
 
 // Seen is what a node saw of one thing nobody keeps a record of.
@@ -42,20 +60,39 @@ type Seen struct {
 	// among its owners.
 	Manifest kind.Raw
 
+	// Labelled says the platform labelled it as one of its own, under the
+	// uuid it is seen by (blockKinds.Identity): what a record kept until a
+	// moment ago, as a heartbeat its node took before the record's delete
+	// removed it says, or what outlived its record. It is shown only once
+	// its node has gone on saying it for long enough.
+	Labelled bool
+
+	// since and said are when its node first and last said it, by the
+	// node's clock, in a run of heartbeats each said soon enough after the
+	// one before: how long it has been said for. What a command changed of
+	// it, as of the control plane's clock (At), is kept apart from them.
+	since time.Time
+	said  time.Time
+
 	// gone says a command took it away: what was seen of it before then is
 	// not shown again.
 	gone bool
 }
 
 // NewSightings is nothing seen yet, each thing to be shown for as long as
-// shownFor once its node has stopped saying it.
-func NewSightings(shownFor time.Duration) *Sightings {
-	return &Sightings{seen: make(map[string]map[string]Seen), staleAfter: shownFor, now: time.Now}
+// shownFor once its node has stopped saying it, and what the platform
+// labelled as its own only once its node has gone on saying it for as long
+// as sureAfter, never as long again without a word of it.
+func NewSightings(shownFor time.Duration, sureAfter time.Duration) *Sightings {
+	return &Sightings{seen: make(map[string]map[string]Seen), staleAfter: shownFor, sureAfter: sureAfter, now: time.Now}
 }
 
 // Saw keeps what a node saw of one thing of the named kind, in place of what
 // was seen of it before, unless that was seen later, or a command took it away
-// later.
+// later. It is said for as long as its node has said it without going for
+// longer than sureAfter without a word of it: what that node said of it before
+// such a gap, what another node said of it, by another clock, and what a
+// command took away since, start no run of this one.
 func (s *Sightings) Saw(kindName string, seen Seen) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -64,8 +101,14 @@ func (s *Sightings) Saw(kindName string, seen Seen) {
 
 	uuid := seen.Manifest.Metadata.UUID
 
-	if kept, there := s.seen[kindName][uuid]; there && seen.At.Before(kept.At) {
+	kept, there := s.seen[kindName][uuid]
+	if there && seen.At.Before(kept.At) {
 		return
+	}
+
+	seen.since, seen.said = seen.At, seen.At
+	if there && !kept.gone && kept.Node == seen.Node && seen.At.Sub(kept.said) <= s.sureAfter {
+		seen.since = kept.since
 	}
 
 	if s.seen[kindName] == nil {
@@ -114,7 +157,7 @@ func (s *Sightings) In(kindName string, vmUUID string) []kind.Raw {
 
 // Changed has what of the named kind uuid names be as after says, once a
 // command changed it, or gone when after is nothing: until a heartbeat taken
-// since says otherwise.
+// since says otherwise. How long its node has said it for is as it was.
 func (s *Sightings) Changed(kindName string, uuid string, after *kind.Raw) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -154,10 +197,10 @@ func (s *Sightings) shown(kindName string, is func(kind.Raw) bool) []kind.Raw {
 	return shown
 }
 
-// shows reports whether what was seen is shown: seen lately, and not taken
-// away since.
+// shows reports whether what was seen is shown: seen lately, not taken away
+// since, and, when the platform labelled it as its own, said for long enough.
 func (s *Sightings) shows(seen Seen) bool {
-	return !seen.gone && !s.stale(seen)
+	return !seen.gone && !s.stale(seen) && (!seen.Labelled || seen.said.Sub(seen.since) >= s.sureAfter)
 }
 
 // stale reports whether what was seen was seen too long ago to show.

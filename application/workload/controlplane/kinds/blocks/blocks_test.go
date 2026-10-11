@@ -49,6 +49,17 @@ func witnessed(t *testing.T, w *blockstest.Workload, at time.Time, instances ...
 	}
 }
 
+// beating has the containers' strategy hear of each instance, nobody's record,
+// in a heartbeat of its own every second its node beats from one moment to
+// another, both among them.
+func beating(t *testing.T, w *blockstest.Workload, from time.Time, to time.Time, instances ...kind.Observation) {
+	t.Helper()
+
+	for at := from; !at.After(to); at = at.Add(time.Second) {
+		witnessed(t, w, at, instances...)
+	}
+}
+
 func TestBlocks_Witnessed(t *testing.T) {
 	t.Parallel()
 
@@ -98,12 +109,12 @@ func TestBlocks_Witnessed(t *testing.T) {
 
 		web := seen(t, "web-uuid", containerKind.Docker{ID: "c-web", Name: "web", State: "running", Labels: labelled(t, "web-uuid")})
 
-		witnessed(t, w, at, web)
+		beating(t, w, at, at.Add(blockstest.SureAfter), web)
 
 		_, err := w.Containers.One(ctx, "web-uuid")
 		require.NoError(t, err, "nobody's, while nobody keeps a record of it")
 
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, web, true, at.Add(time.Second)))
+		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, web, true, at.Add(blockstest.SureAfter+time.Second)))
 
 		_, err = w.Containers.One(ctx, "web-uuid")
 		assert.ErrorIs(t, err, domain.ErrNotExists, "a record speaks for it now, and it is not shown twice")
@@ -132,22 +143,55 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.Empty(t, w.Sightings.In(containerKind.Name, "vm-2"))
 	})
 
-	t.Run("what is labelled as the platform's with no record is nobody's, rather than taken in", func(t *testing.T) {
+	t.Run("what is labelled as the platform's with no record is not taken in, nor shown at all from the heartbeats its node took before its record went", func(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 
-		labels := labelled(t, "deleted-a-moment-ago")
+		web := seen(t, "deleted-a-moment-ago", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "deleted-a-moment-ago")})
 
-		witnessed(t, w, at, seen(t, "deleted-a-moment-ago", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labels}))
+		// the heartbeats on their way as its delete's result was heard.
+		for _, beat := range []time.Duration{-time.Second, -500 * time.Millisecond, 0} {
+			witnessed(t, w, at.Add(beat), web)
+		}
 
 		_, kept := w.Kept(containerKind.Name, "deleted-a-moment-ago")
 		assert.False(t, kept, "what a node saw before it removed it does not come back")
 
 		extras, err := w.Containers.All(ctx)
 		require.NoError(t, err)
+		assert.Empty(t, extras, "nor is it shown, as nobody's")
+
+		_, err = w.Containers.One(ctx, "deleted-a-moment-ago")
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+
+		_, err = w.Containers.Resolve(ctx, kind.Reference{Kind: "vm", UUID: "vm-1"}, "web")
+		assert.ErrorIs(t, err, domain.ErrNotExists, "nor named, to be acted on")
+	})
+
+	t.Run("but one its node goes on saying is shown as nobody's once its node has said it for as long as a record may go unheard", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		web := seen(t, "outlived-its-record", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "outlived-its-record")})
+
+		beating(t, w, at, at.Add(blockstest.SureAfter-time.Second), web)
+
+		extras, err := w.Containers.All(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, extras, "not before")
+
+		witnessed(t, w, at.Add(blockstest.SureAfter), web)
+
+		extras, err = w.Containers.All(ctx)
+		require.NoError(t, err)
 		require.Len(t, extras, 1)
-		assert.Equal(t, "deleted-a-moment-ago", extras[0].Metadata.UUID)
+		assert.Equal(t, "outlived-its-record", extras[0].Metadata.UUID)
+		assert.Equal(t, blockKinds.ManagedByNobody, extras[0].Metadata.Labels[blockKinds.LabelManagedBy])
+
+		_, kept := w.Kept(containerKind.Name, "outlived-its-record")
+		assert.False(t, kept, "and is not taken in")
 	})
 
 	t.Run("but in the first look into a vm whose disk was just restored, it is taken in again, as it was asked for", func(t *testing.T) {

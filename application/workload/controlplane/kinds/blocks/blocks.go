@@ -22,7 +22,10 @@
 // its stack's again, while the stack is there. The restored disk is what the
 // VM holds now, and it is what its stored building blocks are reset to. Any
 // other time, it is shown as nobody's, which is what a record deleted a
-// moment before its node said so would otherwise come back as.
+// moment before its node said so would otherwise come back as; and only once
+// its node has gone on saying it for long enough (Sightings), which a
+// heartbeat its node took before such a record's delete removed it, heard
+// after, does not.
 //
 // Inside a Docker VM, a building block is named by its Docker id or its name,
 // as the dashboard has always named them, and the strategy resolves that to
@@ -352,9 +355,11 @@ func (b *Blocks) request(ctx context.Context, r kind.Raw, action string, payload
 // the kind in a Docker VM: one a record speaks for is shown as the record
 // alone, and one nobody keeps a record of is shown as it was seen from now on,
 // until a later heartbeat says otherwise, or until none has said it for long
-// enough (Sightings). What it found labelled as the platform's with no record,
-// in the first look into a VM whose disk was just restored, is taken in again
-// instead; and that look is kept on the VM's record (looked).
+// enough (Sightings); one labelled as the platform's, under the uuid it is
+// told by, only once its node has gone on saying it for long enough. What it
+// found labelled as the platform's with no record, in the first look into a
+// VM whose disk was just restored, is taken in again instead; and that look
+// is kept on the VM's record (looked).
 func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.Observation, kept bool, at time.Time) error {
 	if kept {
 		b.Sightings.Forget(b.descriptor.Name, instance.UUID)
@@ -397,9 +402,17 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 		return errors.Join(failed, err)
 	}
 
-	b.Sightings.Saw(b.descriptor.Name, Seen{Node: nodeName, At: at, Manifest: b.sighted(nodeName, v, instance, keepers)})
+	b.Sightings.Saw(b.descriptor.Name, Seen{Node: nodeName, At: at, Manifest: b.sighted(nodeName, v, instance, keepers), Labelled: b.labelled(instance)})
 
 	return failed
+}
+
+// labelled reports whether what a node said of is labelled as the platform's
+// own, as a resource of the kind, under the uuid it is told by: what a record
+// kept, or keeps. An image, which nothing labels, is told by a uuid its
+// reference or its Docker id gives it, and is never labelled.
+func (b *Blocks) labelled(instance kind.Observation) bool {
+	return len(instance.UUID) > 0 && blockKinds.Identity(b.descriptor.Name, ObservedOf(instance.Status).Docker.Labels) == instance.UUID
 }
 
 // looked keeps on the record of v, a Docker VM whose disk was restored, the

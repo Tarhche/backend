@@ -25,6 +25,12 @@ import (
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 )
 
+// SureAfter is how long a node goes on saying what the platform labelled as
+// its own, with no record, before it is shown, as when served
+// (ResourceSilentAfter); what nobody keeps is shown for twice as long once
+// its node stops saying it.
+const SureAfter = 30 * time.Second
+
 // Workload is a control plane's VMs and the building blocks that live in
 // them, each kind registered as the control plane registers it.
 type Workload struct {
@@ -46,7 +52,7 @@ type Workload struct {
 func New(options ...vmtest.Option) *Workload {
 	w := &Workload{
 		Workload:  vmtest.New(options...),
-		Sightings: blocks.NewSightings(time.Minute),
+		Sightings: blocks.NewSightings(2*SureAfter, SureAfter),
 		Requester: &messagingMock.Requester{},
 	}
 

@@ -360,30 +360,38 @@ func TestStacks(t *testing.T) {
 
 		user.call(t, http.MethodDelete, path, nil, http.StatusAccepted, nil)
 
+		// whether a container listed is one of its, by its id or by its name.
+		theStacks := func(c containerView) bool {
+			return slices.ContainsFunc(its, func(gone containerView) bool { return c.ID == gone.ID || c.Name == gone.Name })
+		}
+
+		// none of its containers is listed as nobody's while it goes, as a
+		// heartbeat its node took before one of them went, heard once that
+		// one's record went, would have it.
 		eventually(t, "stack "+slug, 5*time.Minute, func() (bool, string) {
 			status, _ := user.status(t, http.MethodGet, path, nil)
+
+			var listed page[containerView]
+			user.call(t, http.MethodGet, dockerPath(vmUUID, "/containers"), nil, http.StatusOK, &listed)
+
+			for _, c := range listed.Items {
+				if c.Unmanaged && theStacks(c) {
+					t.Fatalf("the stack's container %s is listed as nobody's once its record went: %+v", c.Name, c)
+				}
+			}
 
 			return status == http.StatusNotFound, fmt.Sprint(status)
 		})
 
 		// its record goes last of all, once its containers have: none of
 		// them is listed any more, by its id or by its name, though nothing
-		// names a stack that is gone as theirs. What a heartbeat its node took
-		// before one of them went says of it may be shown, as nobody's, until
-		// it has gone unheard for a minute, twice the time a resource may.
-		eventually(t, "the stack's containers", 3*time.Minute, func() (bool, string) {
-			var left page[containerView]
-			user.call(t, http.MethodGet, dockerPath(vmUUID, "/containers"), nil, http.StatusOK, &left)
+		// names a stack that is gone as theirs.
+		var left page[containerView]
+		user.call(t, http.MethodGet, dockerPath(vmUUID, "/containers"), nil, http.StatusOK, &left)
 
-			var outlived []string
-			for _, c := range left.Items {
-				if slices.ContainsFunc(its, func(gone containerView) bool { return c.ID == gone.ID || c.Name == gone.Name }) {
-					outlived = append(outlived, c.Name)
-				}
-			}
-
-			return len(outlived) == 0, fmt.Sprintf("listed still: %v", outlived)
-		})
+		if i := slices.IndexFunc(left.Items, theStacks); i >= 0 {
+			t.Fatalf("the stack's container %s outlived it: %+v", left.Items[i].Name, left.Items[i])
+		}
 
 		var volumes page[struct {
 			Name string `json:"name"`
