@@ -171,9 +171,25 @@ func (c *Cascade) Deleted(ctx context.Context, parent kind.Reference) error {
 // that outlives it are kept as they are. The moment is the restore's own, as
 // the restored parent says it (kind.Restore), and each record reset is
 // stamped with it (resource.Record.ResetAt): a parent's record that says an
-// earlier restore is yet to take the one they were reset for.
+// earlier restore is yet to take the one they were reset for. A record reset
+// that is on no node, kept as gone with a parent deleted before and made
+// again since, its graph yet to place it, is placed on the restored parent's
+// node, the parent's record read once: its node's word of it finds it there,
+// and its node's silence forgets it, where nothing would ever judge it on
+// none.
 func (c *Cascade) Restored(ctx context.Context, parent kind.Reference, at time.Time) error {
-	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Restore }, at, func(ctx context.Context, _ kind.ControlPlaneBinding, r resource.Record) error {
+	var node string
+
+	switch held, err := c.resources.GetOne(ctx, parent.Kind, parent.UUID); {
+	case err == nil:
+		node = held.Metadata.Node
+	case !errors.Is(err, domain.ErrNotExists):
+		return err
+	}
+
+	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Restore }, func(ctx context.Context, r resource.Record) error {
+		return c.reset(ctx, r, at, node)
+	}, func(ctx context.Context, _ kind.ControlPlaneBinding, r resource.Record) error {
 		return c.forget(ctx, r)
 	})
 }
@@ -197,7 +213,9 @@ func (c *Cascade) deleted(ctx context.Context, parent kind.Reference) ([]kind.Re
 		}
 	}
 
-	failed := c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Delete }, time.Time{}, func(ctx context.Context, b kind.ControlPlaneBinding, r resource.Record) error {
+	resets := func(ctx context.Context, r resource.Record) error { return c.reset(ctx, r, time.Time{}, "") }
+
+	failed := c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Delete }, resets, func(ctx context.Context, b kind.ControlPlaneBinding, r resource.Record) error {
 		if err := c.goes(ctx, b, r, was, at); err != nil {
 			return err
 		}
@@ -210,10 +228,10 @@ func (c *Cascade) deleted(ctx context.Context, parent kind.Reference) ([]kind.Re
 	return touched, failed
 }
 
-// each applies to what lives in parent the rule rule says each kind keeps,
-// at a moment, what goes with it going as goes says. One kind failing is no
-// reason to leave the others as they were.
-func (c *Cascade) each(ctx context.Context, parent kind.Reference, rule func(kind.Descriptor) kind.Cascade, at time.Time, goes func(ctx context.Context, b kind.ControlPlaneBinding, r resource.Record) error) error {
+// each applies to what lives in parent the rule rule says each kind keeps:
+// what is reset as resets says, and what goes with it as goes says. One kind
+// failing is no reason to leave the others as they were.
+func (c *Cascade) each(ctx context.Context, parent kind.Reference, rule func(kind.Descriptor) kind.Cascade, resets func(ctx context.Context, r resource.Record) error, goes func(ctx context.Context, b kind.ControlPlaneBinding, r resource.Record) error) error {
 	var failed error
 
 	for _, binding := range c.registry.All() {
@@ -228,9 +246,7 @@ func (c *Cascade) each(ctx context.Context, parent kind.Reference, rule func(kin
 				return goes(ctx, binding, r)
 			}))
 		case kind.CascadeReset:
-			failed = errors.Join(failed, c.children(ctx, d, parent, func(ctx context.Context, r resource.Record) error {
-				return c.reset(ctx, r, at)
-			}))
+			failed = errors.Join(failed, c.children(ctx, d, parent, resets))
 		}
 	}
 
@@ -421,11 +437,12 @@ func (c *Cascade) forget(ctx context.Context, r resource.Record) error {
 // moment, the parent's restore's, reading it again when something else wrote
 // it first: it is taken to have been observed then, so that what was seen of
 // it before is older than what is known of it, and stamped with that restore,
-// to the millisecond the records keep a moment to. One reset as of that
-// restore already, or a later one, is left as it is, whether it is reset
-// still or was found since: a result heard again resets nothing found since
-// it was first heard.
-func (c *Cascade) reset(ctx context.Context, r resource.Record, at time.Time) error {
+// to the millisecond the records keep a moment to; and, on no node, it is
+// placed on node, its restored parent's. One reset as of that restore
+// already, or a later one, is left as it is, whether it is reset still or was
+// found since: a result heard again resets nothing found since it was first
+// heard.
+func (c *Cascade) reset(ctx context.Context, r resource.Record, at time.Time, node string) error {
 	stamp := at.Truncate(time.Millisecond)
 
 	for try := 1; ; try++ {
@@ -440,6 +457,10 @@ func (c *Cascade) reset(ctx context.Context, r resource.Record, at time.Time) er
 
 		r.Reset = true
 		r.ResetAt = stamp
+
+		if len(r.Metadata.Node) == 0 {
+			r.Metadata.Node = node
+		}
 
 		if common.ObservedAt.Before(at) {
 			common.ObservedAt = at

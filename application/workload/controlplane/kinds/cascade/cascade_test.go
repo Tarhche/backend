@@ -199,6 +199,59 @@ func TestCascade_Restored(t *testing.T) {
 		assert.Equal(t, fan.Version, again.Version, "an earlier one, heard late, changes nothing")
 	})
 
+	t.Run("what is on no node, kept as gone with a house that went and was made again since, is placed on the restored house's node, and what is on a node stays on its own", func(t *testing.T) {
+		t.Parallel()
+
+		onNoNode := func(f *kindstest.Fan) { f.Metadata.Node = "" }
+		onAnother := func(f *kindstest.Fan) { f.Metadata.Node = "node-2" }
+
+		c, resources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			resource.Record{Raw: kind.Raw{Kind: kindstest.Parent, Metadata: kind.Metadata{UUID: kindstest.House, Node: "node-3"}}},
+			kindstest.AFan("on-no-node", kindstest.Running, kindstest.Running, onNoNode),
+			kindstest.AFan("on-another", kindstest.Running, kindstest.Running, onAnother),
+		)
+
+		require.NoError(t, c.Restored(ctx, house, restoredAt))
+
+		placed, _ := held(t, resources, "on-no-node")
+		assert.True(t, placed.Reset)
+		assert.Equal(t, "node-3", placed.Metadata.Node, "placed where its restored house is, its node's to find or forget")
+
+		kept, _ := held(t, resources, "on-another")
+		assert.True(t, kept.Reset)
+		assert.Equal(t, "node-2", kept.Metadata.Node, "and what is on a node is left on it")
+	})
+
+	t.Run("but placed nowhere when its house is gone", func(t *testing.T) {
+		t.Parallel()
+
+		c, resources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("on-no-node", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) { f.Metadata.Node = "" }),
+		)
+
+		require.NoError(t, c.Restored(ctx, house, restoredAt))
+
+		fan, _ := held(t, resources, "on-no-node")
+		assert.True(t, fan.Reset)
+		assert.Empty(t, fan.Metadata.Node)
+	})
+
+	t.Run("and what reading the house fails with is what the restore fails with, nothing reset", func(t *testing.T) {
+		t.Parallel()
+
+		c, resources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+		)
+		resources.Fail = errors.New("the database is gone")
+
+		assert.ErrorIs(t, c.Restored(ctx, house, restoredAt), resources.Fail)
+
+		resources.Fail = nil
+
+		fan, _ := held(t, resources, "in-it")
+		assert.False(t, fan.Reset)
+	})
+
 	t.Run("one found since the restore it was reset for is not reset again by that restore heard again", func(t *testing.T) {
 		t.Parallel()
 
