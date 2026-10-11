@@ -95,6 +95,7 @@ func TestRepository_stored(t *testing.T) {
 			"failures":   int32(0),
 			"reason":     "",
 			"next_at":    nil,
+			"seen":       nil,
 			"poked":      false,
 			"updated_at": "a time",
 		}, kept)
@@ -105,8 +106,10 @@ func TestRepository_stored(t *testing.T) {
 		assert.Equal(t, []string{"workload_leases"}, collections)
 	})
 
-	t.Run("one let go of after a failure is held by nobody, and backs its root off", func(t *testing.T) {
-		_, err := repository.Release(ctx, "s-uuid", "one", graph.Ended{State: graph.StateFailed, Reason: "$failures is a reason, not a field", Backoff: graph.Backoff{First: 15 * time.Second, Most: 15 * time.Minute}})
+	t.Run("one let go of after a failure is held by nobody, and backs its root off, keeping what the run saw of its root", func(t *testing.T) {
+		since := time.Date(2026, 10, 11, 5, 0, 0, 123456789, time.UTC)
+
+		_, err := repository.Release(ctx, "s-uuid", "one", graph.Ended{State: graph.StateFailed, Reason: "$failures is a reason, not a field", Backoff: graph.Backoff{First: 15 * time.Second, Most: 15 * time.Minute}, Seen: graph.Seen{State: "$starting", Since: since}})
 		require.NoError(t, err)
 
 		kept, times := stored(t)
@@ -118,10 +121,30 @@ func TestRepository_stored(t *testing.T) {
 			"failures":   int32(1),
 			"reason":     "$failures is a reason, not a field",
 			"next_at":    "a time",
+			"seen":       bson.D{{Key: "state", Value: "$starting"}, {Key: "since", Value: bson.NewDateTimeFromTime(since)}},
 			"poked":      false,
 			"updated_at": "a time",
-		}, kept, "a reason is kept as it is said, whatever it starts with")
+		}, kept, "a reason, and a state, are kept as they are said, whatever they start with, and a time to the millisecond")
 		assert.Equal(t, map[string]bool{"expires_at": false, "next_at": true, "updated_at": true}, times)
+	})
+
+	t.Run("taken now, it is held by its taker, and nothing backs it off any more", func(t *testing.T) {
+		_, err := repository.TakeNow(ctx, "s-uuid", "one", time.Minute)
+		require.NoError(t, err)
+
+		kept, _ := stored(t)
+
+		assert.Equal(t, bson.M{
+			"_id":        "s-uuid",
+			"holder":     "one",
+			"expires_at": "a time",
+			"failures":   int32(0),
+			"reason":     "",
+			"next_at":    nil,
+			"seen":       nil,
+			"poked":      false,
+			"updated_at": "a time",
+		}, kept)
 	})
 
 	t.Run("one asked for while another holds it is kept poked, and taken, it is not", func(t *testing.T) {

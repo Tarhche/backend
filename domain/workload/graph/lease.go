@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
 var (
@@ -42,11 +44,13 @@ type Lease struct {
 	ExpiresAt time.Time
 
 	// Failures are how many runs of the root's plan in a row failed, Reason
-	// what the last of them failed with, and NextAt when the root may be
-	// carried out again: none since a run was last done.
+	// what the last of them failed with, NextAt when the root may be carried
+	// out again, and Seen what the root was doing as the last of them read
+	// it: none since a run was last done.
 	Failures int
 	Reason   string
 	NextAt   time.Time
+	Seen     Seen
 
 	// Poked says the root was asked to be carried out while another control
 	// plane held its lease (Leases.Take, ErrHeld): what asked may have come
@@ -91,10 +95,28 @@ type Ended struct {
 	// State is what the run came to: StateDone, which clears what backed
 	// the root off; StateWaiting, which leaves it as it was; or StateFailed,
 	// one more failure in a row, whose Reason is what it failed with, which
-	// backs the root off for as long as Backoff says of so many.
+	// backs the root off for as long as Backoff says of so many, and Seen
+	// what the root was doing as the run read it.
 	State   State
 	Reason  string
 	Backoff Backoff
+	Seen    Seen
+}
+
+// Seen is what a root's record said it was doing as a run read it: its state,
+// and since when, as the record says them. It tells a state that began after
+// the run read it from the one the run read by what the record says, rather
+// than by a clock a control plane keeps; its time is kept to the millisecond,
+// as a lease keeps any time. None is the record of no run.
+type Seen struct {
+	State kind.State
+	Since time.Time
+}
+
+// Is reports whether s is what other is: the same state, begun at the same
+// time, to the millisecond. None is nothing.
+func (s Seen) Is(other Seen) bool {
+	return len(s.State) > 0 && s.State == other.State && s.Since.Truncate(time.Millisecond).Equal(other.Since.Truncate(time.Millisecond))
 }
 
 // Leases keeps each root's lease, by the root's uuid: what keeps two control
@@ -117,6 +139,17 @@ type Leases interface {
 	// nothing is taken.
 	Take(ctx context.Context, rootUUID string, holder string, ttl time.Duration) (Lease, error)
 
+	// TakeNow takes the root's lease for holder as Take does, whatever backs
+	// the root off, which it clears in the same write: one nobody else holds,
+	// nobody holding it, it expired, or holder holding it already, is taken,
+	// its failures, what the last of them failed with and saw, and when the
+	// root may be carried out next, cleared, and poked no more. One another
+	// holds, and has not let expire, is ErrHeld, and is poked, as Take has
+	// it. Of any that take one at once, one takes it, and the others find it
+	// held. What Take refuses to take a lease for, it refuses to take one
+	// for.
+	TakeNow(ctx context.Context, rootUUID string, holder string, ttl time.Duration) (Lease, error)
+
 	// Renew has the root's lease, which holder holds, expire ttl from now,
 	// and is the lease as it is then. One holder does not hold is ErrLost,
 	// and is not renewed; and what Take refuses to take a lease for, it
@@ -127,11 +160,11 @@ type Leases interface {
 	// the run that held it ended, and is the lease as it is left: a run
 	// done clears its failures, a run that waits leaves them as they were,
 	// and a run that failed is one more, which backs the root off from now,
-	// for as long as its Backoff says of so many in a row; and it is poked
-	// still when it was while holder held it, which holder carries the root
-	// out again for. One holder does not hold is ErrLost, an end that is
-	// none of those three, and a root's uuid that is nothing, are errors,
-	// and none of them changes anything.
+	// for as long as its Backoff says of so many in a row, and keeps what it
+	// saw; and it is poked still when it was while holder held it, which
+	// holder carries the root out again for. One holder does not hold is
+	// ErrLost, an end that is none of those three, and a root's uuid that is
+	// nothing, are errors, and none of them changes anything.
 	Release(ctx context.Context, rootUUID string, holder string, ended Ended) (Lease, error)
 
 	// Forget removes the root's lease, its failures with it, once the root

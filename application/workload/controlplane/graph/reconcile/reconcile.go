@@ -5,24 +5,24 @@
 //
 // A root is reconciled (Reconcile) under its lease (graph.Leases), which one
 // control plane holds at a time, renewed while the root's plan runs, or while
-// it is removed with none, so that two never carry one root out at once: a
-// root another holds is
-// skipped, its lease poked, so that its holder carries it out again once its
-// run ends, and nothing it was reconciled for is lost; and so is one backed
-// off after its plan failed, until its backoff is over, but for one a person
-// asked something of since, which is carried out at once. A root asked to be
-// deleted is removed, from the top down, through what it owns
+// it is removed with none, so that two never carry one root out at once: a root
+// another holds is skipped, its lease poked, so that its holder carries it out
+// again once its run ends, and nothing it was reconciled for is lost; and so is
+// one backed off after its plan failed, until its backoff is over, but for one
+// a person asked something of since its failed run read it, as its lease keeps
+// what that run saw, which is carried out at once. A root asked to be deleted
+// is removed, from the top down, through what it owns
 // (execute.Executor.Remove), however often it is reconciled, and whatever its
-// failures backed it off for, and is never made again: one whose plan cannot
-// be made, its record saying nothing a plan is made of, through what its
-// records say it owns; any other is applied at its record's generation
-// (execute.Executor.Apply), which makes what is missing of it, from the
-// bottom up, and nothing else. How its plan ended is kept on its lease as it
-// is let go of: one that failed backs the root off, longer with every failure
-// in a row, one done clears that, and one that waits on what it needs leaves
-// it. While the root itself is not made, why its plan failed or waits is said
-// on its record too, a refusal as its failure, by its code, for whoever waits
-// for it to be made. A root that is gone has its lease and how its plan went
+// failures backed it off for, and is never made again: one whose plan cannot be
+// made, its record saying nothing a plan is made of, through what its records
+// say it owns; any other is applied at its record's generation
+// (execute.Executor.Apply), which makes what is missing of it, from the bottom
+// up, and nothing else. How its plan ended is kept on its lease as it is let go
+// of: one that failed backs the root off, longer with every failure in a row,
+// one done clears that, and one that waits on what it needs leaves it. While
+// the root itself is not made, why its plan failed or waits is said on its
+// record too, a refusal as its failure, by its code, for whoever waits for it
+// to be made. A root that is gone has its lease and how its plan went
 // forgotten, one that went while its plan ran among them, which nothing makes
 // again.
 //
@@ -235,31 +235,32 @@ func New(dependencies Dependencies, config Config) (*Reconciler, error) {
 // is taken first, as this control plane's: a root another holds is skipped,
 // ErrHeld, its lease poked, so that its holder carries it out again once it
 // lets go of it; and so is one backed off, ErrBackedOff, unless it is gone
-// meanwhile, when its lease is forgotten, since nothing would take it again
-// to forget it, or it was asked to go, or asked something its graph is yet
-// to carry out, a stack's start say, which what its plan failed with before
-// holds back nothing of: its backoff is forgotten, and its lease taken. Then
-// its record is read. One that is gone, or that something
-// owns now and is a root no more, has its lease and how its plan went
-// forgotten, and that is all. Any other's graph is planned, from what its
-// kind says it needs (graph.RootKind.Root), and carried out while its lease
-// is renewed every third of its time: removed when it was asked to be
-// deleted, a delete cut short taken up where it stopped, and applied at its
-// record's generation otherwise, a record kept before generations at its
-// first; one asked to be deleted whose graph cannot be planned is removed
-// through what its records say it owns, under its lease all the same; and a
-// lease lost meanwhile, which another control plane took once it lapsed,
-// stops the run.
+// meanwhile, when its lease is forgotten, since nothing would take it again to
+// forget it, or it was asked to go, or asked something its graph is yet to
+// carry out since the run whose failure backs it off read it, a stack's start
+// say, which what its plan failed with before holds back nothing of: its lease
+// is taken now, its backoff cleared in the same write, so that of two control
+// planes that come to it at once, one takes it. Then its record is read. One
+// that is gone, or that something owns now and is a root no more, has its
+// lease and how its plan went forgotten, and that is all. Any other's graph is
+// planned, from what its kind says it needs (graph.RootKind.Root), and carried
+// out while its lease is renewed every third of its time: removed when it was
+// asked to be deleted, a delete cut short taken up where it stopped, and
+// applied at its record's generation otherwise, a record kept before
+// generations at its first; one asked to be deleted whose graph cannot be
+// planned is removed through what its records say it owns, under its lease all
+// the same; and a lease lost meanwhile, which another control plane took once
+// it lapsed, stops the run.
 //
 // How it ended is kept on its lease as it is let go of: done, waiting, or
 // failed, which a plan that could not be made is, and a run that was
-// interrupted too, saying why; and a root removed has its lease forgotten. A
-// root asked something after its run read it, which that run says nothing
-// of (explain), or whose lease another control plane poked meanwhile, is
-// queued to run again once its lease is let go of. It
-// is nothing when its plan is done, waits, or it is gone, and what failed
-// otherwise, which is logged with its kind and its uuid, and how long it is
-// backed off for. A root of a kind that is not a root here is
+// interrupted too, saying why, and what it saw of the root as it read it; and
+// a root removed has its lease forgotten. A root asked something after its run
+// read it, which that run says nothing of (explain), or whose lease another
+// control plane poked meanwhile, is queued to run again once its lease is let
+// go of. It is nothing when its plan is done, waits, or it is gone, and what
+// failed otherwise, which is logged with its kind and its uuid, and how long
+// it is backed off for. A root of a kind that is not a root here is
 // kind.ErrUnknownKind, and nothing is done.
 func (r *Reconciler) Reconcile(ctx context.Context, root graph.Ref) error {
 	rooted, isRoot := r.roots[root.Kind]
@@ -298,6 +299,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, root graph.Ref) error {
 	}
 
 	again := r.explain(context.WithoutCancel(ctx), root, read, lease.Reason, ended, err)
+
+	// what a failed run saw of its root is kept on its lease, which tells
+	// what is asked of the root since from what that run left as it was.
+	if ended.State == graph.StateFailed {
+		ended.Seen = seenOf(read)
+	}
 
 	released, releaseErr := r.leases.Release(context.WithoutCancel(ctx), root.UUID, r.holder, ended)
 
@@ -746,10 +753,13 @@ func (r *Reconciler) held(ctx context.Context, root graph.Ref, carry func(ctx co
 }
 
 // goingNow is root's lease, which was not taken while root is backed off,
-// err, taken after all when root was asked to go, or asked something its
-// graph is yet to carry out (asked), a stack's restart say: what failed of
-// its plan before holds back nothing of what a person asked of it since, and
-// is forgotten. Any other root's is left as it was.
+// err, taken now after all, its backoff cleared in the same write
+// (graph.Leases.TakeNow), when root was asked to go, or asked something its
+// graph is yet to carry out since the run whose failure backs it off read it
+// (asked), a stack's restart say: what failed of its plan before holds back
+// nothing of what a person asked of it since. Of the control planes that
+// come to it at once, one takes it, and the others find it held. Any other
+// root's is left as it was.
 func (r *Reconciler) goingNow(ctx context.Context, root graph.Ref, lease graph.Lease, err error) (graph.Lease, error) {
 	rec, there, readErr := r.read(ctx, root)
 	if readErr != nil || !there {
@@ -757,13 +767,7 @@ func (r *Reconciler) goingNow(ctx context.Context, root graph.Ref, lease graph.L
 	}
 
 	going := !rec.Metadata.DeletionRequestedAt.IsZero()
-	if !going && !r.asked(rec) {
-		return lease, err
-	}
-
-	if forgetErr := r.leases.Forget(ctx, root.UUID); forgetErr != nil {
-		r.logger.ErrorContext(ctx, "could not forget the backoff of a root asked to go, or asked something", "error", forgetErr, "kind", root.Kind, "uuid", root.UUID)
-
+	if !going && !r.asked(rec, lease.Seen) {
 		return lease, err
 	}
 
@@ -773,17 +777,24 @@ func (r *Reconciler) goingNow(ctx context.Context, root graph.Ref, lease graph.L
 		r.logger.InfoContext(ctx, "what a root was asked is carried out now, whatever its plan's failures backed it off for", "kind", root.Kind, "uuid", root.UUID, "failures", lease.Failures)
 	}
 
-	return r.leases.Take(ctx, root.UUID, r.holder, r.config.Lease)
+	return r.leases.TakeNow(ctx, root.UUID, r.holder, r.config.Lease)
 }
 
 // asked reports whether rec, the record of a root, was asked something its
-// graph is yet to carry out: its state is the control plane's, and one in
-// flight that only an action of its kind moves it into, a stack starting,
-// stopping or restarting. A run that fails to carry it out fails it, as
-// explain says, and leaves it so only when it was asked again after that run
-// read it, so that a root is carried out at once only for what a person
-// asked of it since its plan last failed.
-func (r *Reconciler) asked(rec resource.Record) bool {
+// graph is yet to carry out since the run whose failure backs it off read it,
+// as it saw it (seen): its state is the control plane's, one in flight that
+// an action of its kind moves it into, a stack starting, stopping or
+// restarting, and not the one that run saw, begun when it saw it. A run that
+// fails to carry it out fails it, as explain says, and leaves it so when it
+// was asked again after that run read it, or when the run could not say what
+// it failed with, its records out of reach or its lease lost: the one is
+// carried out at once, and the other is left until its backoff is over, so
+// that a root is carried out at once only for what a person asked of it
+// since its plan last failed. A stack's restart, carried out by its run,
+// moves it into starting too, a state that run did not see: should the run
+// fail after it, the stack is carried out again at once, and the run after
+// it, which sees it starting, fails it.
+func (r *Reconciler) asked(rec resource.Record, seen graph.Seen) bool {
 	binding, registered := r.registry.Lookup(rec.Kind)
 	if !registered {
 		return false
@@ -796,9 +807,28 @@ func (r *Reconciler) asked(rec resource.Record) bool {
 		return false
 	}
 
+	if seen.Is(graph.Seen{State: common.State, Since: common.Since}) {
+		return false
+	}
+
 	return slices.ContainsFunc(d.Machine.Transitions, func(t kind.Transition) bool {
 		return t.To == common.State && len(t.On.Action) > 0
 	})
+}
+
+// seenOf is what read, the record of a root as a run read it, said the root
+// was doing: none when the run read none, or what it says cannot be read.
+func seenOf(read resource.Record) graph.Seen {
+	if len(read.Metadata.UUID) == 0 {
+		return graph.Seen{}
+	}
+
+	common, err := read.Common()
+	if err != nil {
+		return graph.Seen{}
+	}
+
+	return graph.Seen{State: common.State, Since: common.Since}
 }
 
 // backedOff is root's lease not taken while root is backed off, err: a root

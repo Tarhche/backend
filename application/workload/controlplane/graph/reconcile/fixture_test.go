@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -155,6 +156,14 @@ func newFixture(t *testing.T, kinds *graphtest.Kind, records ...resource.Record)
 func (f *fixture) reconciler(t *testing.T, holder string, config reconcile.Config, roots ...string) *reconcile.Reconciler {
 	t.Helper()
 
+	return f.reconcilerOver(t, f.leases, holder, config, roots...)
+}
+
+// reconcilerOver is a reconciler over the fixture as reconciler is, keeping
+// its leases in leases.
+func (f *fixture) reconcilerOver(t *testing.T, leases graph.Leases, holder string, config reconcile.Config, roots ...string) *reconcile.Reconciler {
+	t.Helper()
+
 	kinds := f.kinds.Kinds(every...)
 
 	executor, err := execute.New(kinds, f.ownership, f.executions, f.clock.Now)
@@ -168,7 +177,7 @@ func (f *fixture) reconciler(t *testing.T, holder string, config reconcile.Confi
 		Planner:    graph.NewPlanner(kinds, graph.DefaultPolicy()),
 		Executor:   executor,
 		Executions: f.executions,
-		Leases:     f.leases,
+		Leases:     leases,
 		Holder:     holder,
 		Logger:     slog.New(slog.DiscardHandler),
 	}, config)
@@ -357,6 +366,38 @@ func (r *recorder) Saved() []graph.Execution {
 	defer r.lock.Unlock()
 
 	return append([]graph.Execution(nil), r.saved...)
+}
+
+// together keeps leases as the leases it wraps do, but answers none of the
+// first who take one (Take), as many as it waits for, until each of them has,
+// each with what was there when it took it: what takers who come to one at
+// once find. Any who take one after them are answered at once.
+type together struct {
+	graph.Leases
+
+	left   atomic.Int64
+	takers sync.WaitGroup
+}
+
+// newTogether is leases whose first takes are answered once takers take
+// them.
+func newTogether(leases graph.Leases, takers int) *together {
+	t := &together{Leases: leases}
+	t.left.Store(int64(takers))
+	t.takers.Add(takers)
+
+	return t
+}
+
+func (t *together) Take(ctx context.Context, rootUUID string, holder string, ttl time.Duration) (graph.Lease, error) {
+	lease, err := t.Leases.Take(ctx, rootUUID, holder, ttl)
+
+	if t.left.Add(-1) >= 0 {
+		t.takers.Done()
+		t.takers.Wait()
+	}
+
+	return lease, err
 }
 
 // gate is what a fake kind's node waits on when it is asked something, until

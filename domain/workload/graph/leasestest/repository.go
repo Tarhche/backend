@@ -10,6 +10,8 @@ package leasestest
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -129,6 +131,189 @@ func Repository(t *testing.T, make Maker) {
 		read, err := repository.Get(ctx, shop)
 		require.NoError(t, err)
 		assert.False(t, read.Poked, "a lease is poked by nothing but its being asked for while another holds it")
+	})
+
+	t.Run("taken now, one whose root is backed off is taken all the same, and what backs it off is cleared", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t)
+
+		_, err := repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+
+		held, err := repository.Take(ctx, shop, another, time.Minute)
+		require.ErrorIs(t, err, graph.ErrHeld)
+		require.True(t, held.Poked)
+
+		_, err = repository.Release(ctx, shop, one, graph.Ended{State: graph.StateFailed, Reason: "broken", Backoff: loops, Seen: graph.Seen{State: "starting", Since: time.Now()}})
+		require.NoError(t, err)
+
+		_, err = repository.Take(ctx, shop, another, time.Minute)
+		require.ErrorIs(t, err, graph.ErrBackedOff)
+
+		taken, err := repository.TakeNow(ctx, shop, another, 30*time.Second)
+		require.NoError(t, err)
+
+		assert.Equal(t, another, taken.Holder)
+		assert.Equal(t, 30*time.Second, taken.ExpiresAt.Sub(taken.UpdatedAt), "until as long from then as it is taken for")
+		assert.Zero(t, taken.Failures, "its failures cleared")
+		assert.Empty(t, taken.Reason)
+		assert.True(t, taken.NextAt.IsZero(), "and nothing backs it off")
+		assert.Equal(t, graph.Seen{}, taken.Seen)
+		assert.False(t, taken.Poked, "the run it is taken for reads its root after whatever poked it")
+		kept(t, taken.ExpiresAt)
+
+		read, err := repository.Get(ctx, shop)
+		require.NoError(t, err)
+		assert.Equal(t, taken, read, "as it is kept")
+
+		again, err := repository.TakeNow(ctx, shop, another, time.Minute)
+		require.NoError(t, err, "its holder takes it now again")
+		assert.Equal(t, time.Minute, again.ExpiresAt.Sub(again.UpdatedAt))
+
+		fresh, err := repository.TakeNow(ctx, cache, one, time.Minute)
+		require.NoError(t, err, "and one never taken is taken now")
+		assert.Equal(t, one, fresh.Holder)
+		assert.Zero(t, fresh.Failures)
+	})
+
+	t.Run("but one another holds is not taken now, and is poked, as it is taken", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t)
+
+		_, err := repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+
+		held, err := repository.TakeNow(ctx, shop, another, time.Minute)
+		require.ErrorIs(t, err, graph.ErrHeld)
+		assert.NotErrorIs(t, err, graph.ErrBackedOff)
+		assert.Equal(t, one, held.Holder, "beside the lease as it is")
+		assert.True(t, held.Poked)
+
+		released, err := repository.Release(ctx, shop, one, graph.Ended{State: graph.StateDone})
+		require.NoError(t, err)
+		assert.True(t, released.Poked, "which its holder's letting go of it says")
+
+		for name, take := range map[string]struct {
+			root, holder string
+			ttl          time.Duration
+		}{
+			"of no root":                {root: "", holder: one, ttl: time.Minute},
+			"for nobody":                {root: shop, holder: "", ttl: time.Minute},
+			"for less than millisecond": {root: shop, holder: one, ttl: 500 * time.Microsecond},
+		} {
+			_, err := repository.TakeNow(ctx, take.root, take.holder, take.ttl)
+			assert.Error(t, err, name)
+			assert.NotErrorIs(t, err, graph.ErrHeld, name)
+		}
+	})
+
+	t.Run("of many that take a lease now at once, its root backed off, one takes it, and every other finds it held", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t)
+
+		_, err := repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+
+		_, err = repository.Release(ctx, shop, one, graph.Ended{State: graph.StateFailed, Reason: "broken", Backoff: loops})
+		require.NoError(t, err)
+
+		var (
+			start  sync.WaitGroup
+			taking sync.WaitGroup
+			lock   sync.Mutex
+			took   []string
+			held   int
+		)
+
+		// each waits for the rest, so that they take it at once.
+		start.Add(1)
+
+		for i := range 8 {
+			holder := fmt.Sprintf("0193b5c2-7b1e-7000-8000-0000000001%02d", i)
+
+			taking.Go(func() {
+				start.Wait()
+
+				_, err := repository.TakeNow(ctx, shop, holder, time.Minute)
+
+				lock.Lock()
+				defer lock.Unlock()
+
+				switch {
+				case err == nil:
+					took = append(took, holder)
+				case assert.ErrorIs(t, err, graph.ErrHeld):
+					held++
+				}
+			})
+		}
+
+		start.Done()
+		taking.Wait()
+
+		require.Len(t, took, 1, "one takes it")
+		assert.Equal(t, 7, held, "and every other finds it held")
+
+		lease, err := repository.Get(ctx, shop)
+		require.NoError(t, err)
+		assert.Equal(t, took[0], lease.Holder, "which holds it")
+		assert.Zero(t, lease.Failures)
+		assert.True(t, lease.Poked, "poked by the others")
+	})
+
+	t.Run("a run that failed keeps what it saw of its root, to the millisecond, which one that waits leaves and one done clears", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t)
+
+		since := time.Date(2026, 10, 11, 5, 0, 0, 123456789, time.FixedZone("Tehran", 12600))
+
+		_, err := repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+
+		failed, err := repository.Release(ctx, shop, one, graph.Ended{State: graph.StateFailed, Reason: "broken", Seen: graph.Seen{State: "starting", Since: since}})
+		require.NoError(t, err)
+
+		assert.Equal(t, graph.Seen{State: "starting", Since: time.Date(2026, 10, 11, 1, 30, 0, 123000000, time.UTC)}, failed.Seen)
+		assert.True(t, failed.Seen.Is(graph.Seen{State: "starting", Since: since}), "the same state begun at the same time as it saw it")
+
+		read, err := repository.Get(ctx, shop)
+		require.NoError(t, err)
+		assert.Equal(t, failed.Seen, read.Seen, "as it is kept")
+
+		_, err = repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+
+		waited, err := repository.Release(ctx, shop, one, graph.Ended{State: graph.StateWaiting, Reason: "its vm is stopped"})
+		require.NoError(t, err)
+		assert.Equal(t, failed.Seen, waited.Seen, "a run that waits leaves it, as it leaves the failure it is of")
+
+		_, err = repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+
+		blind, err := repository.Release(ctx, shop, one, graph.Ended{State: graph.StateFailed, Reason: "its record could not be read"})
+		require.NoError(t, err)
+		assert.Equal(t, graph.Seen{}, blind.Seen, "and one that saw nothing keeps nothing")
+
+		_, err = repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+
+		_, err = repository.Release(ctx, shop, one, graph.Ended{State: graph.StateFailed, Seen: graph.Seen{State: "stopping", Since: since}})
+		require.NoError(t, err)
+
+		_, err = repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+
+		done, err := repository.Release(ctx, shop, one, graph.Ended{State: graph.StateDone})
+		require.NoError(t, err)
+		assert.Equal(t, graph.Seen{}, done.Seen, "and a run done clears it")
 	})
 
 	t.Run("one that expired is taken by another, its failures as they were", func(t *testing.T) {

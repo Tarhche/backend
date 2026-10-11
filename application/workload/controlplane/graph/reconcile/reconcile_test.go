@@ -414,6 +414,97 @@ func TestReconciler_Reconcile(t *testing.T) {
 		assert.Empty(t, kinds.Calls())
 	})
 
+	t.Run("and of two control planes that find one backed off at once, asked something since, one takes it now, and the other finds it held, and pokes it", func(t *testing.T) {
+		t.Parallel()
+
+		gate := newGate()
+
+		kinds := stacked()
+		kinds.Hold(vm, network)
+		kinds.On(graphtest.Create, store, gate.wait)
+
+		f := newFixture(t, kinds, aStack(stackKind.Restarting))
+
+		_, err := f.leases.Take(ctx, store.Name(), "another", time.Minute)
+		require.NoError(t, err)
+
+		_, err = f.leases.Release(ctx, store.Name(), "another", graph.Ended{State: graph.StateFailed, Reason: "broken", Backoff: reconcile.DefaultConfig().Backoff})
+		require.NoError(t, err)
+
+		// each finds it backed off before either takes it now.
+		leases := newTogether(f.leases, 2)
+
+		one := f.reconcilerOver(t, leases, "one", reconcile.DefaultConfig(), stackKind.Name)
+		two := f.reconcilerOver(t, leases, "two", reconcile.DefaultConfig(), stackKind.Name)
+
+		results := make(chan error, 2)
+		for _, r := range []*reconcile.Reconciler{one, two} {
+			go func() { results <- r.Reconcile(ctx, refOf(store)) }()
+		}
+
+		require.Eventually(t, func() bool { return slices.Contains(kinds.Asked(graphtest.Create), store) }, settle, tick, "one of them carries it out")
+
+		select {
+		case err = <-results:
+		case <-time.After(settle):
+			require.Fail(t, "both carry it out")
+		}
+
+		require.ErrorIs(t, err, graph.ErrHeld, "and the other finds it held")
+
+		lease := f.lease(t, store)
+		assert.Contains(t, []string{"one", "two"}, lease.Holder)
+		assert.Zero(t, lease.Failures, "its backoff cleared as it was taken")
+		assert.True(t, lease.Poked, "and poked")
+
+		gate.Open()
+		require.NoError(t, <-results)
+
+		assert.Equal(t, []graph.NodeID{store}, kinds.Asked(graphtest.Create), "carried out once")
+	})
+
+	t.Run("but one whose last run failed for what the control plane keeps, which left it as that run saw it, is left until its backoff is over, though it is in flight; and carried out at once once a person asks it something again", func(t *testing.T) {
+		t.Parallel()
+
+		gone := errors.New("the database is gone")
+
+		kinds := stacked()
+		kinds.Hold(vm, network, store)
+
+		f := newFixture(t, kinds, aStack(stackKind.Running))
+		require.NoError(t, f.moveTo(ctx, store, stackKind.Starting), "a person's start")
+
+		f.executions.Fail(gone)
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), stackKind.Name)
+
+		require.ErrorIs(t, r.Reconcile(ctx, refOf(store)), gone)
+
+		backedOff := f.lease(t, store)
+		require.Equal(t, 1, backedOff.Failures)
+		assert.Equal(t, stackKind.Starting, backedOff.Seen.State, "its lease keeps what its run saw of it")
+		assert.Equal(t, stackKind.Starting, f.saidOfRoot(t, store).State, "which it left as it was")
+
+		f.executions.Fail(nil)
+
+		exists := len(kinds.Asked(graphtest.Exists))
+
+		assert.ErrorIs(t, r.Reconcile(ctx, refOf(store)), graph.ErrBackedOff, "starting as that run saw it, it is not carried out again at once")
+		assert.Len(t, kinds.Asked(graphtest.Exists), exists)
+		assert.Equal(t, backedOff, f.lease(t, store), "and its lease is as it was")
+
+		// asked to start again, a second later.
+		f.clock.Advance(time.Second)
+		require.NoError(t, f.moveTo(ctx, store, stackKind.Starting))
+
+		require.NoError(t, r.Reconcile(ctx, refOf(store)), "carried out at once")
+		assert.Greater(t, len(kinds.Asked(graphtest.Exists)), exists)
+
+		lease := f.lease(t, store)
+		assert.Zero(t, lease.Failures, "its failures cleared")
+		assert.Equal(t, graph.Seen{}, lease.Seen)
+	})
+
 	t.Run("what something owns now is a root no more: its lease is forgotten, and its graph is not carried out", func(t *testing.T) {
 		t.Parallel()
 

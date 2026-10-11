@@ -2,11 +2,12 @@
 // document for a root,
 //
 //	{_id: "<root uuid>", holder, expires_at, failures, reason, next_at,
-//	 poked, updated_at}
+//	 seen: {state, since}, poked, updated_at}
 //
-// holder and expires_at null while nobody holds it, next_at while nothing
-// backs its root off, and poked false but while another control plane asked
-// for it while it was held.
+// holder and expires_at null while nobody holds it, next_at and seen while
+// nothing backs its root off, and poked false but while another control plane
+// asked for it while it was held. A lease kept before seen was has none,
+// which is read as nothing seen.
 //
 // When a lease expires, and when a root's backoff is over, is judged by the
 // database's clock, $$NOW, in the pipelines that write them, never by a
@@ -28,6 +29,11 @@
 // off. Taken, it is poked no more. Two control planes that make a new one at
 // once leave one of them a duplicate key, should MongoDB not take its upsert
 // up again: the other made it, and holds it.
+//
+// A lease is taken now (TakeNow) with the same upsert, whose pipeline takes
+// it whatever backs its root off, and clears that as it takes it: what a
+// lease held by its taker says is that it took it, and one held by another
+// that another holds it, so that of two that take one at once, one takes it.
 //
 // Only its holder renews it or lets go of it, which a write matched by its
 // holder says, and a failure backs its root off for as long as the backoff
@@ -52,6 +58,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
 const (
@@ -78,6 +85,17 @@ func NewRepository(database *mongo.Database) *Repository {
 }
 
 func (r *Repository) Take(ctx context.Context, rootUUID string, holder string, ttl time.Duration) (graph.Lease, error) {
+	return r.take(ctx, rootUUID, holder, ttl, false)
+}
+
+func (r *Repository) TakeNow(ctx context.Context, rootUUID string, holder string, ttl time.Duration) (graph.Lease, error) {
+	return r.take(ctx, rootUUID, holder, ttl, true)
+}
+
+// take takes the root's lease for holder, until ttl from now, as Take does,
+// or, clearing, as TakeNow does: whatever backs its root off, which it
+// clears.
+func (r *Repository) take(ctx context.Context, rootUUID string, holder string, ttl time.Duration, clearing bool) (graph.Lease, error) {
 	if err := asked(rootUUID, holder, ttl); err != nil {
 		return graph.Lease{}, err
 	}
@@ -85,17 +103,21 @@ func (r *Repository) Take(ctx context.Context, rootUUID string, holder string, t
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	// taken when nobody holds it, it expired or holder holds it, and its
-	// root is not backed off: a null or missing time is before $$NOW, and a
-	// null or missing holder is nobody, as a new one has.
-	takeable := bson.D{{Key: "$and", Value: bson.A{
-		bson.D{{Key: "$or", Value: bson.A{
-			bson.D{{Key: "$eq", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$holder", ""}}}, ""}}},
-			bson.D{{Key: "$eq", Value: bson.A{"$holder", literal(holder)}}},
-			bson.D{{Key: "$lte", Value: bson.A{"$expires_at", now}}},
-		}}},
-		bson.D{{Key: "$not", Value: bson.A{bson.D{{Key: "$gt", Value: bson.A{"$next_at", now}}}}}},
+	// taken when nobody holds it, it expired or holder holds it, and, but
+	// when clearing, its root is not backed off: a null or missing time is
+	// before $$NOW, and a null or missing holder is nobody, as a new one has.
+	takeable := bson.D{{Key: "$or", Value: bson.A{
+		bson.D{{Key: "$eq", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$holder", ""}}}, ""}}},
+		bson.D{{Key: "$eq", Value: bson.A{"$holder", literal(holder)}}},
+		bson.D{{Key: "$lte", Value: bson.A{"$expires_at", now}}},
 	}}}
+
+	if !clearing {
+		takeable = bson.D{{Key: "$and", Value: bson.A{
+			takeable,
+			bson.D{{Key: "$not", Value: bson.A{bson.D{{Key: "$gt", Value: bson.A{"$next_at", now}}}}}},
+		}}}
+	}
 
 	// held by another and not taken, it is poked, so that its holder carries
 	// the root out again; poked before, it stays so.
@@ -104,17 +126,28 @@ func (r *Repository) Take(ctx context.Context, rootUUID string, holder string, t
 		bson.D{{Key: "$ifNull", Value: bson.A{"$poked", false}}},
 	}}}
 
+	// what backs it off is kept as it was, and a new one has nothing backing
+	// it off; taken clearing it, it is cleared.
+	backedOff := func(field string, none any) bson.D {
+		kept := bson.D{{Key: "$ifNull", Value: bson.A{"$" + field, none}}}
+		if clearing {
+			return ifTaken(none, kept)
+		}
+
+		return kept
+	}
+
 	// what is taken is held by holder from now, and poked no more, and what
-	// is not is left as it was but for being poked; a new one has no
-	// failures, and nothing backing it off.
+	// is not is left as it was but for being poked.
 	take := mongo.Pipeline{
 		{{Key: "$set", Value: bson.D{{Key: "taken", Value: takeable}}}},
 		{{Key: "$set", Value: bson.D{
 			{Key: "holder", Value: ifTaken(literal(holder), "$holder")},
 			{Key: "expires_at", Value: ifTaken(after(ttl), "$expires_at")},
-			{Key: "failures", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$failures", 0}}}},
-			{Key: "reason", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$reason", ""}}}},
-			{Key: "next_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$next_at", nil}}}},
+			{Key: "failures", Value: backedOff("failures", 0)},
+			{Key: "reason", Value: backedOff("reason", "")},
+			{Key: "next_at", Value: backedOff("next_at", nil)},
+			{Key: "seen", Value: backedOff("seen", nil)},
 			{Key: "poked", Value: ifTaken(false, poked)},
 			{Key: "updated_at", Value: ifTaken(now, "$updated_at")},
 		}}},
@@ -178,6 +211,7 @@ func (r *Repository) Release(ctx context.Context, rootUUID string, holder string
 			bson.E{Key: "failures", Value: 0},
 			bson.E{Key: "reason", Value: ""},
 			bson.E{Key: "next_at", Value: nil},
+			bson.E{Key: "seen", Value: nil},
 		)}}}
 	case graph.StateWaiting:
 		release = mongo.Pipeline{{{Key: "$set", Value: released}}}
@@ -187,6 +221,7 @@ func (r *Repository) Release(ctx context.Context, rootUUID string, holder string
 			{{Key: "$set", Value: append(released,
 				bson.E{Key: "failures", Value: bson.D{{Key: "$add", Value: bson.A{bson.D{{Key: "$ifNull", Value: bson.A{"$failures", 0}}}, 1}}}},
 				bson.E{Key: "reason", Value: literal(ended.Reason)},
+				bson.E{Key: "seen", Value: seenOf(ended.Seen)},
 			)}},
 			{{Key: "$set", Value: bson.D{
 				{Key: "next_at", Value: bson.D{{Key: "$add", Value: bson.A{now, backoff(ended.Backoff)}}}},
@@ -252,18 +287,26 @@ func (r *Repository) held(ctx context.Context, rootUUID string, holder string, c
 // document is a lease as it is stored: every field there, null while it has
 // none.
 type document struct {
-	Root      string     `bson:"_id"`
-	Holder    string     `bson:"holder"`
-	ExpiresAt *time.Time `bson:"expires_at"`
-	Failures  int        `bson:"failures"`
-	Reason    string     `bson:"reason"`
-	NextAt    *time.Time `bson:"next_at"`
-	Poked     bool       `bson:"poked"`
-	UpdatedAt *time.Time `bson:"updated_at"`
+	Root      string        `bson:"_id"`
+	Holder    string        `bson:"holder"`
+	ExpiresAt *time.Time    `bson:"expires_at"`
+	Failures  int           `bson:"failures"`
+	Reason    string        `bson:"reason"`
+	NextAt    *time.Time    `bson:"next_at"`
+	Seen      *seenDocument `bson:"seen"`
+	Poked     bool          `bson:"poked"`
+	UpdatedAt *time.Time    `bson:"updated_at"`
+}
+
+// seenDocument is what the run whose failure backs a lease's root off saw of
+// the root, as it is stored.
+type seenDocument struct {
+	State string     `bson:"state"`
+	Since *time.Time `bson:"since"`
 }
 
 func toLease(stored document) graph.Lease {
-	return graph.Lease{
+	lease := graph.Lease{
 		Root:      stored.Root,
 		Holder:    stored.Holder,
 		ExpiresAt: moment(stored.ExpiresAt),
@@ -273,6 +316,28 @@ func toLease(stored document) graph.Lease {
 		Poked:     stored.Poked,
 		UpdatedAt: moment(stored.UpdatedAt),
 	}
+
+	if stored.Seen != nil {
+		lease.Seen = graph.Seen{State: kind.State(stored.Seen.State), Since: moment(stored.Seen.Since)}
+	}
+
+	return lease
+}
+
+// seenOf is what a run saw as it is stored, taken as it is: its time to the
+// millisecond, which is all a date of the database's holds, and null when it
+// saw nothing.
+func seenOf(s graph.Seen) any {
+	if len(s.State) == 0 {
+		return nil
+	}
+
+	var since any
+	if !s.Since.IsZero() {
+		since = s.Since.UTC().Truncate(time.Millisecond)
+	}
+
+	return literal(bson.D{{Key: "state", Value: string(s.State)}, {Key: "since", Value: since}})
 }
 
 // after is the time d from now, by the database's clock, to the millisecond.

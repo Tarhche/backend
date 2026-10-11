@@ -1,9 +1,10 @@
 // Package leases keeps each root's lease in memory, the way the MongoDB
 // repository keeps it: one lease for a root, by the root's uuid, taken when
 // nobody holds it, it expired or its taker holds it, and its root is not
-// backed off, as its clock judges, and poked when another holds it; a
-// failure in a row backing its root off twice as long as the last; and times
-// to the millisecond, in UTC.
+// backed off, as its clock judges, or taken now whatever backs it off, which
+// it clears, and poked when another holds it; a failure in a row backing its
+// root off twice as long as the last, and keeping what its run saw; and
+// times to the millisecond, in UTC.
 package leases
 
 import (
@@ -80,6 +81,46 @@ func (r *Repository) Take(_ context.Context, rootUUID string, holder string, ttl
 	return lease, nil
 }
 
+func (r *Repository) TakeNow(_ context.Context, rootUUID string, holder string, ttl time.Duration) (graph.Lease, error) {
+	if r.Fail != nil {
+		return graph.Lease{}, r.Fail
+	}
+
+	if err := asked(rootUUID, holder, ttl); err != nil {
+		return graph.Lease{}, err
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	now := r.clock()
+
+	lease, kept := r.of()[rootUUID]
+	if !kept {
+		lease = graph.Lease{Root: rootUUID}
+	}
+
+	if len(lease.Holder) > 0 && lease.Holder != holder && lease.ExpiresAt.After(now) {
+		lease.Poked = true
+		r.leases[rootUUID] = lease
+
+		return lease, graph.ErrHeld
+	}
+
+	lease.Holder = holder
+	lease.ExpiresAt = now.Add(ttl.Truncate(time.Millisecond))
+	lease.Failures = 0
+	lease.Reason = ""
+	lease.NextAt = time.Time{}
+	lease.Seen = graph.Seen{}
+	lease.Poked = false
+	lease.UpdatedAt = now
+
+	r.leases[rootUUID] = lease
+
+	return lease, nil
+}
+
 func (r *Repository) Renew(_ context.Context, rootUUID string, holder string, ttl time.Duration) (graph.Lease, error) {
 	if r.Fail != nil {
 		return graph.Lease{}, r.Fail
@@ -139,6 +180,7 @@ func (r *Repository) Release(_ context.Context, rootUUID string, holder string, 
 		lease.Failures = 0
 		lease.Reason = ""
 		lease.NextAt = time.Time{}
+		lease.Seen = graph.Seen{}
 	case graph.StateFailed:
 		// worked out in milliseconds, as the database does.
 		backoff := graph.Backoff{First: ended.Backoff.First.Truncate(time.Millisecond), Most: ended.Backoff.Most.Truncate(time.Millisecond)}
@@ -146,6 +188,7 @@ func (r *Repository) Release(_ context.Context, rootUUID string, holder string, 
 		lease.Failures++
 		lease.Reason = ended.Reason
 		lease.NextAt = now.Add(backoff.After(lease.Failures))
+		lease.Seen = seen(ended.Seen)
 	}
 
 	r.leases[rootUUID] = lease
@@ -211,6 +254,20 @@ func (r *Repository) clock() time.Time {
 	}
 
 	return now().UTC().Truncate(time.Millisecond)
+}
+
+// seen is what a run saw as a lease keeps it: its time to the millisecond, in
+// UTC, and none when it saw none.
+func seen(s graph.Seen) graph.Seen {
+	if len(s.State) == 0 {
+		return graph.Seen{}
+	}
+
+	if !s.Since.IsZero() {
+		s.Since = s.Since.UTC().Truncate(time.Millisecond)
+	}
+
+	return s
 }
 
 // asked is what is wrong with a lease of the root uuid names, for holder,
