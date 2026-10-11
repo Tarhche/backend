@@ -21,6 +21,7 @@ import (
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -834,7 +835,10 @@ func failureOf(status json.RawMessage, reason string) *noderequest.Error {
 
 // containerOf is a container's manifest as docker has a container: what its
 // VM's dockerd last said of it, or, before there is any, what it was asked
-// for, in the words docker has for one it is making.
+// for, in the words docker has for one it is making. Which stack's it is, and
+// which of its services, its labels say (labelsOf), those its record carries
+// among them: one being made, or made again, which its VM's dockerd has said
+// nothing of yet, is its stack's all the same.
 func containerOf(m containerManifest) docker.Container {
 	var c docker.Container
 
@@ -873,9 +877,43 @@ func containerOf(m containerManifest) docker.Container {
 		c.RestartPolicy = m.Spec.RestartPolicy
 	}
 
+	c.Labels = labelsOf(m.Metadata, c.Labels)
+	c.Stack, c.Service = c.Labels[stackKind.LabelStack], c.Labels[stackKind.LabelService]
+
 	c.Unmanaged = unmanaged(m.Metadata)
 
 	return c
+}
+
+// stackLabels are the labels of the record of a container a stack owns that
+// say which stack's, and which of its services, it is: its stack's graph
+// writes them on its record, and its node labels it with them in its VM's
+// dockerd.
+var stackLabels = []string{stackKind.LabelStack, stackKind.LabelService}
+
+// labelsOf are a container's labels: those its VM's dockerd last said it
+// has, seen, and beside them those of its record's, m's, that its node labels
+// it with (stackLabels), which say which stack's, and which of its services,
+// it is before its VM's dockerd has said anything of it. Where both say one,
+// what its VM's dockerd says is what it is.
+func labelsOf(m kind.Metadata, seen map[string]string) map[string]string {
+	labels, cloned := seen, false
+
+	for _, key := range stackLabels {
+		value, carried := m.Labels[key]
+		if _, said := seen[key]; !carried || said {
+			continue
+		}
+
+		if !cloned {
+			labels, cloned = make(map[string]string, len(seen)+len(stackLabels)), true
+			maps.Copy(labels, seen)
+		}
+
+		labels[key] = value
+	}
+
+	return labels
 }
 
 // statusSentence is a kind's state, and why, as docker puts its own in a

@@ -372,6 +372,38 @@ func TestContainerOf(t *testing.T) {
 	assert.Equal(t, "exited", seen.State, "docker's own word")
 	assert.Equal(t, "Exited (0) 1 second ago", seen.Status)
 	assert.True(t, seen.Unmanaged)
+
+	// a stack's, as its stack's graph wrote it on its record.
+	stacked := kind.Metadata{Labels: map[string]string{stackKind.LabelStack: "s-uuid", stackKind.LabelService: "web"}}
+
+	making := containerOf(containerManifest{
+		Metadata: stacked,
+		Spec:     containerKind.Spec{Name: "shop-abcde_web", Image: "nginx:1.27"},
+		Status:   containerKind.Status{Status: kind.Status{State: containerKind.Pending, Reason: "its vm is being made"}},
+	})
+
+	assert.Equal(t, "s-uuid", making.Stack, "one of a stack's its vm's dockerd has said nothing of yet is its stack's, as its record says")
+	assert.Equal(t, "web", making.Service)
+	assert.Equal(t, stacked.Labels, making.Labels, "labelled as its node labels it")
+	assert.True(t, passes(making, docker.ContainerFilter{All: true, Label: stackKind.LabelStack + "=s-uuid"}), "so that its stack's detail, which lists its containers by its label, lists it")
+
+	said := map[string]string{"workload.managed": "true", stackKind.LabelStack: "s-uuid", stackKind.LabelService: "cache"}
+	labelled := containerOf(containerManifest{
+		Metadata: stacked,
+		Status:   containerKind.Status{Status: kind.Status{State: containerKind.Running}, Docker: &containerKind.Docker{ID: "c3", State: "running", Labels: said}},
+	})
+
+	assert.Equal(t, "cache", labelled.Service, "where its vm's dockerd says one too, what it says is what it is")
+	assert.Equal(t, said, labelled.Labels)
+
+	unlabelled := containerOf(containerManifest{
+		Metadata: stacked,
+		Status:   containerKind.Status{Status: kind.Status{State: containerKind.Running}, Docker: &containerKind.Docker{ID: "c4", State: "running", Labels: map[string]string{"workload.managed": "true"}}},
+	})
+
+	assert.Equal(t, "s-uuid", unlabelled.Stack, "and where it says none, its record's is")
+	assert.Equal(t, "web", unlabelled.Service)
+	assert.Equal(t, map[string]string{"workload.managed": "true", stackKind.LabelStack: "s-uuid", stackKind.LabelService: "web"}, unlabelled.Labels)
 }
 
 func TestAnswered(t *testing.T) {

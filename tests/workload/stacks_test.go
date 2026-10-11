@@ -675,10 +675,11 @@ func TestAStacksGraph(t *testing.T) {
 // TestAStoppedStacksContainerWhoseMakingFails stops a stack, and deletes its
 // web server while no registry has its image and its VM holds none: the
 // stack's graph makes it again, expected stopped as its stack is, and its
-// create fails, docker never having it, which fails the stack's plan. Once
-// the image can be pulled, the run after makes it by its create, still
-// expected stopped, what docker starts as it makes it stopped, and nothing
-// asks it to run: the stack is stopped again, and not degraded.
+// create fails, docker never having it, which fails the stack's plan; the
+// stack's detail lists it all the same, as its record says it is the
+// stack's. Once the image can be pulled, the run after makes it by its
+// create, still expected stopped, what docker starts as it makes it stopped,
+// and nothing asks it to run: the stack is stopped again, and not degraded.
 //
 // It runs alone, not in parallel: the second it takes, its registry down and
 // its stack backed off, moves when the tests beside it wait on what a node
@@ -725,6 +726,19 @@ func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
 
 	assert.Nil(t, failed.Status.Docker, "docker never had it")
 	assert.Equal(t, containerKind.Stopped, failed.Status.Expected, "admitted expected stopped, as its stack is")
+
+	// being made again, which its vm's dockerd has said nothing of, it is
+	// listed by the stack's detail all the same, as its record says it is
+	// the stack's.
+	detail, err := w.readStack(ctx, stackUUID)
+	require.NoError(t, err)
+
+	remade := slices.IndexFunc(detail.Containers, func(c presenter.Container) bool { return c.Name == web })
+	require.GreaterOrEqual(t, remade, 0, "the stack's detail lists %s, being made again: %+v", web, detail.Containers)
+	assert.Equal(t, "web", detail.Containers[remade].Service)
+	assert.Equal(t, stackUUID, detail.Containers[remade].StackUUID)
+	assert.Contains(t, []string{"created", "dead"}, detail.Containers[remade].State, "being made, or its making failed, in docker's words")
+	assert.Len(t, detail.Containers, 2, "beside db")
 
 	w.dockerd.Allow("nginx:alpine")
 

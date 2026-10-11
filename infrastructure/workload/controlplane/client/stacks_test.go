@@ -355,6 +355,37 @@ func TestClient_Stack(t *testing.T) {
 		assert.Equal(t, "web", detail.Containers[0].Service, "and its service")
 	})
 
+	t.Run("and one its graph is making, which its vm's dockerd has said nothing of yet, as its record says it is its own", func(t *testing.T) {
+		t.Parallel()
+
+		// web is the stack's, and the other another stack's, each pending,
+		// as each one's record says.
+		pending := func(uuid string, name string, stackUUID string) containerManifest {
+			return containerManifest{
+				Kind:     containerKind.Name,
+				Metadata: kind.Metadata{UUID: uuid, Labels: map[string]string{stackKind.LabelStack: stackUUID, stackKind.LabelService: "web"}},
+				Spec:     containerKind.Spec{Name: name, Image: "nginx:1.27"},
+				Status:   containerKind.Status{Status: kind.Status{State: containerKind.Pending, Reason: "it is being made"}},
+			}
+		}
+
+		c, p := newBlocksPlane(t)
+		p.answers(http.MethodGet, "/api/stacks/stack-uuid", http.StatusOK, shopIn("vm-uuid", stackKind.Deploying))
+		p.lists("/api/containers", []containerManifest{
+			pending("web-uuid", "shop-abcde_web", "stack-uuid"),
+			pending("other-uuid", "blog-fghij_web", "elsewhere"),
+		})
+
+		detail, err := c.Stack(ctx, "owner-uuid", "stack-uuid")
+		require.NoError(t, err)
+
+		require.Len(t, detail.Containers, 1, "its own, and nothing of another stack's")
+		assert.Equal(t, "shop-abcde_web", detail.Containers[0].Name)
+		assert.Equal(t, "created", detail.Containers[0].State, "being made, in docker's words")
+		assert.Equal(t, "stack-uuid", detail.Containers[0].Stack)
+		assert.Equal(t, "web", detail.Containers[0].Service)
+	})
+
 	for name, tt := range map[string]struct {
 		vm vmManifest
 	}{
