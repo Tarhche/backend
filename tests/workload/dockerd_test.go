@@ -1201,6 +1201,40 @@ func (d *dockerd) Remove(t *testing.T, id string, name string) {
 	}
 }
 
+// Refuse has no registry have reference from now on, as one that is down
+// has none, until Allow: a pull of it is refused before it starts.
+func (d *dockerd) Refuse(reference string) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.refused[normalized(reference)] = true
+}
+
+// Allow has the registries have reference again.
+func (d *dockerd) Allow(reference string) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	delete(d.refused, normalized(reference))
+}
+
+// Forget removes an image from the VM id names behind everybody's back, so
+// that what is made of it next pulls it.
+func (d *dockerd) Forget(t *testing.T, id string, reference string) {
+	t.Helper()
+
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	if err := d.change(id, func(h *holding) {
+		if at := h.imageAt(reference); at >= 0 {
+			h.Images = slices.Delete(h.Images, at, at+1)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Disconnect takes a container of the VM id names off a network behind
 // everybody's back.
 func (d *dockerd) Disconnect(t *testing.T, id string, name string, network string) {

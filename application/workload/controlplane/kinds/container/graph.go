@@ -54,10 +54,11 @@ const tries = 3
 // One that is not made is made: admitted when there is no record of it, but
 // for a root, whose record gone is never admitted again; its create asked
 // when its record is pending, a root's from when it was admitted on, or
-// missing, expected stopped first when it is to be made stopped (Want.Stopped,
-// a stopped stack's service), which its create leaves it; started, which
-// makes it, when it failed before it ever was; and waited on while it is
-// being made. What is asked of one is asked on the
+// missing, or when it failed before it ever was and is to be made stopped,
+// expected stopped first when it is to be made stopped (Want.Stopped, a
+// stopped stack's service), which its create leaves it, never started;
+// started, which makes it, when it failed before it ever was otherwise; and
+// waited on while it is being made. What is asked of one is asked on the
 // node its VM is on, where it is placed first when it is not: one admitted
 // before its VM was made, or kept when its VM went, which was made again
 // elsewhere. Nothing is asked of it while its VM does not run, nor of one on
@@ -233,12 +234,12 @@ func (g *Graph) create(ctx context.Context, w containerKind.Want, vmUUID string)
 
 // again is a container whose record there is, in the Docker VM vmUUID names,
 // made as w wants it: as it is when it is made already, its create asked
-// again when it is pending or missing, expected stopped first when w says it
-// is to be stopped (held), started, which makes it, when it failed before it
-// ever was, and waited on while it is being made. What is asked of it is
-// asked on the node its VM is on (ask). One on its way out, and one last
-// seen waiting on its VM, which nothing can be asked of until its VM is
-// looked into again, wait.
+// again when it is pending or missing, or failed before it ever was and w
+// says it is to be stopped, expected stopped first when w says so (held),
+// started, which makes it, when it failed before it ever was otherwise, and
+// waited on while it is being made. What is asked of it is asked on the node
+// its VM is on (ask). One on its way out, and one last seen waiting on its
+// VM, which nothing can be asked of until its VM is looked into again, wait.
 func (g *Graph) again(ctx context.Context, w containerKind.Want, r resource.Record, vmUUID string) (resource.Record, error) {
 	c, err := kind.Decode[containerKind.Spec, containerKind.Status](r.Raw)
 	if err != nil {
@@ -262,7 +263,7 @@ func (g *Graph) again(ctx context.Context, w containerKind.Want, r resource.Reco
 		}
 
 		return settled, err
-	case state == containerKind.Pending, state == containerKind.Missing:
+	case state == containerKind.Pending, state == containerKind.Missing, state == containerKind.Failed && w.Stopped:
 		held, err := g.held(ctx, w, r)
 		if err != nil {
 			return resource.Record{}, err

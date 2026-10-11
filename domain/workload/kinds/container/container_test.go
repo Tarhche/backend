@@ -74,6 +74,7 @@ func TestDescriptor(t *testing.T) {
 		}{
 			"made where it is not yet":               {action: container.ActionCreate, state: container.Pending, allows: true},
 			"or not any more":                        {action: container.ActionCreate, state: container.Missing, allows: true},
+			"or whose making failed":                 {action: container.ActionCreate, state: container.Failed, allows: true},
 			"not over one that is":                   {action: container.ActionCreate, state: container.Running},
 			"started when stopped":                   {action: container.ActionStart, state: container.Stopped, allows: true},
 			"or completed":                           {action: container.ActionStart, state: container.Completed, allows: true},
@@ -124,6 +125,7 @@ func TestMachine(t *testing.T) {
 		"at rest it is what its node says":                  {from: container.Running, on: kind.OnObserved(container.Completed), to: container.Completed},
 		"removed, it is gone once its vm has none of it":    {from: container.Removing, on: kind.OnObserved(container.Missing), to: container.Deleted},
 		"a missing one is made again":                       {from: container.Missing, on: kind.OnAction(container.ActionCreate), to: container.Creating},
+		"and so is one whose making failed":                 {from: container.Failed, on: kind.OnAction(container.ActionCreate), to: container.Creating},
 		"or started, which makes it":                        {from: container.Missing, on: kind.OnAction(container.ActionStart), to: container.Starting},
 	} {
 		t.Run(name, func(t *testing.T) {

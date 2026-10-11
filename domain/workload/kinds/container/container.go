@@ -100,8 +100,9 @@ const (
 // A container's actions.
 const (
 	// ActionCreate makes a container that is not there, pulling its image
-	// first when its VM does not hold it. It is the workload's own to ask
-	// for.
+	// first when its VM does not hold it: one asked for, one its VM has none
+	// of any more, and one whose making failed. It leaves one expected
+	// stopped made and not started. It is the workload's own to ask for.
 	ActionCreate = "create"
 
 	ActionStart   = "start"
@@ -628,7 +629,7 @@ func Descriptor() kind.Descriptor {
 		OnParent:      blocks.OnParent(),
 		Machine:       Machine(),
 		Actions: []kind.Action{
-			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Pending, Missing}, Internal: true, Timeout: kind.TimeoutPull, Payload: kind.NoPayload},
+			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Pending, Missing, Failed}, Internal: true, Timeout: kind.TimeoutPull, Payload: kind.NoPayload},
 			pulling(waiting(command(ActionStart, []kind.State{Stopped, Completed, Missing, Failed}, Running, kind.NoPayload))),
 			waiting(command(ActionStop, []kind.State{Running, Failed}, Stopped, kind.NoPayload)),
 			pulling(waiting(command(ActionRestart, []kind.State{Running, Stopped, Completed, Missing, Failed}, Running, kind.NoPayload))),
@@ -668,7 +669,7 @@ func Machine() kind.Machine {
 		}
 	}
 
-	asked(ActionCreate, Creating, Pending, Missing)
+	asked(ActionCreate, Creating, Pending, Missing, Failed)
 	asked(ActionStart, Starting, Stopped, Completed, Missing, Failed)
 	asked(ActionStop, Stopping, Running, Failed)
 	asked(ActionRestart, Restarting, Running, Stopped, Completed, Missing, Failed)

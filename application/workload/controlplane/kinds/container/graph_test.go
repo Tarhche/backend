@@ -434,6 +434,27 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, containerKind.Stopped, typed(t, sent[0].Resource).Status.Expected)
 	})
 
+	t.Run("and so is one whose create failed before docker ever had it, its registry down say, made again by its create rather than started, which would have it run", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		w.Keep(blockstest.AContainer("c-1", "vm-1", containerKind.Failed, containerKind.Stopped, unmade, func(c *containerKind.Container) {
+			c.Spec.Name = "web"
+			c.Metadata.Name = "web"
+		}))
+
+		_, err := w.Kinds[containerKind.Name].Create(ctx, wanted("vm-1", func(w *containerKind.Want) { w.Stopped = true }), inVM)
+		require.NoError(t, err)
+
+		c, _ := stored(t, w, "c-1")
+		assert.Equal(t, containerKind.Stopped, c.Status.Expected, "it is expected stopped still")
+
+		sent := w.Node.Sent()
+		require.Len(t, sent, 1)
+		assert.Equal(t, containerKind.ActionCreate, sent[0].Action)
+		assert.Equal(t, containerKind.Stopped, typed(t, sent[0].Resource).Status.Expected, "its node is asked to make it stopped")
+	})
+
 	t.Run("under its record's uuid, when it is known by one, as its admission kept it", func(t *testing.T) {
 		t.Parallel()
 
