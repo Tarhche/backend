@@ -1014,3 +1014,140 @@ func TestNewControlPlaneWorkload_lateRestoreRacesItsVMsDelete(t *testing.T) {
 	assert.True(t, made.Status.RestoredAt.IsZero(), "and the vm made again takes nothing of a restore it was never sent: %s", made.Status.RestoredAt)
 	assert.Equal(t, "builds", made.Metadata.Name, "it is the vm as it was")
 }
+
+// TestNewControlPlaneWorkload_restoreThatSaysNotWhen holds the control plane
+// to taking a Docker VM's restore whose result says nothing of when it was
+// carried out, as a node of before results said it, as carried out when its
+// result was said: the VM's record says so, as what lives in it is reset as
+// of then, and the first look into the restored disk since decides the
+// stack, held by its web server found there under its uuid, rather than
+// waiting for ever on a restore the VM's record never says.
+func TestNewControlPlaneWorkload_restoreThatSaysNotWhen(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	stored := resourcesMemory.NewRepository()
+	stack := graph.Ref{Kind: stackKind.Name, UUID: "s-1"}
+
+	stores := storesOf(stored)
+	stores.Nodes = nodesMemory.NewRepository(vmtest.Alive(vmtest.Node))
+
+	var skew atomic.Int64
+	stores.Leases = leasesMemory.NewRepository(func() time.Time { return time.Now().Add(time.Duration(skew.Load())) })
+
+	workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), stores, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	saidAt := time.Now().Add(-10 * time.Minute)
+
+	// vm-1, being restored.
+	v := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+		v.Status.State = vmKind.Restoring
+		v.Status.ObservedAt = saidAt.Add(-time.Minute)
+	})
+	raw, err := kind.Encode(v)
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: raw, Pending: &resource.Pending{Action: vmKind.ActionRestore, IDs: []string{"restore-1"}, SentAt: saidAt.Add(-time.Minute)}, Restores: []string{"restore-1"}})
+	require.NoError(t, err)
+
+	raw, err = kind.Encode(stackKind.Stack{
+		Kind:     stackKind.Name,
+		Metadata: kind.Metadata{UUID: "s-1", Name: "shop", Slug: "shop", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, Generation: 1, CreatedAt: saidAt.Add(-time.Hour)},
+		Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+		Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running, Since: saidAt.Add(-time.Hour)}},
+	})
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: raw})
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: blockstest.AContainer("c-web", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+		c.Metadata.Name = "shop_web"
+		c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "s-1"}}
+		c.Metadata.Labels = map[string]string{stackKind.LabelStack: "s-1", stackKind.LabelService: "web"}
+		c.Spec.Name = "shop_web"
+		c.Status.ObservedAt = saidAt.Add(-time.Minute)
+	})})
+	require.NoError(t, err)
+
+	// its node says it is carried out, and nothing of when.
+	status, err := json.Marshal(vmKind.Status{Status: kind.Status{State: vmKind.Running}})
+	require.NoError(t, err)
+
+	result, err := json.Marshal(kind.ResourceActedOn{ID: "restore-1", Kind: vmKind.Name, UUID: "vm-1", Action: vmKind.ActionRestore, Node: vmtest.Node, OK: true, Status: status, At: saidAt})
+	require.NoError(t, err)
+
+	require.NoError(t, workload.Subscribers[kind.ResourceActedOnName].Handle(ctx, result))
+
+	r, err := stored.GetOne(ctx, vmKind.Name, "vm-1")
+	require.NoError(t, err)
+
+	taken, err := kind.Decode[vmKind.Spec, vmKind.Status](r.Raw)
+	require.NoError(t, err)
+	assert.True(t, taken.Status.RestoredAt.Equal(saidAt), "the vm's record says the restore carried out as its result was said: %s", taken.Status.RestoredAt)
+
+	s, err := stored.GetOne(ctx, stackKind.Name, "s-1")
+	require.NoError(t, err)
+	require.True(t, s.Reset)
+	assert.True(t, s.ResetAt.Equal(saidAt.Truncate(time.Millisecond)), "the stack reset as of then: %s", s.ResetAt)
+
+	beat := func(at time.Time, observed kind.Observation) {
+		t.Helper()
+
+		data, err := json.Marshal(kind.Heartbeat{Node: vmtest.Node, At: at, Observed: observed})
+		require.NoError(t, err)
+		require.NoError(t, workload.Subscribers[kind.HeartbeatName(observed.Kind)].Handle(ctx, data))
+	}
+
+	// the restored disk holds the stack's web server, under its uuid.
+	spec, err := containerKind.SpecLabel(containerKind.Spec{Name: "shop_web", Image: "nginx:1.27"})
+	require.NoError(t, err)
+
+	labels := blockKinds.Labels(containerKind.Name, "c-web")
+	labels[containerKind.LabelSpec] = spec
+	labels[stackKind.LabelStack] = "s-1"
+	labels[stackKind.LabelService] = "web"
+
+	webStatus, err := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Running}, Docker: &containerKind.Docker{ID: "d-web", Name: "shop_web", State: "running", Labels: labels}})
+	require.NoError(t, err)
+
+	web := kind.Observation{Kind: containerKind.Name, UUID: "c-web", Owners: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, Status: webStatus}
+
+	bridge, err := json.Marshal(map[string]any{"state": "present", "docker": map[string]any{"id": "n-bridge", "name": "bridge", "driver": "bridge"}})
+	require.NoError(t, err)
+
+	running, err := json.Marshal(vmKind.Status{Status: kind.Status{State: vmKind.Running}})
+	require.NoError(t, err)
+
+	// its node says what the restored disk holds beat after beat, up to now.
+	now := time.Now()
+
+	for at := saidAt.Add(time.Minute); !at.After(now); at = at.Add(30 * time.Second) {
+		beat(at, kind.Observation{Kind: networkKind.Name, Owners: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, Status: bridge})
+		beat(at, web)
+		beat(at, kind.Observation{Kind: vmKind.Name, UUID: "vm-1", Status: running})
+	}
+
+	beat(now, web)
+	beat(now, kind.Observation{Kind: vmKind.Name, UUID: "vm-1", Status: running})
+
+	require.NoError(t, workload.Reconcile.Execute(ctx))
+
+	c, err := stored.GetOne(ctx, containerKind.Name, "c-web")
+	require.NoError(t, err)
+	assert.False(t, c.Reset, "its web server, which the restored disk holds under its uuid, is found there")
+
+	// past any backoff a run cut short left.
+	skew.Store(int64(time.Hour))
+
+	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	_ = workload.Graphs.Reconcile(bounded, stack)
+
+	s, err = stored.GetOne(ctx, stackKind.Name, "s-1")
+	require.NoError(t, err)
+	assert.False(t, s.Reset, "and the stack is held by it, not left waiting for ever")
+}

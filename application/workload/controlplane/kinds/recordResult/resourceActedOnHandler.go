@@ -11,7 +11,11 @@
 // carried out, resets what lives in the resource to what it now holds, as the
 // kinds that live in it say, as of the restore's own moment, which its result
 // says (kind.Restore), before the result is taken: told first, so that a
-// result heard again tells it again rather than not at all. And it is taken
+// result heard again tells it again rather than not at all. A result that
+// says nothing of that moment, a node's of before results said it, is taken
+// as carried out when it was said: the resource's record says so, as what
+// lives in it is reset as of then, so that the look into the resource since
+// decides what it holds, as for any restore. And it is taken
 // whatever its resource was asked since, for as long as the resource's record
 // says an earlier restore, by the record it was sent from alone, which keeps
 // the restores sent to it until they are taken (resource.Record.Restores): a
@@ -181,7 +185,10 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 	}
 
 	// a restore carried out says when, which what lives in its resource is
-	// reset as of: when it says nothing of it, as of when it was heard of.
+	// reset as of, and its record takes. One that says nothing of it is
+	// taken as carried out as its result was said, or heard of: its record
+	// says so, as what lives in it is reset as of then, and the look into
+	// its resource since decides what it holds, as for any restore.
 	action, _ := d.Action(result.Action)
 	restores := result.OK && action.Restores
 
@@ -191,11 +198,10 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 		if restored, err = resource.RestoreOf(result.Status); err != nil {
 			return fmt.Errorf("%w: %w", errNotTaken, err)
 		}
-	}
 
-	resetAt := at
-	if !restored.RestoredAt.IsZero() {
-		resetAt = restored.RestoredAt
+		if restored.RestoredAt.IsZero() {
+			restored.RestoredAt = at
+		}
 	}
 
 	for try := 1; ; try++ {
@@ -232,6 +238,12 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 			return nil
 		case err != nil:
 			return fmt.Errorf("%w: %w", errNotTaken, err)
+		case restores && !change.Gone:
+			// its record says when the restore was carried out, which
+			// what lives in it is reset as of, whatever its result said.
+			if r.Status, err = resource.WithRestore(r.Status, restored); err != nil {
+				return fmt.Errorf("%w: %w", errNotTaken, err)
+			}
 		}
 
 		after, err := r.Common()
@@ -244,7 +256,7 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 		// what lives in one on its way out goes with it: its restore is
 		// taken onto its record, and nothing in it is reset.
 		if restores && h.restorer != nil && !(late && going(after, r)) {
-			if err := h.restorer.Restored(ctx, kind.Reference{Kind: d.Name, UUID: r.Metadata.UUID}, resetAt); err != nil {
+			if err := h.restorer.Restored(ctx, kind.Reference{Kind: d.Name, UUID: r.Metadata.UUID}, restored.RestoredAt); err != nil {
 				return err
 			}
 		}
@@ -290,13 +302,8 @@ func going(common kind.Status, r resource.Record) bool {
 // commands a restore was sent as, what that restore's result says of it,
 // restored, and reports whether it did: only while r says an earlier restore,
 // or none, so that a result heard again, once it was taken, takes nothing, nor
-// does one of a restore before the last one taken. A result that says nothing
-// of when it was carried out is taken never.
+// does one of a restore before the last one taken.
 func took(r *resource.Record, restored kind.Restore) (bool, error) {
-	if restored.RestoredAt.IsZero() {
-		return false, nil
-	}
-
 	recorded, err := resource.RestoreOf(r.Status)
 	if err != nil {
 		return false, err

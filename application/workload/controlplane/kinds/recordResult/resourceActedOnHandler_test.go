@@ -414,7 +414,7 @@ func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 		assert.True(t, restoreOf(t, r).Equal(restoredAt))
 	})
 
-	t.Run("and as of when its result was said, when it says nothing of when it was carried out", func(t *testing.T) {
+	t.Run("and as of when its result was said, when it says nothing of when it was carried out, which the record says too, for the look into it since to decide", func(t *testing.T) {
 		t.Parallel()
 
 		told := &restorer{}
@@ -427,6 +427,32 @@ func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 
 		require.Len(t, told.at, 1)
 		assert.True(t, told.at[0].Equal(restoredAt))
+
+		r, _ := f.stored(t, "fan-uuid")
+		assert.True(t, restoreOf(t, r).Equal(restoredAt), "the record says the restore it was reset for: %s", restoreOf(t, r))
+		assert.Equal(t, kindstest.Running, kindstest.Typed(r).Status.State, "and the rest as its result says")
+	})
+
+	t.Run("and so is one its resource waits on no more", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{}
+		f := restoring(t, told, waiting(kindstest.Starting, kindstest.Running, "start"))
+
+		// failed as its node went quiet, waiting on nothing any more.
+		f.racing.Cross(kindstest.Rewrite(f.memory, func(r *resource.Record) {
+			require.NoError(t, observe.Fail(r, "node_lost", kindstest.Moment))
+		}))
+
+		said := restored
+		said.At = restoredAt
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, said)))
+
+		r, _ := f.stored(t, "fan-uuid")
+		assert.True(t, restoreOf(t, r).Equal(restoredAt), "the record says the restore it was reset for: %s", restoreOf(t, r))
+		require.NotEmpty(t, told.at)
+		assert.True(t, told.at[len(told.at)-1].Equal(restoredAt))
 	})
 
 	t.Run("one its resource waits on no more, failed as its node went quiet once what lives in it was reset and before the restore was taken onto it, is taken all the same, and only what it says of the restore", func(t *testing.T) {
