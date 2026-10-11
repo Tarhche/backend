@@ -142,9 +142,10 @@ func TestAContainersGraph(t *testing.T) {
 				return false
 			}
 
-			c, running := w.dockerd.Holds(t, vmUUID).Container("web")
+			held, _ := w.dockerd.Held(vmUUID)
+			c, running := held.Container("web")
 
-			return w.dockerd.Holds(t, vmUUID).Volume("data") && running && c.State == container.StateRunning
+			return held.Volume("data") && running && c.State == container.StateRunning
 		}, settle, beat, "the volume, and then the container, were never made again")
 	})
 
@@ -166,7 +167,7 @@ func TestAContainersGraph(t *testing.T) {
 		assert.Equal(t, web.Spec.VM.Resources.CPUs, again.Spec.Resources.CPUs)
 
 		require.Eventually(t, func() bool {
-			held := w.dockerd.Holds(t, vmUUID)
+			held, _ := w.dockerd.Held(vmUUID)
 			c, there := held.Container("web")
 			_, networked := held.Network("backend")
 
@@ -877,7 +878,8 @@ func TestAVMDeletedUnderAContainer(t *testing.T) {
 	assert.Equal(t, vmKind.ResourcesOf(resized), again.Spec.Resources)
 
 	require.Eventually(t, func() bool {
-		c, there := w.dockerd.Holds(t, vmUUID).Container("web")
+		held, _ := w.dockerd.Held(vmUUID)
+		c, there := held.Container("web")
 
 		return there && c.State == container.StateRunning
 	}, settle, beat, "the container was never made again in it")

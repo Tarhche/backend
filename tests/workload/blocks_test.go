@@ -150,9 +150,10 @@ func TestAContainer(t *testing.T) {
 		require.Empty(t, deleted.ValidationErrors)
 
 		require.Eventually(t, func() bool {
-			_, there := w.dockerd.Holds(t, vmUUID).Container("web")
+			held, read := w.dockerd.Held(vmUUID)
+			_, there := held.Container("web")
 
-			return !there && len(w.containerRecords(t, vmUUID)) == 0
+			return read && !there && len(w.containerRecords(t, vmUUID)) == 0
 		}, settle, beat, "it was never removed")
 	})
 }
@@ -325,9 +326,10 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 		w.dockerd.Disconnect(t, vmUUID, "api", "backend")
 
 		require.Eventually(t, func() bool {
-			c, _ := w.dockerd.Holds(t, vmUUID).Container("api")
+			held, _ := w.dockerd.Held(vmUUID)
+			c, there := held.Container("api")
 
-			return c.NetworkSettings.Networks["backend"] != nil
+			return there && c.NetworkSettings.Networks["backend"] != nil
 		}, settle, beat, "it was never put back on the network")
 
 		c, _ := w.dockerd.Holds(t, vmUUID).Container("api")
@@ -360,9 +362,10 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 		require.Empty(t, deleted.ValidationErrors)
 
 		require.Eventually(t, func() bool {
-			_, there := w.dockerd.Holds(t, vmUUID).Network("backend")
+			held, read := w.dockerd.Held(vmUUID)
+			_, there := held.Network("backend")
 
-			return !there
+			return read && !there
 		}, settle, beat, "the network was never removed")
 	})
 
@@ -431,7 +434,11 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
 
-		require.Eventually(t, func() bool { return !w.dockerd.Holds(t, vmUUID).Volume("data") }, settle, beat, "the volume was never removed")
+		require.Eventually(t, func() bool {
+			held, read := w.dockerd.Held(vmUUID)
+
+			return read && !held.Volume("data")
+		}, settle, beat, "the volume was never removed")
 	})
 
 	t.Run("an image is pulled into it, and removed; one a container it keeps uses is not", func(t *testing.T) {
@@ -481,7 +488,11 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
 
-		require.Eventually(t, func() bool { return !w.dockerd.Holds(t, vmUUID).Image("redis:7") }, settle, beat, "the image was never removed")
+		require.Eventually(t, func() bool {
+			held, read := w.dockerd.Held(vmUUID)
+
+			return read && !held.Image("redis:7")
+		}, settle, beat, "the image was never removed")
 
 		require.Eventually(t, func() bool {
 			_, err := w.resources.GetOne(ctx, imageKind.Name, redis)
@@ -541,9 +552,10 @@ func TestARestoredDockerVM(t *testing.T) {
 	require.Empty(t, deleted.ValidationErrors)
 
 	require.Eventually(t, func() bool {
-		_, there := w.dockerd.Holds(t, vmUUID).Container("kept")
+		held, read := w.dockerd.Held(vmUUID)
+		_, there := held.Container("kept")
 
-		return !there && len(w.containerRecords(t, vmUUID)) == 1
+		return read && !there && len(w.containerRecords(t, vmUUID)) == 1
 	}, settle, beat, "kept was never deleted")
 
 	w.restore(t, vmUUID, snapshotUUID)

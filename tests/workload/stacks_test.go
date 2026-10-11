@@ -494,7 +494,7 @@ func TestAStacksGraph(t *testing.T) {
 				return false
 			}
 
-			held := w.dockerd.Holds(t, vmUUID)
+			held, _ := w.dockerd.Held(vmUUID)
 			c, running := held.Container(named("db"))
 
 			return held.Volume(named("data")) && running && c.State == "running"
@@ -552,7 +552,7 @@ func TestAStacksGraph(t *testing.T) {
 		assert.Equal(t, v.Metadata.Name, again.Metadata.Name)
 
 		require.Eventually(t, func() bool {
-			held := w.dockerd.Holds(t, vmUUID)
+			held, _ := w.dockerd.Held(vmUUID)
 			db, dbThere := held.Container(named("db"))
 			web, webThere := held.Container(named("web"))
 			_, networked := held.Network(named("backend"))
@@ -610,7 +610,8 @@ func TestAStacksGraph(t *testing.T) {
 		require.Empty(t, deleted.ValidationErrors)
 
 		require.Eventually(t, func() bool {
-			c, there := w.dockerd.Holds(t, vmUUID).Container(named("web"))
+			held, _ := w.dockerd.Held(vmUUID)
+			c, there := held.Container(named("web"))
 
 			return there && c.Labels[blockKinds.Label(containerKind.Name)] != before.Metadata.UUID && c.State == "created"
 		}, settle, beat, "web was never made again")

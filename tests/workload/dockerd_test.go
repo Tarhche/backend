@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -30,7 +29,6 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
-	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -1162,30 +1160,39 @@ func (h *holding) removeVolume(rw http.ResponseWriter, name string) bool {
 	return true
 }
 
-// Holds is what the dockerd of the VM id names holds now: nothing, when the
-// engine holds no instance of the VM. A wait reads it from a goroutine of its
-// own, which may not end the test, so what cannot be read fails the test
-// without ending it, and is nothing held.
+// Holds is what the dockerd of the VM id names holds now, read from the
+// test's own goroutine: what cannot be read, as of a VM the engine holds no
+// instance of, ends the test, so that what it says is not held is said of a
+// dockerd that is there. A wait reads it with Held.
 func (d *dockerd) Holds(t *testing.T, id string) holding {
 	t.Helper()
 
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	h, err := d.load(id)
-
-	switch {
-	case errors.Is(err, domain.ErrNotExists):
-		// a vm the engine holds no instance of, gone or not made yet, has no
-		// dockerd to hold anything.
-		return holding{Configs: make(map[string]created)}
-	case err != nil:
-		t.Errorf("what the dockerd of %s holds cannot be read: %v", id, err)
-
-		return holding{Configs: make(map[string]created)}
+	h, err := d.holding(id)
+	if err != nil {
+		t.Fatalf("what the dockerd of %s holds cannot be read: %v", id, err)
 	}
 
 	return h
+}
+
+// Held is what the dockerd of the VM id names holds now, and whether it could
+// be read, which it cannot of a VM the engine holds no instance of, gone or
+// not made yet: what a wait reads, from a goroutine of its own, which may not
+// end the test, and which looks again. One that waits for something not to
+// be held waits for it to be read so too.
+func (d *dockerd) Held(id string) (holding, bool) {
+	h, err := d.holding(id)
+
+	return h, err == nil
+}
+
+// holding is what the dockerd of the VM id names holds now, read off the
+// VM's disk.
+func (d *dockerd) holding(id string) (holding, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	return d.load(id)
 }
 
 // Container is the container a name names, and whether there is one.
