@@ -287,10 +287,12 @@ func (s *session) read() error {
 				waitErr = fmt.Errorf("the vmhost could not wait for the command: %s", reason)
 			}
 
-			s.exit(exitCode, waitErr)
-
-			// the command has ended, and its input with it.
+			// the command has ended, and its input with it: a write to it is
+			// refused as a closed pipe refuses it from the moment whoever
+			// waits for the command hears it ended.
 			s.stdin.credit.Fail(io.ErrClosedPipe)
+
+			s.exit(exitCode, waitErr)
 
 		case wire.FrameWindow:
 			stream, increment, err := wire.ParseWindow(payload)
