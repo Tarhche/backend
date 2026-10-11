@@ -156,7 +156,7 @@ func TestAContainer(t *testing.T) {
 }
 
 // TestAContainerAskedForMore holds what a container is asked for beyond its
-// image, its ports and its mounts, as a compose file's service may ask for it,
+// image, its ports and its mounts, as a stack's file's service may ask for it,
 // to reaching its VM's dockerd as it was asked for: privileged, held to a
 // number of processes, run as a user of its own, with a runtime its dockerd
 // has, and published on one address of its VM. A runtime its dockerd lacks is

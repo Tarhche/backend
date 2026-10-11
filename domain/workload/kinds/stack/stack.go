@@ -9,8 +9,8 @@
 // their own kinds, which its graph makes in its Docker VM, in order: its VM,
 // then its networks and its volumes, then its services as they depend on one
 // another, and then the stack, which says of each service the container made
-// of it (Status.Services). Nothing runs compose, and nothing reads what
-// compose would label.
+// of it (Status.Services). The platform makes all of it, and labels it as its
+// own.
 //
 // Its state is the control plane's (StateBy: OnControlPlane): no node says
 // what a stack is doing. While its graph makes it, it is deploying; once made,
@@ -113,9 +113,8 @@ const (
 type Spec struct {
 	VM VMChoice `json:"vm"`
 
-	// Compose is its file, as it was given (File). What compose would call
-	// its project it does not say: what its graph makes is named under the
-	// stack's slug.
+	// Compose is its file, as it was given (File). It names no project: what
+	// its graph makes is named under the stack's slug.
 	Compose string `json:"compose"`
 }
 

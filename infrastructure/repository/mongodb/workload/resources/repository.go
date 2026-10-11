@@ -14,8 +14,8 @@
 //
 // Its uuid is its _id, so no two resources share one, whatever their kinds,
 // and no two share a slug either: a VM's and a task's are what the ingress
-// serves their ports under and a stack's is its compose project, and the one
-// collection holds each to one resource.
+// serves their ports under and a stack's is what its graph names what it
+// makes under, and the one collection holds each to one resource.
 //
 // The spec and the status are the kind's own JSON, kept as documents of
 // their own so that they can be read in the database as they are in the API.

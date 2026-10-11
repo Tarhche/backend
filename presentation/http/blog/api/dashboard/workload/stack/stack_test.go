@@ -192,6 +192,22 @@ func TestCreate(t *testing.T) {
 		assert.JSONEq(t, `{"vm": {"uuid": "vm-uuid", "name": "docker-1", "created": false}, "stack": `+workloadtest.StackJSON+`}`, response.Body.String())
 	})
 
+	t.Run("a file it does not take is refused field by field, under each path in the file, in the reader's language", func(t *testing.T) {
+		t.Parallel()
+
+		var workload controlplane.MockClient
+		workload.On("CreateStack", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Once().Return(
+			workloadControlPlane.CreatedStack{},
+			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"compose.services.web.build": "unsupported_key"}},
+		)
+		defer workload.AssertExpectations(t)
+
+		response := workloadhttptest.Serve(routes(&workload), http.MethodPost, "/api/dashboard/workload/stacks", `{"name": "shop", "compose": "services:\n  web:\n    image: nginx\n    build: .\n"}`)
+
+		assert.Equal(t, http.StatusBadRequest, response.Code)
+		assert.JSONEq(t, `{"errors": {"compose.services.web.build": "a stack's file does not take this key"}}`, response.Body.String())
+	})
+
 	t.Run("a Docker VM no node has room for, made for it as it named none", func(t *testing.T) {
 		t.Parallel()
 

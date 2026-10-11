@@ -8,9 +8,10 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 )
 
-// UseCase takes a stack down and removes it. Compose does it inside the VM in
-// its own time, and the record goes once it has. Its volumes stay in the VM,
-// among the VM's volumes, until they are removed there.
+// UseCase takes a stack down and removes it. Its graph removes its
+// containers and its networks in its own time, and the record goes once it
+// has. Its volumes stay in the VM, among the VM's volumes, until they are
+// removed there.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator

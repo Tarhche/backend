@@ -44,11 +44,12 @@ import (
 const shopCompose = "services:\n  web:\n    image: nginx:alpine\n  cache:\n    image: redis:alpine\n"
 
 // TestAStack walks a stack through its life from the dashboard, as a kind
-// the control plane keeps and its graph makes, no compose anywhere: made in a
-// Docker VM made for it, degraded when one of its containers falls over and
-// stays down, as a container on its own does, stopped, started and
-// restarted, waiting while its VM is stopped, and deleted, its containers and
-// its network with it, and its images left to nobody.
+// the control plane keeps and its graph makes, all of it the platform's: made
+// in a Docker VM made for it, its containers listed as its own, degraded when
+// one of its containers falls over and stays down, as a container on its own
+// does, stopped, started and restarted, waiting while its VM is stopped, and
+// deleted, its containers and its network with it, and its images left to
+// nobody.
 func TestAStack(t *testing.T) {
 	t.Parallel()
 

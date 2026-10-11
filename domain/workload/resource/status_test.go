@@ -97,9 +97,9 @@ func TestMerge(t *testing.T) {
 			want:     `{"state":"running","uptime":2,"services":[]}`,
 		},
 		"and what it does not mention is kept": {
-			recorded: `{"state":"running","output":"compose said so","uptime":1}`,
+			recorded: `{"state":"running","output":"its node said so","uptime":1}`,
 			observed: `{"state":"running","uptime":2}`,
-			want:     `{"state":"running","output":"compose said so","uptime":2}`,
+			want:     `{"state":"running","output":"its node said so","uptime":2}`,
 		},
 		"but what every kind shares is never simply what it said": {
 			recorded: `{"state":"stopping","expected":"stopped","reason":"","since":"2026-10-06T12:00:00Z"}`,

@@ -14,7 +14,7 @@ import (
 // It travels as a node request, on the subject every node already answers
 // on (noderequest.Subject), rather than on a subject of its own:
 //
-//   - its Op is the kind and the action, "stack.state" or "vm.logs", the
+//   - its Op is the kind and the action, "container.logs" or "vm.logs", the
 //     way a VM's log was asked before VMs were a kind. A kind's name and an
 //     action's have no dot in them, so an op splits back into the two at its
 //     one dot, and one with more than one is never mistaken for a kind's;
@@ -49,7 +49,7 @@ type query struct {
 	Resource Raw             `json:"resource"`
 }
 
-// Op is the operation a kind's query action is asked as: "stack.state".
+// Op is the operation a kind's query action is asked as: "container.logs".
 func Op(kindName string, action string) noderequest.Op {
 	return noderequest.Op(kindName + "." + action)
 }

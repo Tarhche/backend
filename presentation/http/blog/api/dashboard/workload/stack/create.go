@@ -16,7 +16,7 @@ func NewCreateHandler(useCase *createStack.UseCase) *createHandler {
 }
 
 // @Summary		Deploy a stack
-// @Description	deploy a compose project for the caller: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. The deploy happens after the answer, which says which VM it went into and whether it was made for it
+// @Description	deploy a stack for the caller from its file, which the platform reads and carries out itself, each service a container of its own: YAML in the shape of a compose file, of which it takes services (at least one), volumes and networks at the top, each volume and network with nothing beneath it; and of a service, image, which it needs, command and entrypoint, environment, ports (short or long form), privileged, restart (no or unless-stopped), depends_on (service_started), volumes (named ones the file declares, or binds of absolute paths), networks, pids_limit, user, runtime and resources.limits.cpus and .memory. Anything else, build, healthcheck, deploy, profiles, extends, configs, secrets, x- keys, anchors and aliases, and a top-level version or name among it, is refused, and so is everything else wrong with it, field by field under its path in the file, as compose.<path>: compose.services.web.build. It goes in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. Its graph makes it after the answer, which says which VM it goes into and whether that is made for it
 // @Tags			dashboard workload stacks
 // @Accept			json
 // @Produce		json

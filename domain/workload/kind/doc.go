@@ -51,7 +51,7 @@
 //     needs no database, and its ResourceActedOn, on ResourceActedOnName,
 //     back;
 //   - a Query, as a node request whose op is the kind and the action,
-//     "stack.state", on the subject every node already answers on;
+//     "container.logs", on the subject every node already answers on;
 //   - and, every beat, a Heartbeat of every instance of every kind whose
 //     state its nodes know, on a subject of the kind's own (HeartbeatName),
 //     beside the node's own heartbeat and stamped as that is, so that a

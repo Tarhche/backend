@@ -39,7 +39,7 @@ func TestUseCase_Execute(t *testing.T) {
 			presented, err := json.Marshal(response)
 			require.NoError(t, err)
 
-			// a listing is read to choose one, so the compose files stay out
+			// a listing is read to choose one, so the files stay out
 			// of it.
 			assert.JSONEq(t, `{
 				"items": [{

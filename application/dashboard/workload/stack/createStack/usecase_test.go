@@ -28,7 +28,7 @@ func useCase(workload *controlplane.MockClient) *UseCase {
 func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
 
-	t.Run("deploys the compose file for whoever asks, and says where it went", func(t *testing.T) {
+	t.Run("deploys the stack's file for whoever asks, and says where it went", func(t *testing.T) {
 		t.Parallel()
 
 		deploying := workloadtest.Stack()
@@ -119,7 +119,7 @@ func TestUseCase_Execute(t *testing.T) {
 		workload.AssertNotCalled(t, "CreateStack", mock.Anything, mock.Anything, mock.Anything)
 	})
 
-	t.Run("a compose file of nothing but space is none", func(t *testing.T) {
+	t.Run("a file of nothing but space is none", func(t *testing.T) {
 		t.Parallel()
 
 		assert.Equal(t, domain.ValidationErrors{"compose": "required_field"}, (&Request{Name: "shop", Compose: " \n "}).Validate())
@@ -153,6 +153,29 @@ func TestUseCase_Execute(t *testing.T) {
 			assert.Nil(t, response.Stack)
 		})
 	}
+
+	t.Run("what of its file the control plane refuses is said under its path in the file, in the reader's language", func(t *testing.T) {
+		t.Parallel()
+
+		var workload controlplane.MockClient
+		workload.On("CreateStack", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Once().Return(
+			workloadControlPlane.CreatedStack{},
+			&client.ValidationError{ValidationErrors: domain.ValidationErrors{
+				"compose.services.web.build":         "unsupported_key",
+				"compose.services.web.depends_on.db": "undefined_service",
+			}},
+		)
+		defer workload.AssertExpectations(t)
+
+		response, err := useCase(&workload).Execute(context.Background(), &Request{Name: "shop", Compose: compose, OwnerUUID: workloadtest.OwnerUUID})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{
+			"compose.services.web.build":         "a stack's file does not take this key",
+			"compose.services.web.depends_on.db": "the file has no service called this",
+		}, response.ValidationErrors)
+		assert.Nil(t, response.Stack, "and nothing is deployed")
+	})
 
 	t.Run("what the control plane refuses about the vm is said where this request asked for it", func(t *testing.T) {
 		t.Parallel()

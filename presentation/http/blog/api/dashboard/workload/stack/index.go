@@ -17,7 +17,7 @@ func NewIndexHandler(useCase *getStacks.UseCase, owner workload.Owner) *indexHan
 }
 
 // @Summary		List stacks
-// @Description	a page of stacks, without their compose files, in one VM with ?vm=: anybody's on the workload routes, the caller's own on the my routes
+// @Description	a page of stacks, without their files, in one VM with ?vm=: anybody's on the workload routes, the caller's own on the my routes
 // @Tags			dashboard workload stacks
 // @Produce		json
 // @Param			page	query		int		false	"Page"	default(1)

@@ -1,5 +1,5 @@
-// Package stack is a compose project deployed into a Docker VM, as the blog
-// shows one.
+// Package stack is a stack in a Docker VM, as the blog shows one: the
+// services, volumes and networks of its file, which its graph made there.
 //
 // What a stack is, and everything the workload does with it, is the stack
 // kind's (domain/workload/kinds/stack): the control plane keeps it as a
@@ -10,7 +10,7 @@ package stack
 
 import "time"
 
-// Stack is one compose project.
+// Stack is one stack.
 type Stack struct {
 	UUID      string
 	Name      string
@@ -24,12 +24,13 @@ type Stack struct {
 	// wherever its stacks are shown.
 	VMName string
 
-	// Slug is the compose project's name: unique, lowercase letters, digits
-	// and dashes. What the compose file calls its project is ignored.
+	// Slug is what it is known by inside its VM: unique, lowercase letters,
+	// digits and dashes. What its graph makes is named under it,
+	// <slug>_<name>.
 	Slug string
 
-	// Compose is the YAML as it was given. A stack is not edited: there is no
-	// update, only deploy and remove.
+	// Compose is its file, the YAML as it was given. A stack is not edited:
+	// there is no update, only deploy and remove.
 	Compose string
 
 	// ExpectedState is what the stack was asked to be, Running or Stopped.
@@ -49,7 +50,7 @@ type Stack struct {
 type State int
 
 const (
-	// Deploying is a stack whose project is being brought up.
+	// Deploying is a stack its graph is making.
 	Deploying State = 1
 
 	// Running is a stack whose every service runs.
@@ -63,19 +64,21 @@ const (
 
 	Restarting State = 6
 
-	// Removing is a stack whose project is being taken down. Its record goes
-	// once that is done.
+	// Removing is a stack its graph is removing. Its record goes once that is
+	// done.
 	Removing State = 7
 
 	// Failed is a stack whose plan failed. Its Reason says why.
 	Failed State = 8
 
-	// Degraded is a stack some of whose services are not running. It is
-	// deployed again, to bring them back.
+	// Degraded is a stack some of whose services are not running: one whose
+	// container fell over stays down, as a container of its own would, until
+	// the stack is started.
 	Degraded State = 9
 
-	// Waiting is a stack that is not in its VM: one whose VM is not running,
-	// and one not deployed there yet, or any more. Its Reason says which.
+	// Waiting is a stack whose graph waits on what it needs, which cannot be
+	// made now: its VM is not running, or a container of it is being removed.
+	// Its Reason says which.
 	Waiting State = 10
 )
 

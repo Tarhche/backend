@@ -39,6 +39,12 @@ func TestOf(t *testing.T) {
 			refused: domain.ValidationErrors{"vm": "there is no room for it on any node right now, try again later", "compose": "this is larger than allowed"},
 		},
 		{
+			name:    "and what of a stack's file it refuses, under its path in the file",
+			locale:  translation.EN,
+			err:     &client.ValidationError{ValidationErrors: domain.ValidationErrors{"compose.services.web.build": "unsupported_key"}},
+			refused: domain.ValidationErrors{"compose.services.web.build": "a stack's file does not take this key"},
+		},
+		{
 			name:    "and in Farsi to somebody reading Farsi",
 			locale:  translation.FA,
 			err:     &client.ValidationError{ValidationErrors: domain.ValidationErrors{"resources.memory": "quota_exceeded"}},

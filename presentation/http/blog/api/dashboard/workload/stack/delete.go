@@ -17,7 +17,7 @@ func NewDeleteHandler(useCase *deleteStack.UseCase, owner workload.Owner) *delet
 }
 
 // @Summary		Delete a stack
-// @Description	take a stack down and remove it; it is removing until compose is done. Its volumes stay
+// @Description	take a stack down and remove it; it is removing until its graph has removed its containers and its networks. Its volumes stay, and so does its VM
 // @Tags			dashboard workload stacks
 // @Param			uuid	path		string	true	"Stack UUID"
 // @Success		202		{object}	map[string]interface{}

@@ -8,8 +8,9 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 )
 
-// UseCase asks for a stopped stack's containers to be started again. Compose
-// runs inside the VM in its own time: the stack's state says how it went.
+// UseCase asks for a stopped stack's containers to be started again. Its
+// graph starts them in its own time, a level of its services at a time: the
+// stack's state says how it went.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator

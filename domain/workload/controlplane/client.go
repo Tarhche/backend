@@ -91,10 +91,10 @@ type Client interface {
 	// Docker is the building blocks of a Docker VM, its containers, images,
 	// networks and volumes, as the control plane keeps them: what was made
 	// through it is a resource of its kind, stored and brought back to what
-	// was asked of it, and is shown as its node last reported it; what the
-	// VM's dockerd holds besides, a stack's or what was made from the VM's
-	// terminal, is shown beside it as its node reported it, and marked
-	// unmanaged when it is nobody's. Whatever is made is waited for, for as
+	// was asked of it, and is shown as its node last reported it, a stack's
+	// among it; what the VM's dockerd holds besides, what was made from the
+	// VM's terminal, is shown beside it as its node reported it, and marked
+	// unmanaged, being nobody's. Whatever is made is waited for, for as
 	// long as dockerd may take, and a log or a sample of what a container
 	// uses is read from dockerd as it is now. A VM that is not a Docker VM is
 	// refused by every call, and so is one that is neither running nor on its
@@ -150,12 +150,11 @@ type Client interface {
 	// empty.
 	Stacks(ctx context.Context, ownerUUID string, vmUUID string, page uint) (Page[stack.Stack], error)
 
-	// Stack is one stack and the containers compose made for it.
+	// Stack is one stack and the containers its graph made of its services.
 	Stack(ctx context.Context, ownerUUID string, uuid string) (StackDetail, error)
 
-	// CreateStack deploys a compose project into the Docker VM the request
-	// chooses, making that VM first when it says so or when ownerUUID has
-	// none.
+	// CreateStack deploys a stack, from its file, into the Docker VM the
+	// request chooses, its graph making that VM first when it names none.
 	CreateStack(ctx context.Context, ownerUUID string, request StackRequest) (CreatedStack, error)
 
 	// DeleteStack takes a stack down and removes it. Its volumes stay in its
@@ -281,11 +280,11 @@ type VMContainer struct {
 	VMName string
 }
 
-// StackRequest is a compose project to deploy, and where.
+// StackRequest is a stack to deploy, from its file, and where.
 type StackRequest struct {
 	Name string
 
-	// Compose is the YAML, as it was written.
+	// Compose is its file, the YAML as it was written.
 	Compose string
 
 	VM DockerVMChoice
@@ -297,8 +296,8 @@ type CreatedStack struct {
 	Stack stack.Stack
 }
 
-// StackDetail is a stack and the containers compose made for it, as its
-// node last reported them.
+// StackDetail is a stack and the containers its graph made of its services,
+// as their node last reported them.
 type StackDetail struct {
 	stack.Stack
 

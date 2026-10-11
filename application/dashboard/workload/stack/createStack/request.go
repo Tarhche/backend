@@ -7,11 +7,11 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
-// MaxCompose is the longest compose file a stack is deployed from, in bytes.
+// MaxCompose is the longest file a stack is deployed from, in bytes.
 const MaxCompose = 256 << 10
 
-// Request is a compose project to deploy into one of the caller's Docker VMs.
-// It is always deployed for whoever asks.
+// Request is a stack to deploy into one of the caller's Docker VMs, from its
+// file. It is always deployed for whoever asks.
 //
 // Which VM it goes in is the request's to say, as a container's is: one named
 // by VMUUID, a new one described by VM, or neither, which makes a new one
@@ -19,8 +19,11 @@ const MaxCompose = 256 << 10
 type Request struct {
 	Name string `json:"name"`
 
-	// Compose is the YAML, as it would be handed to docker compose. What it
-	// calls its project is ignored: the stack's slug is the project.
+	// Compose is its file, YAML in the shape of a compose file, of which the
+	// platform takes what it carries out itself: services, volumes and
+	// networks. Anything else is refused under its path in the file
+	// (compose.services.web.build). It names no project: what the stack's
+	// graph makes is named under the stack's slug.
 	Compose string `json:"compose"`
 
 	VMUUID string             `json:"vm_uuid,omitempty"`

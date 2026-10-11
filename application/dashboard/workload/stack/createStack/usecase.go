@@ -11,12 +11,13 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
-// UseCase deploys a compose project into a Docker VM of the caller's.
+// UseCase deploys a stack into a Docker VM of the caller's, from its file.
 //
 // The deploy itself happens after the answer: what comes back is a stack that
-// is still deploying, in the VM it named or one the control plane made for it.
-// That the YAML is compose at all is the control plane's to say, since it is
-// the one that reads it.
+// is still deploying, in the VM it named or one its graph is to make for it.
+// What of the file the platform takes, and what it refuses, under the path in
+// the file of each (compose.services.web.build), is the control plane's to
+// say, since it is the one that reads it.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	validator  domain.Validator

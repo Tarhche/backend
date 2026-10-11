@@ -17,7 +17,7 @@ func NewShowHandler(useCase *getStack.UseCase, owner workload.Owner) *showHandle
 }
 
 // @Summary		Show a stack
-// @Description	one stack, with its compose file and the containers compose made for it as its VM lists them now; note is vm_not_running when there are none because its VM is not running
+// @Description	one stack, with its file and the containers its graph made of its services as its VM lists them now, each with the stack's slug and uuid and its service; note is vm_not_running when there are none because its VM is not running
 // @Tags			dashboard workload stacks
 // @Produce		json
 // @Param			uuid	path		string	true	"Stack UUID"

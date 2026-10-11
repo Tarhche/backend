@@ -205,8 +205,11 @@ definitions:
     properties:
       compose:
         description: |-
-          Compose is the YAML, as it would be handed to docker compose. What it
-          calls its project is ignored: the stack's slug is the project.
+          Compose is its file, YAML in the shape of a compose file, of which the
+          platform takes what it carries out itself: services, volumes and
+          networks. Anything else is refused under its path in the file
+          (compose.services.web.build). It names no project: what the stack's
+          graph makes is named under the stack's slug.
         type: string
       name:
         type: string
@@ -4642,8 +4645,8 @@ paths:
       - dashboard workload snapshots
   /dashboard/my/workload/stacks:
     get:
-      description: 'a page of stacks, without their compose files, in one VM with
-        ?vm=: anybody''s on the workload routes, the caller''s own on the my routes'
+      description: 'a page of stacks, without their files, in one VM with ?vm=: anybody''s
+        on the workload routes, the caller''s own on the my routes'
       parameters:
       - default: 1
         description: Page
@@ -4670,8 +4673,9 @@ paths:
       - dashboard workload stacks
   /dashboard/my/workload/stacks/{uuid}:
     delete:
-      description: take a stack down and remove it; it is removing until compose is
-        done. Its volumes stay
+      description: take a stack down and remove it; it is removing until its graph
+        has removed its containers and its networks. Its volumes stay, and so does
+        its VM
       parameters:
       - description: Stack UUID
         in: path
@@ -4700,9 +4704,10 @@ paths:
       tags:
       - dashboard workload stacks
     get:
-      description: one stack, with its compose file and the containers compose made
-        for it as its VM lists them now; note is vm_not_running when there are none
-        because its VM is not running
+      description: one stack, with its file and the containers its graph made of its
+        services as its VM lists them now, each with the stack's slug and uuid and
+        its service; note is vm_not_running when there are none because its VM is
+        not running
       parameters:
       - description: Stack UUID
         in: path
@@ -6673,8 +6678,8 @@ paths:
       - dashboard workload snapshots
   /dashboard/workload/stacks:
     get:
-      description: 'a page of stacks, without their compose files, in one VM with
-        ?vm=: anybody''s on the workload routes, the caller''s own on the my routes'
+      description: 'a page of stacks, without their files, in one VM with ?vm=: anybody''s
+        on the workload routes, the caller''s own on the my routes'
       parameters:
       - default: 1
         description: Page
@@ -6702,10 +6707,21 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'deploy a compose project for the caller: in the Docker VM vm_uuid
-        names, in a new one vm describes, or with neither in a new one made with the
-        defaults. The deploy happens after the answer, which says which VM it went
-        into and whether it was made for it'
+      description: 'deploy a stack for the caller from its file, which the platform
+        reads and carries out itself, each service a container of its own: YAML in
+        the shape of a compose file, of which it takes services (at least one), volumes
+        and networks at the top, each volume and network with nothing beneath it;
+        and of a service, image, which it needs, command and entrypoint, environment,
+        ports (short or long form), privileged, restart (no or unless-stopped), depends_on
+        (service_started), volumes (named ones the file declares, or binds of absolute
+        paths), networks, pids_limit, user, runtime and resources.limits.cpus and
+        .memory. Anything else, build, healthcheck, deploy, profiles, extends, configs,
+        secrets, x- keys, anchors and aliases, and a top-level version or name among
+        it, is refused, and so is everything else wrong with it, field by field under
+        its path in the file, as compose.<path>: compose.services.web.build. It goes
+        in the Docker VM vm_uuid names, in a new one vm describes, or with neither
+        in a new one made with the defaults. Its graph makes it after the answer,
+        which says which VM it goes into and whether that is made for it'
       parameters:
       - description: Stack
         in: body
@@ -6737,8 +6753,9 @@ paths:
       - dashboard workload stacks
   /dashboard/workload/stacks/{uuid}:
     delete:
-      description: take a stack down and remove it; it is removing until compose is
-        done. Its volumes stay
+      description: take a stack down and remove it; it is removing until its graph
+        has removed its containers and its networks. Its volumes stay, and so does
+        its VM
       parameters:
       - description: Stack UUID
         in: path
@@ -6767,9 +6784,10 @@ paths:
       tags:
       - dashboard workload stacks
     get:
-      description: one stack, with its compose file and the containers compose made
-        for it as its VM lists them now; note is vm_not_running when there are none
-        because its VM is not running
+      description: one stack, with its file and the containers its graph made of its
+        services as its VM lists them now, each with the stack's slug and uuid and
+        its service; note is vm_not_running when there are none because its VM is
+        not running
       parameters:
       - description: Stack UUID
         in: path

@@ -1,5 +1,4 @@
-// Package docker stands in for what runs inside a Docker VM: its dockerd, and
-// docker compose.
+// Package docker stands in for what runs inside a Docker VM: its dockerd.
 package docker
 
 import (

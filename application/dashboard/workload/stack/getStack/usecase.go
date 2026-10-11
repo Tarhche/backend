@@ -7,8 +7,8 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 )
 
-// UseCase reads one stack, with its compose file and the containers compose
-// made for it as its VM lists them now.
+// UseCase reads one stack, with its file and the containers its graph made
+// of its services as its VM lists them now.
 type UseCase struct {
 	workload workloadControlPlane.Client
 	owners   *presenter.Directory

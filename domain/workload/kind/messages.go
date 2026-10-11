@@ -79,8 +79,8 @@ type ResourceActedOn struct {
 	// Reason is why it failed, in the words of whatever failed it.
 	Reason string `json:"reason,omitempty"`
 
-	// Output is what the action printed, compose's say: the last MaxOutput
-	// bytes of it.
+	// Output is what the action printed, when it printed anything: the last
+	// MaxOutput bytes of it.
 	Output string `json:"output,omitempty"`
 
 	At time.Time `json:"at,omitzero"`

@@ -98,8 +98,8 @@ type Metadata struct {
 	Name string `json:"name,omitempty"`
 
 	// Slug is the name it is reached under, unique within its kind: a VM's
-	// hostname label, a stack's compose project. A kind that is reached under
-	// no name leaves it empty.
+	// hostname label, the name a stack's graph names what it makes under. A
+	// kind that is reached under no name leaves it empty.
 	Slug string `json:"slug,omitempty"`
 
 	// OwnerUUID is the person it belongs to, or the guest for the code

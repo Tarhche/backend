@@ -1188,26 +1188,27 @@ func dockerObjectTools() []tool {
 	)
 }
 
-// stackTools are compose projects deployed into Docker VMs. A stack is never
-// edited: a different compose file is a new stack.
+// stackTools are stacks in Docker VMs: the services, volumes and networks of
+// a file, which the platform reads and makes itself. A stack is never edited:
+// a different file is a new stack.
 func stackTools() []tool {
 	return slices.Concat(
 		both(tool{
 			name:        "dashboard_stacks_list",
-			description: "A page of the stacks the workload holds, whoever owns them, without their compose files, narrowed to one VM's with vm.",
+			description: "A page of the stacks the workload holds, whoever owns them, without their files, narrowed to one VM's with vm.",
 			route:       "GET /api/dashboard/workload/stacks",
 			params:      []Parameter{page(), text("vm", "only the stacks deployed into the VM with this uuid")},
 			readOnly:    true,
 		}, "A page of this session owner's own stacks, narrowed to one VM's with vm."),
 		[]tool{{
 			name:        "dashboard_stack_create",
-			description: "Deploy a compose project for this session's owner: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. The deploy happens after the answer, which says which VM it went into and whether it was made for it.",
+			description: "Deploy a stack for this session's owner from its file, YAML in the shape of a compose file, of which the platform takes services, volumes and networks; of a service, image, command, entrypoint, environment, ports, privileged, restart (no or unless-stopped), depends_on (service_started), volumes, networks, pids_limit, user, runtime and resources.limits.cpus and .memory. Anything else is refused under its path in the file, as compose.<path>. It goes in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. Its graph makes it after the answer, which says which VM it goes into and whether that is made for it.",
 			route:       "POST /api/dashboard/workload/stacks",
 			body:        body[dashboardCreateStack.Request](),
 		}},
 		both(tool{
 			name:        "dashboard_stack_show",
-			description: "One stack, whoever owns it, with its compose file, the output of its last compose command and its containers as its VM lists them now.",
+			description: "One stack, whoever owns it, with its file and the containers its graph made of its services, as its VM lists them now.",
 			route:       "GET /api/dashboard/workload/stacks/{uuid}",
 			params:      []Parameter{uuidOf("stack")},
 			readOnly:    true,

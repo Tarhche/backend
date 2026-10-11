@@ -8,7 +8,7 @@ import (
 )
 
 // UseCase lists stacks: everybody's or one person's own, in every VM or in
-// one. A listing leaves their compose files out.
+// one. A listing leaves their files out.
 type UseCase struct {
 	workload workloadControlPlane.Client
 	owners   *presenter.Directory
