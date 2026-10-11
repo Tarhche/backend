@@ -631,6 +631,19 @@ func (d *Dispatcher) orphan(nodeName string, uuid string, at time.Time) (time.Ti
 	return since, asked
 }
 
+// Kept lets go of what a node said of a resource nobody kept a record of,
+// once a heartbeat of it finds one: what it said with none before then was
+// said, heard late, of one whose record its delete took away before its graph
+// made it again under its uuid, and makes no run with what it says once the
+// record goes again, so that heartbeats heard late a while apart, each of a
+// moment before a delete, add up to none.
+func (d *Dispatcher) Kept(_ context.Context, _ kind.Descriptor, nodeName string, uuid string) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	delete(d.orphans, nodeName+"/"+uuid)
+}
+
 // Forget takes a resource's record away, when there is nothing of it left
 // anywhere to wait for.
 func (d *Dispatcher) Forget(ctx context.Context, r resource.Record) error {

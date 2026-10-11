@@ -47,6 +47,13 @@ type Orphans interface {
 	// own clock, says: one it took before the record's delete removed the
 	// resource is heard after the record went now and then.
 	Orphaned(ctx context.Context, d kind.Descriptor, nodeName string, uuid string, at time.Time) error
+
+	// Kept is told that a heartbeat of nodeName's says of a resource of d's
+	// kind, by uuid, that somebody keeps a record of: what its node said of
+	// it with none before then, heard late once a delete took its record
+	// away and before its graph made it again under its uuid, was said of no
+	// orphan.
+	Kept(ctx context.Context, d kind.Descriptor, nodeName string, uuid string)
 }
 
 // Observer writes down what the nodes' heartbeats say of the resources of
@@ -125,7 +132,8 @@ func NewObserver(registry *kind.Registry[kind.ControlPlaneBinding], resources re
 //
 // An instance nobody keeps a record of, of a kind that lives in nothing, is
 // an orphan, which orphans are told of, when the observer was given them: a
-// VM deleted while its node could not be told. What lives in a parent is its
+// VM deleted while its node could not be told. They are told of one a record
+// is found for too, which no orphan is. What lives in a parent is its
 // parent's, and is never an orphan of its own. A kind whose strategy is a
 // kind.Witness is then told of the instance, and whether a record is it: a
 // container a VM's terminal made is the kind's to show, never the framework's
@@ -174,8 +182,10 @@ func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time,
 		}
 	}
 
-	if !kept && o.orphans != nil && len(d.Parent) == 0 && len(instance.UUID) > 0 {
-		if err := o.orphans.Orphaned(ctx, d, nodeName, instance.UUID, at); err != nil {
+	if o.orphans != nil && len(d.Parent) == 0 && len(instance.UUID) > 0 {
+		if kept {
+			o.orphans.Kept(ctx, d, nodeName, instance.UUID)
+		} else if err := o.orphans.Orphaned(ctx, d, nodeName, instance.UUID, at); err != nil {
 			o.logger.WarnContext(ctx, "could not tell what a node holds that nobody keeps a record of", "error", err, "node", nodeName, "kind", d.Name, "uuid", instance.UUID)
 		}
 	}

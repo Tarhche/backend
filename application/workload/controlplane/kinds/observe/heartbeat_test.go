@@ -643,10 +643,11 @@ func (p parents) Down(_ context.Context, parent kind.Reference) (kind.State, err
 }
 
 // orphans are told of what a node holds that nobody keeps a record of, and
-// as of when.
+// as of when, and of what it holds that somebody does.
 type orphans struct {
 	told []string
 	at   []time.Time
+	kept []string
 }
 
 func (o *orphans) Orphaned(_ context.Context, d kind.Descriptor, nodeName string, uuid string, at time.Time) error {
@@ -654,6 +655,10 @@ func (o *orphans) Orphaned(_ context.Context, d kind.Descriptor, nodeName string
 	o.at = append(o.at, at)
 
 	return nil
+}
+
+func (o *orphans) Kept(_ context.Context, d kind.Descriptor, nodeName string, uuid string) {
+	o.kept = append(o.kept, d.Name+" "+uuid+" on "+nodeName)
 }
 
 func TestObserver_Heartbeat_orphans(t *testing.T) {
@@ -699,6 +704,7 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 
 		assert.Equal(t, []string{"fan orphan on " + kindstest.NodeName}, told.told, "one kept elsewhere is its own node's to speak for, and one that says no uuid names nothing to tell of")
 		assert.Equal(t, []time.Time{kindstest.Moment}, told.at, "as of the heartbeat its node took")
+		assert.Equal(t, []string{"fan kept on " + kindstest.NodeName, "fan kept-elsewhere on " + kindstest.NodeName}, told.kept, "and of what has a record, which no orphan is")
 	})
 
 	t.Run("what lives in a parent is never an orphan of its own", func(t *testing.T) {
@@ -710,6 +716,7 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, running("orphan"))
 
 		assert.Empty(t, told.told)
+		assert.Empty(t, told.kept)
 	})
 
 	t.Run("and an observer given no orphans tells nobody", func(t *testing.T) {

@@ -949,6 +949,40 @@ func TestDispatcher_Orphaned(t *testing.T) {
 		assert.Equal(t, kindstest.Moment, sent[0].Orphaned, "as of the first late heartbeat, before the vm was made again")
 	})
 
+	t.Run("heartbeats heard late a while apart, each of a moment before a vm's delete, between which its record is found again, add up to nothing", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		f.dispatch = dispatch.New(f.resources, f.producer, f.waiters, f.clock.Now, dispatch.OrphansAfter(30*time.Second))
+
+		for _, ghost := range []time.Duration{0, 15 * time.Second, 30 * time.Second} {
+			// between ghosts the vm's record is there again, made again under
+			// its uuid by its graph, and a heartbeat of it finds it.
+			f.clock.Advance(15 * time.Second)
+			f.dispatch.Kept(ctx, kindstest.Descriptor(), kindstest.NodeName, "vm-made-again")
+			require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "vm-made-again", kindstest.Moment.Add(ghost)))
+		}
+
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
+		require.NoError(t, err)
+		assert.Empty(t, sent, "three ghosts 15 s apart are no orphan said for 30 s")
+
+		// with nothing in between found, the same heartbeats are what its
+		// node says of an orphan heard now and then, as another control plane
+		// hears it, and are one run.
+		g := newFixture(t)
+		g.dispatch = dispatch.New(g.resources, g.producer, g.waiters, g.clock.Now, dispatch.OrphansAfter(30*time.Second))
+
+		for _, ghost := range []time.Duration{0, 15 * time.Second, 30 * time.Second} {
+			g.clock.Advance(15 * time.Second)
+			require.NoError(t, g.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan", kindstest.Moment.Add(ghost)))
+		}
+
+		sent, err = messagingMock.Produced[kind.ActOnResource](g.producer, kind.ActOnResourceName)
+		require.NoError(t, err)
+		assert.Len(t, sent, 1)
+	})
+
 	t.Run("once its node is asked, what it says from then on is a run of its own, asked for as of its own first word", func(t *testing.T) {
 		t.Parallel()
 
