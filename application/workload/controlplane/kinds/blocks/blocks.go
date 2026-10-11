@@ -389,16 +389,27 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 		return errors.Join(failed, err)
 	}
 
-	b.Sightings.Saw(b.descriptor.Name, Seen{Node: nodeName, At: at, Manifest: b.sighted(nodeName, v, instance, keepers), Labelled: b.labelled(instance)})
+	sighted := b.sighted(nodeName, v, instance, keepers)
+
+	b.Sightings.Saw(b.descriptor.Name, Seen{Node: nodeName, At: at, Manifest: sighted, Labelled: b.labelled(instance, sighted)})
 
 	return failed
 }
 
-// labelled reports whether what a node said of is labelled as the platform's
-// own, as a resource of the kind, under the uuid it is told by: what a record
-// kept, or keeps. An image, which nothing labels, is told by a uuid its
-// reference or its Docker id gives it, and is never labelled.
-func (b *Blocks) labelled(instance kind.Observation) bool {
+// labelled reports whether what a node said of, sighted as it is shown, is
+// taken as the platform's own, shown only once its node has gone on saying
+// it for long enough (Sightings): labelled as a resource of the kind, under
+// the uuid it is told by, which a record kept, or keeps. Of a kind what lives
+// beside it keeps (Keeper), an image, which nothing labels, it is one nothing
+// keeps: an image the platform deleted a moment ago is, since its delete is
+// refused while a container kept beside it uses it, and so is one pulled from
+// its VM's terminal, shown only once its node has said it for as long. One a
+// container kept beside it keeps is shown at once.
+func (b *Blocks) labelled(instance kind.Observation, sighted kind.Raw) bool {
+	if _, keeps := b.kind.(Keeper); keeps {
+		return sighted.Metadata.Labels[blockKinds.LabelManagedBy] == blockKinds.ManagedByNobody
+	}
+
 	return len(instance.UUID) > 0 && blockKinds.Identity(b.descriptor.Name, ObservedOf(instance.Status).Docker.Labels) == instance.UUID
 }
 

@@ -2,6 +2,7 @@ package workload_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -33,9 +34,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/createVolume"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumes"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -467,11 +470,37 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 		assert.NotEmpty(t, refused.ValidationErrors, "the image of a container it keeps")
 		assert.True(t, w.dockerd.Holds(t, vmUUID).Image("nginx:1.27"))
 
+		// what its node says of redis:7, the last of which is heard again once
+		// it and its record are gone: a heartbeat its node took before it
+		// removed it, heard late.
+		redis := imageKind.UUIDOf(vmUUID, "redis:7")
+		heartbeats := w.heartbeats(t, imageKind.Name)
+		heartbeats.heard(t, redis)
+
 		deleted, err := deleteImage.NewUseCase(w.client, w.translator).Execute(ctx, &deleteImage.Request{VMUUID: vmUUID, ID: "redis:7", OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
 
 		require.Eventually(t, func() bool { return !w.dockerd.Holds(t, vmUUID).Image("redis:7") }, settle, beat, "the image was never removed")
+
+		require.Eventually(t, func() bool {
+			_, err := w.resources.GetOne(ctx, imageKind.Name, redis)
+
+			return errors.Is(err, domain.ErrNotExists)
+		}, settle, beat, "the image deleted was never forgotten")
+
+		heartbeats.late(t, redis)
+
+		// the image deleted is never listed again, as nobody's, for what a
+		// heartbeat its node took before it went says of it.
+		assert.Never(t, func() bool {
+			listed, err := getImages.NewUseCase(w.client, w.translator).Execute(ctx, &getImages.Request{VMUUID: vmUUID, OwnerUUID: ownerUUID})
+			if err != nil {
+				return false
+			}
+
+			return slices.ContainsFunc(listed.Items, func(i presenter.Image) bool { return slices.Contains(i.Tags, "redis:7") })
+		}, patience.ResourceSilentAfter, beat, "the image deleted is listed again, as a heartbeat its node took before it went says")
 	})
 }
 

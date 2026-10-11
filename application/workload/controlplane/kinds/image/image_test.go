@@ -187,24 +187,48 @@ func TestImages_Witnessed(t *testing.T) {
 
 	require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, observed(t, "", containerKind.Status{Docker: &containerKind.Docker{ID: "c-db", Name: "db", Image: "postgres:17", State: "running"}}), false, at))
 
-	for _, image := range []kind.Observation{
+	images := []kind.Observation{
 		held(t, "sha256:redis", "redis:7"),
 		held(t, "sha256:redis-before", ""),
 		held(t, "sha256:nginx", "nginx:alpine"),
 		held(t, "sha256:postgres", "postgres:17"),
 		held(t, "sha256:busybox", "busybox:latest"),
-	} {
+	}
+
+	// keepers are the images shown, by their Docker ids, and what keeps
+	// each.
+	keepers := func(t *testing.T) map[string]string {
+		t.Helper()
+
+		extras, err := w.Images.All(ctx)
+		require.NoError(t, err)
+
+		keepers := make(map[string]string, len(extras))
+		for _, r := range extras {
+			keepers[blocks.ObservedOf(r.Status).Docker.ID] = r.Metadata.Labels[blockKinds.LabelManagedBy]
+		}
+
+		return keepers
+	}
+
+	for _, image := range images {
 		require.NoError(t, w.Images.Witnessed(ctx, vmtest.Node, image, false, at))
 	}
 
 	require.NoError(t, w.Images.Witnessed(ctx, vmtest.Node, held(t, "sha256:alpine", "alpine:3"), true, at))
 
-	extras, err := w.Images.All(ctx)
-	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"sha256:redis":        blockKinds.ManagedByContainer,
+		"sha256:redis-before": blockKinds.ManagedByContainer,
+		"sha256:nginx":        blockKinds.ManagedByContainer,
+	}, keepers(t), "a kept container's images are the container's, both the one it was asked for and the one it was made from, a stack's container as much as any other, and are shown at once. One kept itself is a record, not an extra")
 
-	keepers := make(map[string]string, len(extras))
-	for _, r := range extras {
-		keepers[blocks.ObservedOf(r.Status).Docker.ID] = r.Metadata.Labels[blockKinds.LabelManagedBy]
+	// its node goes on saying them, every second, for as long as a record
+	// may go unheard.
+	for after := time.Second; after <= blockstest.SureAfter; after += time.Second {
+		for _, image := range images {
+			require.NoError(t, w.Images.Witnessed(ctx, vmtest.Node, image, false, at.Add(after)))
+		}
 	}
 
 	assert.Equal(t, map[string]string{
@@ -213,7 +237,36 @@ func TestImages_Witnessed(t *testing.T) {
 		"sha256:nginx":        blockKinds.ManagedByContainer,
 		"sha256:postgres":     blockKinds.ManagedByNobody,
 		"sha256:busybox":      blockKinds.ManagedByNobody,
-	}, keepers, "a kept container's images are the container's, both the one it was asked for and the one it was made from, a stack's container as much as any other; and one only a container nobody keeps uses, or nothing does, nobody's. One kept itself is a record, not an extra")
+	}, keepers(t), "one only a container nobody keeps uses, or nothing does, is nobody's, shown once its node has said it for as long")
+}
+
+// TestImages_Witnessed_deleted holds an image the platform deleted a moment
+// ago, which nothing kept beside it keeps, as nothing kept may use an image
+// that is deleted, to never being shown again as nobody's for what a
+// heartbeat its node took before it removed it says, heard once its record
+// went.
+func TestImages_Witnessed_deleted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	at := time.Now()
+
+	w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+	// the heartbeats on their way as its delete's result was heard.
+	for _, beat := range []time.Duration{-time.Second, -500 * time.Millisecond, 0} {
+		require.NoError(t, w.Images.Witnessed(ctx, vmtest.Node, held(t, "sha256:busybox", "busybox:1.36"), false, at.Add(beat)))
+	}
+
+	extras, err := w.Images.All(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, extras)
+
+	_, err = w.Images.One(ctx, imageKind.UUIDOf("vm-1", "busybox:1.36"))
+	assert.ErrorIs(t, err, domain.ErrNotExists)
+
+	_, err = w.Images.Resolve(ctx, kind.Reference{Kind: "vm", UUID: "vm-1"}, "busybox:1.36")
+	assert.ErrorIs(t, err, domain.ErrNotExists, "nor named, to be acted on")
 }
 
 // observed is something as vm-1's node reports it, under uuid.

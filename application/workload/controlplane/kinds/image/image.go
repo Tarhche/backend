@@ -17,7 +17,11 @@
 // An image with no record of its own is shown as kept by what uses it
 // (Keepers): the container's kept in its VM that was asked for it or made
 // from it, a stack's container among them. Only one nothing kept uses is
-// unmanaged.
+// unmanaged, and is shown only once its node has gone on saying it for as
+// long as a record may go unheard, as what is labelled as the platform's with
+// no record is (blocks.Sightings): an image deleted a moment ago is one
+// nothing keeps, and a heartbeat its node took before it removed it, heard
+// once its record went, does not show it again.
 package image
 
 import (
