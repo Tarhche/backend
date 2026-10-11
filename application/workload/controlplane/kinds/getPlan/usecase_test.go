@@ -87,19 +87,19 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, released.NextAt, response.Lease.NextAt)
 	})
 
-	t.Run("a node the plan of a later generation no longer has is none of its nodes, though it is kept as the run before left it", func(t *testing.T) {
+	t.Run("every node kept is said, whatever generation of the plan it was saved at: a run at a newer generation that saved only part of its plan before it stopped leaves the rest of it as the run before left it", func(t *testing.T) {
 		t.Parallel()
 
 		f := newFixture(t, kindstest.AFan("web", kindstest.Running, kindstest.Running, func(fan *kindstest.Fan) { fan.Metadata.Generation = 2 }))
 
-		// its first generation needed a house and a shed, and its second
-		// the house alone.
+		// its second generation's run saved its house pending, and could
+		// not save its fan, the database gone for a moment: what a run of
+		// a newer generation forgets of the plan before is what that plan
+		// no longer has, once it saved every node of its own.
 		for _, e := range []graph.Execution{
 			{Root: root, Generation: 1, Node: "house/house-1", Kind: "house", Action: graph.ActionCreate, Level: 0, State: graph.StateDone},
-			{Root: root, Generation: 1, Node: "shed/shed-1", Kind: "shed", Action: graph.ActionCreate, Level: 0, State: graph.StateDone},
 			{Root: root, Generation: 1, Node: "fan/web", Kind: kindstest.Kind, Action: graph.ActionCreate, Level: 1, State: graph.StateDone},
-			{Root: root, Generation: 2, Node: "house/house-1", Kind: "house", Action: graph.ActionCreate, Level: 0, State: graph.StateDone},
-			{Root: root, Generation: 2, Node: "fan/web", Kind: kindstest.Kind, Action: graph.ActionCreate, Level: 1, State: graph.StateDone},
+			{Root: root, Generation: 2, Node: "house/house-1", Kind: "house", Action: graph.ActionCreate, Level: 0, State: graph.StatePending},
 		} {
 			require.NoError(t, f.executions.Save(ctx, e))
 		}
@@ -110,14 +110,11 @@ func TestUseCase_Execute(t *testing.T) {
 		var nodes []graph.NodeID
 		for _, e := range response.Executions {
 			nodes = append(nodes, e.Node)
-			assert.Equal(t, int64(2), e.Generation, "%s", e.Node)
 		}
 
-		assert.Equal(t, []graph.NodeID{"house/house-1", "fan/web"}, nodes)
-
-		kept, err := f.executions.GetByRoot(ctx, "web")
-		require.NoError(t, err)
-		assert.Len(t, kept, 3, "the shed's is kept, as its last run left it")
+		assert.Equal(t, []graph.NodeID{"house/house-1", "fan/web"}, nodes, "the plan's nodes, the fan among them")
+		assert.Equal(t, graph.StatePending, response.Executions[0].State)
+		assert.Equal(t, int64(1), response.Executions[1].Generation, "the fan as the run before left it")
 	})
 
 	t.Run("one never carried out has no nodes, and no lease", func(t *testing.T) {

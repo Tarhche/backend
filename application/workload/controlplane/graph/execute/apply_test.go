@@ -1148,3 +1148,111 @@ func TestExecutor_Apply_while(t *testing.T) {
 		assert.Equal(t, "its root was asked to go", waiting.Reason)
 	})
 }
+
+// TestExecutor_Apply_generations holds a run of a newer generation of a
+// root's plan to forgetting what is kept of a plan before that its own no
+// longer has, once it has saved every node of its own, so that what is kept
+// is the plan as it is: and to forgetting nothing until then, so that a run
+// that saved only part of its plan leaves the rest as the run before left
+// it.
+func TestExecutor_Apply_generations(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gone := errors.New("the database is gone")
+
+	// dropped is a node web's plan of its first generation had, and its
+	// plan now does not.
+	dropped := graph.ID(networkKind.Name, "s_dropped")
+
+	// first is a fixture whose plan of web was carried out at its first
+	// generation, when it had the dropped network too.
+	first := func(t *testing.T) (*fixture, *graph.Plan) {
+		t.Helper()
+
+		f := newFixture(t, container(false), execute.Concurrency(1))
+		plan := f.plan(t, web)
+
+		_, err := f.executor.Apply(ctx, graphtest.Ref(web), 1, plan)
+		require.NoError(t, err)
+
+		require.NoError(t, f.executions.Save(ctx, graph.Execution{Root: graphtest.Ref(web), Generation: 1, Node: dropped, Kind: networkKind.Name, Action: graph.ActionCreate, Level: 1, State: graph.StateDone}))
+
+		return f, plan
+	}
+
+	nodes := func(t *testing.T, f *fixture) map[graph.NodeID]int64 {
+		t.Helper()
+
+		kept, err := f.executions.GetByRoot(ctx, graphtest.Ref(web).UUID)
+		require.NoError(t, err)
+
+		generations := make(map[graph.NodeID]int64, len(kept))
+		for _, e := range kept {
+			generations[e.Node] = e.Generation
+		}
+
+		return generations
+	}
+
+	t.Run("a run of a newer generation forgets the node its plan no longer has, once it saved every node of its own", func(t *testing.T) {
+		t.Parallel()
+
+		f, plan := first(t)
+
+		_, err := f.executor.Apply(ctx, graphtest.Ref(web), 2, plan)
+		require.NoError(t, err)
+
+		assert.Equal(t, map[graph.NodeID]int64{vm: 2, network: 2, volume: 2, web: 2}, nodes(t, f))
+	})
+
+	t.Run("and so does one that finds every node of its plan as the run before left it, saving nothing else", func(t *testing.T) {
+		t.Parallel()
+
+		f, plan := first(t)
+
+		_, err := f.executor.Apply(ctx, graphtest.Ref(web), 2, plan)
+		require.NoError(t, err)
+
+		// left by a run that could not forget it.
+		require.NoError(t, f.executions.Save(ctx, graph.Execution{Root: graphtest.Ref(web), Generation: 1, Node: dropped, Kind: networkKind.Name, Action: graph.ActionCreate, Level: 1, State: graph.StateDone}))
+		saved := len(f.executions.Saved())
+
+		_, err = f.executor.Apply(ctx, graphtest.Ref(web), 2, plan)
+		require.NoError(t, err)
+
+		assert.Equal(t, map[graph.NodeID]int64{vm: 2, network: 2, volume: 2, web: 2}, nodes(t, f))
+		assert.Len(t, f.executions.Saved(), saved, "nothing saved")
+	})
+
+	t.Run("but one that could not save every node of its own forgets nothing, the rest as the run before left it", func(t *testing.T) {
+		t.Parallel()
+
+		f, plan := first(t)
+
+		f.executions.failWith(func(e graph.Execution) error {
+			if e.Node == volume && e.Generation == 2 {
+				return gone
+			}
+
+			return nil
+		})
+
+		_, err := f.executor.Apply(ctx, graphtest.Ref(web), 2, plan)
+		require.ErrorIs(t, err, gone)
+
+		assert.Equal(t, map[graph.NodeID]int64{vm: 2, network: 2, volume: 1, web: 1, dropped: 1}, nodes(t, f))
+	})
+
+	t.Run("nor does one of the same generation, which has nothing of another kept", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, container(false))
+		plan := f.plan(t, web)
+
+		_, err := f.executor.Apply(ctx, graphtest.Ref(web), 1, plan)
+		require.NoError(t, err)
+
+		assert.Equal(t, map[graph.NodeID]int64{vm: 1, network: 1, volume: 1, web: 1}, nodes(t, f))
+	})
+}

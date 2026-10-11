@@ -13,9 +13,10 @@
 // was saved before is kept.
 //
 // A root's executions are read together, in the order of their levels and
-// then of their nodes, and forgotten together, through an index on the
-// root's uuid, the level and the node, which is made at start
-// (EnsureIndexes), as the task logs' is, rather than by a migration.
+// then of their nodes, and forgotten together, or those of generations
+// before one, through an index on the root's uuid, the level and the node,
+// which is made at start (EnsureIndexes), as the task logs' is, rather than
+// by a migration.
 package executions
 
 import (
@@ -121,6 +122,15 @@ func (r *Repository) DeleteByRoot(ctx context.Context, rootUUID string) error {
 	defer cancel()
 
 	_, err := r.collection.DeleteMany(ctx, bson.D{{Key: "root.uuid", Value: rootUUID}})
+
+	return err
+}
+
+func (r *Repository) DeleteBefore(ctx context.Context, rootUUID string, generation int64) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	_, err := r.collection.DeleteMany(ctx, bson.D{{Key: "root.uuid", Value: rootUUID}, {Key: "generation", Value: bson.D{{Key: "$lt", Value: generation}}}})
 
 	return err
 }

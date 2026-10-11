@@ -101,6 +101,23 @@ func (r *Repository) DeleteByRoot(_ context.Context, rootUUID string) error {
 	return nil
 }
 
+func (r *Repository) DeleteBefore(_ context.Context, rootUUID string, generation int64) error {
+	if r.Fail != nil {
+		return r.Fail
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	for node, e := range r.executions[rootUUID] {
+		if e.Generation < generation {
+			delete(r.executions[rootUUID], node)
+		}
+	}
+
+	return nil
+}
+
 // kept is an execution as the database keeps it: its times to the
 // millisecond, and in UTC.
 func kept(e graph.Execution) graph.Execution {

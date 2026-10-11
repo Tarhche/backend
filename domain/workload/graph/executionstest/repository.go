@@ -152,6 +152,43 @@ func Repository(t *testing.T, make Maker) {
 		assert.NoError(t, repository.DeleteByRoot(ctx, stack.UUID), "what is forgotten is forgotten already")
 	})
 
+	t.Run("a root's of generations before one are forgotten, and not those of that one or later, nor anybody else's", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t)
+
+		at := func(root graph.Ref, node graph.NodeID, level int, generation int64) graph.Execution {
+			e := anExecution(root, node, level)
+			e.Generation = generation
+
+			return e
+		}
+
+		for _, e := range []graph.Execution{
+			at(stack, vm, 0, 2),
+			at(stack, network, 1, 1),
+			at(stack, volume, 1, 3),
+			at(stack, web, 2, 2),
+			at(container, vm, 0, 1),
+		} {
+			require.NoError(t, repository.Save(ctx, e))
+		}
+
+		require.NoError(t, repository.DeleteBefore(ctx, stack.UUID, 2))
+
+		kept, err := repository.GetByRoot(ctx, stack.UUID)
+		require.NoError(t, err)
+		assert.Equal(t, []graph.Execution{asKept(at(stack, vm, 0, 2)), asKept(at(stack, volume, 1, 3)), asKept(at(stack, web, 2, 2))}, kept)
+
+		kept, err = repository.GetByRoot(ctx, container.UUID)
+		require.NoError(t, err)
+		assert.Equal(t, []graph.Execution{asKept(at(container, vm, 0, 1))}, kept, "the container's kept")
+
+		assert.NoError(t, repository.DeleteBefore(ctx, stack.UUID, 2), "what is forgotten is forgotten already")
+		assert.NoError(t, repository.DeleteBefore(ctx, "nobody", 2), "and so is what was never kept")
+	})
+
 	t.Run("a root of which nothing is kept has nothing to read", func(t *testing.T) {
 		t.Parallel()
 

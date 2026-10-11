@@ -10,7 +10,12 @@ import (
 // Apply makes what plan needs, as the plan of the generation of root, and is
 // what that came to.
 //
-// Every node of the plan is saved pending first. Then each level is carried
+// Every node of the plan is saved pending first, and then what is kept of
+// root's plan of an earlier generation is forgotten (DeleteBefore): every
+// node this plan has is saved at its generation by then, and what is left of
+// an earlier one is a node it no longer has, which is no node of the plan as
+// it is. What cannot be forgotten then is forgotten by a later run, which
+// finds it kept still. Then each level is carried
 // out in turn, its nodes at once, as many at a time as the executor is let:
 // a node is saved running, and looked for. One there already is done, as the
 // record it is; one that is not, and is external, waits, and is never made;
@@ -64,7 +69,7 @@ func (e *Executor) Apply(ctx context.Context, root graph.Ref, generation int64, 
 		option(r)
 	}
 
-	r.quietly(ctx, root, generation, levels)
+	older := r.quietly(ctx, root, generation, levels)
 
 	now := e.now()
 
@@ -82,6 +87,10 @@ func (e *Executor) Apply(ctx context.Context, root graph.Ref, generation int64, 
 	})
 	if err != nil {
 		return r.outcome(levels), err
+	}
+
+	if older {
+		_ = e.executions.DeleteBefore(context.WithoutCancel(ctx), root.UUID, generation)
 	}
 
 	r.carryOut(ctx, levels)
@@ -142,28 +151,35 @@ func (r *run) create(ctx context.Context, node graph.Node) (graph.Ref, string, e
 // cannot tell saves everything, as any run does. What is kept is read
 // whatever becomes of the run's context: a run cut short as it starts, its
 // control plane stopping, would otherwise not tell, and save every node
-// pending over a plan a run before carried out.
-func (r *run) quietly(ctx context.Context, root graph.Ref, generation int64, levels [][]graph.NodeID) {
+// pending over a plan a run before carried out. It reports whether anything
+// is kept of root's plan of an earlier generation, which is to be forgotten:
+// nothing, when what is kept cannot be read.
+func (r *run) quietly(ctx context.Context, root graph.Ref, generation int64, levels [][]graph.NodeID) bool {
 	kept, err := r.executor.executions.GetByRoot(context.WithoutCancel(ctx), root.UUID)
 	if err != nil {
-		return
+		return false
 	}
+
+	older := false
 
 	byNode := make(map[graph.NodeID]graph.Execution, len(kept))
 	for _, e := range kept {
 		byNode[e.Node] = e
+		older = older || e.Generation < generation
 	}
 
 	for level, ids := range levels {
 		for _, id := range ids {
 			if e, there := byNode[id]; !there || e.Generation != generation || e.Action != graph.ActionCreate || e.Level != level {
-				return
+				return older
 			}
 		}
 	}
 
 	r.kept = byNode
 	r.quiet.Store(true)
+
+	return older
 }
 
 // link links the node, the record ref, to each node it needs, in the order of

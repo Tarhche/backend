@@ -92,4 +92,10 @@ type Executions interface {
 	// DeleteByRoot forgets every execution kept of the root uuid names, once
 	// the root is gone. One of which nothing is kept is forgotten already.
 	DeleteByRoot(ctx context.Context, rootUUID string) error
+
+	// DeleteBefore forgets every execution kept of the root uuid names of a
+	// generation before generation: once every node of the plan of that
+	// generation is saved, which saves each at it, those of nodes the plan
+	// no longer has. Those of that generation, or of a later one, are kept.
+	DeleteBefore(ctx context.Context, rootUUID string, generation int64) error
 }
