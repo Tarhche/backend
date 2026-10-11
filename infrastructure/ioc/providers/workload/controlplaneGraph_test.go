@@ -2,10 +2,12 @@ package workload
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"maps"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,7 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
@@ -58,6 +63,26 @@ func (r *reading) GetAll(ctx context.Context, kindName string, filter resource.F
 	r.read()
 
 	return r.Repository.GetAll(ctx, kindName, filter, offset, limit)
+}
+
+// interloping keeps records as the repository it wraps does, but for doing
+// what do says before the first write of a record that writes picks, and
+// before writing it: what goes on while that write is yet to be made.
+type interloping struct {
+	resource.Repository
+
+	writes func(r resource.Record) bool
+	do     func(ctx context.Context)
+
+	done atomic.Bool
+}
+
+func (i *interloping) Update(ctx context.Context, r resource.Record) (resource.Record, error) {
+	if i.writes(r) && i.done.CompareAndSwap(false, true) {
+		i.do(ctx)
+	}
+
+	return i.Repository.Update(ctx, r)
 }
 
 // TestNewControlPlaneWorkload_graphs holds the control plane to keeping the
@@ -175,4 +200,137 @@ func TestNewControlPlaneWorkload_graphs(t *testing.T) {
 			assert.Error(t, err)
 		}
 	})
+}
+
+// TestNewControlPlaneWorkload_restored holds the control plane to deciding
+// nothing of a stack its Docker VM's restore reset before that restore is
+// taken onto the VM's record: what lives in the VM is reset first, so that a
+// result heard again resets it again, and a run of the stack's graph in
+// between reads the VM's record as the restore before left it, or none did.
+func TestNewControlPlaneWorkload_restored(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	restoredAt := time.Now()
+	before := restoredAt.Add(-2 * time.Hour)
+
+	for name, earlier := range map[string]func(v *vmKind.VM){
+		"its vm's first restore, which its vm's record says nothing of until it is taken onto it": func(*vmKind.VM) {},
+		"a restore after one looked into long ago, which its vm's record says until then": func(v *vmKind.VM) {
+			v.Status.RestoredAt = before
+			v.Status.LookedAt = before.Add(time.Second)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			stored := resourcesMemory.NewRepository()
+
+			stack := graph.Ref{Kind: stackKind.Name, UUID: "s-1"}
+
+			var workload *ControlPlaneWorkload
+
+			// a run of the stack's graph, bounded, since one carrying the
+			// stack out waits on commands no node is there to answer.
+			run := func(ctx context.Context) error {
+				bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+
+				return workload.Graphs.Reconcile(bounded, stack)
+			}
+
+			// the stack's run in the window: once its vm's restore has
+			// reset what lives in it, and before the restore is written onto
+			// the vm's record.
+			var (
+				ran   error
+				there bool
+				reset bool
+			)
+
+			records := &interloping{
+				Repository: stored,
+				writes: func(r resource.Record) bool {
+					return r.Kind == vmKind.Name && r.Metadata.UUID == "vm-1"
+				},
+				do: func(ctx context.Context) {
+					ran = run(ctx)
+
+					r, err := stored.GetOne(ctx, stackKind.Name, "s-1")
+					there, reset = err == nil, r.Reset
+				},
+			}
+
+			stores := storesOf(stored)
+			stores.Resources = records
+
+			produced := &messagingMock.Recorder{}
+
+			var err error
+			workload, err = NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), stores, nil, produced, slog.New(slog.DiscardHandler))
+			require.NoError(t, err)
+
+			// vm-1, its restore asked as restore-1, and what lives in it: a
+			// stack, running, and the container of its service.
+			restoring := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+				v.Status.State = vmKind.Restoring
+				earlier(v)
+			})
+
+			raw, err := kind.Encode(restoring)
+			require.NoError(t, err)
+
+			_, err = stored.Create(ctx, resource.Record{Raw: raw, Pending: &resource.Pending{Action: vmKind.ActionRestore, IDs: []string{"restore-1"}, SentAt: restoredAt}})
+			require.NoError(t, err)
+
+			raw, err = kind.Encode(stackKind.Stack{
+				Kind:     stackKind.Name,
+				Metadata: kind.Metadata{UUID: "s-1", Name: "shop", Slug: "shop", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, CreatedAt: before},
+				Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+				Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running, Since: before}},
+			})
+			require.NoError(t, err)
+
+			_, err = stored.Create(ctx, resource.Record{Raw: raw})
+			require.NoError(t, err)
+
+			_, err = stored.Create(ctx, resource.Record{Raw: blockstest.AContainer("c-web", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+				c.Metadata.Name = "shop_web"
+				c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "s-1"}}
+				c.Metadata.Labels = map[string]string{stackKind.LabelStack: "s-1", stackKind.LabelService: "web"}
+				c.Spec.Name = "shop_web"
+			})})
+			require.NoError(t, err)
+
+			status, err := json.Marshal(vmKind.Status{Status: kind.Status{State: vmKind.Running}, RestoredAt: restoredAt})
+			require.NoError(t, err)
+
+			result, err := json.Marshal(kind.ResourceActedOn{ID: "restore-1", Kind: vmKind.Name, UUID: "vm-1", Action: vmKind.ActionRestore, Node: vmtest.Node, OK: true, Status: status, At: restoredAt})
+			require.NoError(t, err)
+
+			require.NoError(t, workload.Subscribers[kind.ResourceActedOnName].Handle(ctx, result))
+
+			require.True(t, records.done.Load(), "the restore was written onto the vm's record")
+			require.NoError(t, ran, "the stack's run in between")
+			assert.True(t, there, "which does not forget it")
+			assert.True(t, reset, "nor carries it out, its restored vm yet to be looked into")
+
+			v, err := stored.GetOne(ctx, vmKind.Name, "vm-1")
+			require.NoError(t, err)
+
+			taken, err := kind.Decode[vmKind.Spec, vmKind.Status](v.Raw)
+			require.NoError(t, err)
+			assert.Equal(t, vmKind.Running, taken.Status.State)
+			assert.True(t, taken.Status.RestoredAt.Equal(restoredAt), "the restore is taken onto it once what lives in it is reset")
+
+			require.NoError(t, run(ctx))
+
+			s, err := stored.GetOne(ctx, stackKind.Name, "s-1")
+			require.NoError(t, err)
+			assert.True(t, s.Reset, "and the stack waits for its restored vm to be looked into")
+
+			assert.Empty(t, produced.Subjects(), "nothing of it is asked of its node")
+		})
+	}
 }

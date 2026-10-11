@@ -930,6 +930,13 @@ func TestGraph_Restored(t *testing.T) {
 
 	looked := restoredAt.Add(time.Second)
 
+	// vm-1 as its record is while a restore of it is carried out, before
+	// that restore is taken onto it, its record saying what v says of a
+	// restore before it.
+	restoring := func(v vmKind.VM) vmKind.VM {
+		return vmtest.In(v, func(v *vmKind.VM) { v.Status.State = vmKind.Restoring })
+	}
+
 	// a container of the stack s-1's in vm-1, reset by the vm's restore when
 	// reset says, and no longer otherwise: found in the restored disk, or
 	// taken in from it.
@@ -984,6 +991,21 @@ func TestGraph_Restored(t *testing.T) {
 		"and when its vm's record says nothing of a restore": {
 			vms:      []vmKind.VM{vmtest.Docker("vm-1", "owner")},
 			restored: graph.RestorationHeld,
+		},
+		"but not known while its vm's record says it is restoring, the restore that reset it not yet taken onto it, though it says nothing of one before": {
+			vms:        []vmKind.VM{restoring(vmtest.Docker("vm-1", "owner"))},
+			containers: []resource.Record{container("c-1", true)},
+			restored:   graph.RestorationUnknown,
+		},
+		"nor though it says of the restore before that it was looked into, and heard of for long enough since, all of its containers reset": {
+			vms:        []vmKind.VM{restoring(restored(looked, silence+time.Second))},
+			containers: []resource.Record{container("c-1", true), container("c-2", true)},
+			restored:   graph.RestorationUnknown,
+		},
+		"nor when one of its containers is no longer reset": {
+			vms:        []vmKind.VM{restoring(restored(looked, silence+time.Second))},
+			containers: []resource.Record{container("c-1", true), container("c-2", false)},
+			restored:   graph.RestorationUnknown,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
