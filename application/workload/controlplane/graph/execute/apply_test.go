@@ -613,6 +613,30 @@ func TestExecutor_Apply_again(t *testing.T) {
 
 		assert.Equal(t, before, f.kept(t, plan), "what the plan says is how the run before went, and not the vm pending, which this run found done, beside it")
 	})
+
+	t.Run("and so is the one whose save failed, which may have been carried out all the same", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container(false)
+		f, plan, _ := applied(t, kinds, execute.Concurrency(1))
+		before := f.kept(t, plan)
+
+		// the volume pending is kept, and its save fails all the same: a
+		// write whose answer timed out after it was carried out.
+		kinds.Record(network)
+		f.executions.failOnceKept(func(e graph.Execution) error {
+			if e.Node == volume && e.State == graph.StatePending {
+				return gone
+			}
+
+			return nil
+		})
+
+		_, err := f.executor.Apply(ctx, graphtest.Ref(web), 1, plan)
+		require.ErrorIs(t, err, gone)
+
+		assert.Equal(t, before, f.kept(t, plan), "what the plan says is how the run before went, the volume among it")
+	})
 }
 
 // honouring reads what is kept as MongoDB does: not at all once the read's

@@ -172,18 +172,20 @@ func (f *fixture) kept(t *testing.T, plan *graph.Plan) []graph.Execution {
 }
 
 // recorder keeps executions in memory, and every one it is handed to save, in
-// order. One fail fails is not kept, and is what it fails with.
+// order. One fail fails is not kept, and is what it fails with; one landed
+// fails is kept, and then is what it fails with.
 type recorder struct {
 	*executionsMemory.Repository
 
-	lock  sync.Mutex
-	saved []graph.Execution
-	fail  func(graph.Execution) error
+	lock   sync.Mutex
+	saved  []graph.Execution
+	fail   func(graph.Execution) error
+	landed func(graph.Execution) error
 }
 
 func (r *recorder) Save(ctx context.Context, e graph.Execution) error {
 	r.lock.Lock()
-	fail := r.fail
+	fail, landed := r.fail, r.landed
 	r.lock.Unlock()
 
 	if fail != nil {
@@ -196,7 +198,25 @@ func (r *recorder) Save(ctx context.Context, e graph.Execution) error {
 	r.saved = append(r.saved, e)
 	r.lock.Unlock()
 
-	return r.Repository.Save(ctx, e)
+	if err := r.Repository.Save(ctx, e); err != nil {
+		return err
+	}
+
+	if landed != nil {
+		return landed(e)
+	}
+
+	return nil
+}
+
+// failOnceKept has every save fail with what fail says, when it says
+// anything, once it is kept all the same: a write whose answer timed out
+// after it was carried out.
+func (r *recorder) failOnceKept(fail func(graph.Execution) error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.landed = fail
 }
 
 // failWith has every save fail with what fail says, when it says anything.
