@@ -15,8 +15,9 @@
 // Its state is the control plane's (StateBy: OnControlPlane): no node says
 // what a stack is doing. While its graph makes it, it is deploying; once made,
 // it is what its containers make it, running, degraded or stopped (StateOf);
-// it waits while what it needs cannot be made now, its VM not running, and
-// fails, saying why, when its plan does. Started, stopped and restarted, its
+// it waits while what it needs cannot be made now, its VM not running or a
+// container of it being removed, stopped or not, and fails, saying why, when
+// its plan does. Started, stopped and restarted, its
 // graph has its containers started a level of its services at a time, as
 // they depend on one another, and stopped the other way round. Deleted, it is
 // removing while its graph removes its containers, and then its networks, and
@@ -68,7 +69,10 @@ const (
 	Removing kind.State = "removing"
 
 	// Waiting is a stack whose graph waits on what it needs, which cannot be
-	// made now: its VM is not running. Its reason says what it waits on.
+	// made now: its VM is not running, or a container of it is being
+	// removed. A stack deploying waits so, and so does one at rest, stopped
+	// among it; one asked to start, stop or restart stays as it was asked,
+	// saying what it waits on. Its reason says what it waits on.
 	Waiting = kind.Waiting
 
 	// Failed is a stack whose plan failed. Its reason, and its failure when
@@ -329,10 +333,14 @@ func Descriptor() kind.Descriptor {
 // started or stopped, and a restart, once they are stopped, starts them. In
 // flight, it is taken only where it is going: what its containers make it,
 // once its graph made it or carried out what it was asked; failed, once its
-// plan failed; and, only while it deploys, waiting, once its plan waits on
-// what it needs. Asked to start or stop while its graph waits on its VM, it
-// starts or stops once its VM is up again. At rest, it is what its graph last
-// said it is. Deleted, it is removing until its record is gone.
+// plan failed; and waiting, once its plan waits on what it needs, but only
+// from deploying: asked to start, stop or restart while its graph waits, on
+// its VM say, it stays as it was asked, and starts or stops once it can. At
+// rest, running, degraded, stopped, failed or waiting, it is what its graph
+// last said it is: what its containers make it, failed, or waiting once its
+// plan waits on what it needs, its VM not running or a container of it being
+// removed, a stopped stack as much as a running one. Deleted, it is removing
+// until its record is gone.
 func Machine() kind.Machine {
 	transitions := []kind.Transition{
 		{From: kind.Any, On: kind.OnAction(ActionDelete), To: Removing},

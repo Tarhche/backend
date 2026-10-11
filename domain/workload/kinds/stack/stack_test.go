@@ -140,6 +140,7 @@ func TestMachine(t *testing.T) {
 		"but is not taken for running before it starts":     {from: stack.Restarting, on: kind.OnObserved(stack.Running), to: stack.Restarting},
 		"at rest, it is what its graph says":                {from: stack.Running, on: kind.OnObserved(stack.Degraded), to: stack.Degraded, taken: true},
 		"waiting on what it needs among it":                 {from: stack.Running, on: kind.OnObserved(stack.Waiting), to: stack.Waiting, taken: true},
+		"stopped, as much as running":                       {from: stack.Stopped, on: kind.OnObserved(stack.Waiting), to: stack.Waiting, taken: true},
 		"and back from waiting once its graph made it":      {from: stack.Waiting, on: kind.OnObserved(stack.Stopped), to: stack.Stopped, taken: true},
 		"deleted from anywhere":                             {from: stack.Starting, on: kind.OnAction(stack.ActionDelete), to: stack.Removing, taken: true},
 		"and taken for nothing else while it is removed":    {from: stack.Removing, on: kind.OnObserved(stack.Running), to: stack.Removing},
