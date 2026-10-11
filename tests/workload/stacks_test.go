@@ -598,9 +598,47 @@ func TestAStacksGraph(t *testing.T) {
 		before := w.containerRecord(t, vmUUID, named("web"))
 		did := len(w.dockerd.Did(vmUUID))
 
+		// docker starts web as it makes it, and its node stops it once it is
+		// made, which waits: web runs, and its node says so, meanwhile.
+		release := w.dockerd.HoldStops()
+		defer release()
+
 		deleted, err := deleteContainer.NewUseCase(w.client, w.translator).Execute(ctx, &deleteContainer.Request{VMUUID: vmUUID, ID: named("web"), Force: true, OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
+
+		require.Eventually(t, func() bool {
+			c, there := w.dockerd.Holds(t, vmUUID).Container(named("web"))
+
+			return there && c.Labels[blockKinds.Label(containerKind.Name)] != before.Metadata.UUID && c.State == "running"
+		}, settle, beat, "web was never made again")
+
+		// what its node says of web while it is made says nothing of what its
+		// making came to: its record is never running, nor its stack running,
+		// in part or in full. It may wait meanwhile, on web being removed.
+		assert.Never(t, func() bool {
+			r, err := w.resources.GetOne(ctx, stackKind.Name, stackUUID)
+			if err != nil {
+				return false
+			}
+
+			if s, err := kind.Decode[stackKind.Spec, stackKind.Status](r.Raw); err != nil || s.Status.State == stackKind.Degraded || s.Status.State == stackKind.Running {
+				return err == nil
+			}
+
+			containers, _, err := w.resources.GetAll(ctx, containerKind.Name, resource.Filter{Parent: kind.Reference{Kind: vmKind.Name, UUID: vmUUID}}, 0, 0)
+			if err != nil {
+				return false
+			}
+
+			return slices.ContainsFunc(containers, func(c resource.Record) bool {
+				common, err := c.Common()
+
+				return err == nil && c.Metadata.Name == named("web") && common.State == containerKind.Running
+			})
+		}, patience.ResourceSilentAfter, beat, "web was taken to run while it was made, and its stack with it")
+
+		release()
 
 		again := w.containerKept(t, vmUUID, named("web"), "made again", func(c containerKind.Container) bool {
 			return c.Metadata.UUID != before.Metadata.UUID && c.Status.Docker != nil

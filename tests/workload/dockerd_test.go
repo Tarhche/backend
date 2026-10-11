@@ -96,6 +96,10 @@ type dockerd struct {
 	// still coming up after its VM's restore lists nothing: what the VM holds
 	// cannot be looked at, until Show.
 	hidden map[string]bool
+
+	// stopping, while it holds a channel, holds every container's stop until
+	// it is closed (HoldStops): the rest is answered meanwhile.
+	stopping chan struct{}
 }
 
 // disks are where the VMs' dockerds keep what they hold.
@@ -281,6 +285,21 @@ func (d *dockerd) serve(id string, rw http.ResponseWriter, r *http.Request) {
 		}
 
 		return
+	}
+
+	// a stop waits while stops are held, its dockerd answering the rest.
+	if match := containerPath.FindStringSubmatch(path); match != nil && match[2] == "stop" && r.Method == http.MethodPost {
+		d.lock.Lock()
+		held := d.stopping
+		d.lock.Unlock()
+
+		if held != nil {
+			select {
+			case <-held:
+			case <-r.Context().Done():
+				return
+			}
+		}
 	}
 
 	d.lock.Lock()
@@ -1248,6 +1267,29 @@ func (d *dockerd) Allow(reference string) {
 	defer d.lock.Unlock()
 
 	delete(d.refused, normalized(reference))
+}
+
+// HoldStops holds every container's stop, in every VM, from now on, until
+// what it hands back lets them go: a container docker started as it made it,
+// to be stopped once it is, runs until then, and is seen running.
+func (d *dockerd) HoldStops() (release func()) {
+	held := make(chan struct{})
+
+	d.lock.Lock()
+	d.stopping = held
+	d.lock.Unlock()
+
+	var once sync.Once
+
+	return func() {
+		once.Do(func() {
+			d.lock.Lock()
+			d.stopping = nil
+			d.lock.Unlock()
+
+			close(held)
+		})
+	}
 }
 
 // Hide has the dockerd of the VM id names list nothing of what it holds from
