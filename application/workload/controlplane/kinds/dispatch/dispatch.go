@@ -62,10 +62,27 @@ type Dispatcher struct {
 	now       func() time.Time
 	poll      time.Duration
 
-	// orphans are when each node was last asked to delete what it holds and
-	// nobody keeps a record of, by node and uuid.
+	// orphans are what each node holds that nobody keeps a record of, by
+	// node and uuid: how long its node has said it for, and when it was last
+	// asked to delete it.
 	lock    sync.Mutex
-	orphans map[string]time.Time
+	orphans map[string]orphan
+
+	// orphanAfter is how long a node goes on saying it holds what nobody
+	// keeps a record of before it is asked to delete it (OrphansAfter).
+	orphanAfter time.Duration
+}
+
+// orphan is what a node holds that nobody keeps a record of: since when, and
+// until when, its node has said it, by the node's clock, in a run of
+// heartbeats each said within orphanAfter of the one before; when it was last
+// heard of, and when its node was last asked to delete it, by the control
+// plane's.
+type orphan struct {
+	since time.Time
+	said  time.Time
+	heard time.Time
+	asked time.Time
 }
 
 // Option changes how a dispatcher goes about it.
@@ -79,6 +96,19 @@ func PollEvery(interval time.Duration) Option {
 	}
 }
 
+// OrphansAfter has a node asked to delete what it holds that nobody keeps a
+// record of only once it has gone on saying it for as long as after, by its
+// own clock, with no longer than that without a word of it: what it says of
+// a resource whose record was deleted a moment before, in a heartbeat it took
+// before the delete removed it, is said no more after, and nothing is asked
+// of what was made again under its uuid since. With none, it is asked at
+// once.
+func OrphansAfter(after time.Duration) Option {
+	return func(d *Dispatcher) {
+		d.orphanAfter = after
+	}
+}
+
 // New is a dispatcher that keeps resources in resources, sends their
 // commands with producer, and lets waiters wait for what came of them. A
 // clock of nil is the time now.
@@ -87,7 +117,7 @@ func New(resources resource.Repository, producer domain.Producer, waiting *waite
 		now = time.Now
 	}
 
-	d := &Dispatcher{resources: resources, producer: producer, waiters: waiting, now: now, poll: pollEvery, orphans: make(map[string]time.Time)}
+	d := &Dispatcher{resources: resources, producer: producer, waiters: waiting, now: now, poll: pollEvery, orphans: make(map[string]orphan)}
 
 	for _, option := range options {
 		option(d)
@@ -510,10 +540,15 @@ func requested(r *resource.Record, state kind.State, now time.Time) {
 // delete it, as the delete of a resource of its kind that carries nothing but
 // what it is and where: a VM deleted while its node could not be told, or
 // made again by a command carried out after its delete was. Nobody is going
-// to want it. Its node is asked at most once a minute for one resource,
-// however often it reports it, and what came of it is heard as nobody's.
-func (d *Dispatcher) Orphaned(ctx context.Context, desc kind.Descriptor, nodeName string, uuid string) error {
-	if !d.orphan(nodeName, uuid) {
+// to want it. It is asked once its node has gone on saying it for long enough
+// (OrphansAfter), as of the heartbeat it took at a moment: a VM whose record
+// was deleted a moment before, which a heartbeat its node took before the
+// delete removed it says, and which its graph makes again under its uuid, is
+// not its node's to delete then, whenever the two commands reach it. Its node
+// is asked at most once a minute for one resource, however often it reports
+// it, and what came of it is heard as nobody's.
+func (d *Dispatcher) Orphaned(ctx context.Context, desc kind.Descriptor, nodeName string, uuid string, at time.Time) error {
+	if !d.orphan(nodeName, uuid, at) {
 		return nil
 	}
 
@@ -537,29 +572,44 @@ func (d *Dispatcher) Orphaned(ctx context.Context, desc kind.Descriptor, nodeNam
 	return err
 }
 
-// orphan reports whether a node is to be asked to delete an orphan now, and
-// writes down that it is: once a minute at most, for one resource. What was
-// asked longer ago than that is let go of.
-func (d *Dispatcher) orphan(nodeName string, uuid string) bool {
+// orphan reports whether a node that said it holds an orphan, as of a
+// moment by its clock, is to be asked to delete it now, and writes down that
+// it is: once its node has said it for orphanAfter, and once a minute at
+// most, for one resource. What was neither heard of nor asked for a minute is
+// let go of.
+func (d *Dispatcher) orphan(nodeName string, uuid string, at time.Time) bool {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
 	now := d.now()
 
-	for asked, at := range d.orphans {
-		if now.Sub(at) >= orphanEvery {
-			delete(d.orphans, asked)
+	for key, o := range d.orphans {
+		if now.Sub(o.heard) >= orphanEvery && now.Sub(o.asked) >= orphanEvery {
+			delete(d.orphans, key)
 		}
 	}
 
 	key := nodeName + "/" + uuid
-	if _, asked := d.orphans[key]; asked {
-		return false
+
+	o, heard := d.orphans[key]
+
+	switch {
+	case !heard, at.Sub(o.said) > d.orphanAfter:
+		o.since, o.said = at, at
+	case at.After(o.said):
+		o.said = at
 	}
 
-	d.orphans[key] = now
+	o.heard = now
 
-	return true
+	asked := o.said.Sub(o.since) >= d.orphanAfter && (o.asked.IsZero() || now.Sub(o.asked) >= orphanEvery)
+	if asked {
+		o.asked = now
+	}
+
+	d.orphans[key] = o
+
+	return asked
 }
 
 // Forget takes a resource's record away, when there is nothing of it left

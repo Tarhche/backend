@@ -190,10 +190,14 @@ func NewControlPlaneKinds(
 	resources := cascade.NewRepository(registry, stores.Resources, cascading...)
 
 	// a request that waits for what came of its command is told by whichever
-	// result handler hears it in this process.
+	// result handler hears it in this process. What a node holds that nobody
+	// keeps a record of is asked to be deleted once the node has gone on
+	// saying it for as long as a record may go unheard: a heartbeat it took
+	// before a VM's delete removed it, heard once its record went, says it
+	// no more after, and the VM its graph makes again under its uuid is left.
 	waiting := waiters.New()
 
-	dispatcher := dispatch.New(resources, producer, waiting, nil)
+	dispatcher := dispatch.New(resources, producer, waiting, nil, dispatch.OrphansAfter(settings.reconcile.ResourceSilentAfter))
 
 	// what a node keeps saying of a resource is written down at least twice in
 	// the time the reconcile loop gives a resource to be heard of, so that one

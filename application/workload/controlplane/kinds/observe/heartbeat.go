@@ -43,8 +43,10 @@ type Parents interface {
 // carried out after its delete was. Nobody is going to want it.
 type Orphans interface {
 	// Orphaned is told that nodeName holds a resource of d's kind, by uuid,
-	// that has no record.
-	Orphaned(ctx context.Context, d kind.Descriptor, nodeName string, uuid string) error
+	// that has no record, as a heartbeat its node took at a moment, by its
+	// own clock, says: one it took before the record's delete removed the
+	// resource is heard after the record went now and then.
+	Orphaned(ctx context.Context, d kind.Descriptor, nodeName string, uuid string, at time.Time) error
 }
 
 // Observer writes down what the nodes' heartbeats say of the resources of
@@ -173,7 +175,7 @@ func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time,
 	}
 
 	if !kept && o.orphans != nil && len(d.Parent) == 0 && len(instance.UUID) > 0 {
-		if err := o.orphans.Orphaned(ctx, d, nodeName, instance.UUID); err != nil {
+		if err := o.orphans.Orphaned(ctx, d, nodeName, instance.UUID, at); err != nil {
 			o.logger.WarnContext(ctx, "could not tell what a node holds that nobody keeps a record of", "error", err, "node", nodeName, "kind", d.Name, "uuid", instance.UUID)
 		}
 	}

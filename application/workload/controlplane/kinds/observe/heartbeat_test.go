@@ -642,13 +642,16 @@ func (p parents) Down(_ context.Context, parent kind.Reference) (kind.State, err
 	return p[parent.UUID], nil
 }
 
-// orphans are told of what a node holds that nobody keeps a record of.
+// orphans are told of what a node holds that nobody keeps a record of, and
+// as of when.
 type orphans struct {
 	told []string
+	at   []time.Time
 }
 
-func (o *orphans) Orphaned(_ context.Context, d kind.Descriptor, nodeName string, uuid string) error {
+func (o *orphans) Orphaned(_ context.Context, d kind.Descriptor, nodeName string, uuid string, at time.Time) error {
 	o.told = append(o.told, d.Name+" "+uuid+" on "+nodeName)
+	o.at = append(o.at, at)
 
 	return nil
 }
@@ -695,6 +698,7 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 		}
 
 		assert.Equal(t, []string{"fan orphan on " + kindstest.NodeName}, told.told, "one kept elsewhere is its own node's to speak for, and one that says no uuid names nothing to tell of")
+		assert.Equal(t, []time.Time{kindstest.Moment}, told.at, "as of the heartbeat its node took")
 	})
 
 	t.Run("what lives in a parent is never an orphan of its own", func(t *testing.T) {

@@ -835,8 +835,8 @@ func TestDispatcher_Orphaned(t *testing.T) {
 
 		f := newFixture(t)
 
-		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan"))
-		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan"))
+		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan", kindstest.Moment))
+		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan", kindstest.Moment.Add(time.Second)))
 
 		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
@@ -850,15 +850,81 @@ func TestDispatcher_Orphaned(t *testing.T) {
 		assert.Equal(t, kindstest.Kind, sent[0].Resource.Kind)
 		assert.Equal(t, kind.Metadata{UUID: "orphan", Node: kindstest.NodeName}, sent[0].Resource.Metadata, "carrying nothing but what it is and where")
 
-		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), "node-2", "orphan"))
+		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), "node-2", "orphan", kindstest.Moment))
 
 		f.clock.Advance(time.Minute)
-		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan"))
+		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan", kindstest.Moment.Add(time.Minute)))
 
 		sent, err = messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		assert.Len(t, sent, 3, "another node holding it is asked too, and the first again a minute on")
 		assert.Equal(t, 0, f.resources.Len(kindstest.Kind), "and nothing is written down")
+	})
+
+	t.Run("told to wait, a node is asked to delete it only once it has gone on saying it for so long, by its own clock", func(t *testing.T) {
+		t.Parallel()
+
+		after := 30 * time.Second
+
+		// a node said it holds orphan at moments after kindstest.Moment, by
+		// its own clock, heard as soon as it said them.
+		said := func(t *testing.T, f *fixture, nodeName string, moments ...time.Duration) {
+			t.Helper()
+
+			for _, moment := range moments {
+				require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), nodeName, "orphan", kindstest.Moment.Add(moment)))
+			}
+		}
+
+		asked := func(t *testing.T, f *fixture) int {
+			t.Helper()
+
+			sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
+			require.NoError(t, err)
+
+			return len(sent)
+		}
+
+		for name, tt := range map[string]struct {
+			nodes   []string
+			moments [][]time.Duration
+			asked   int
+		}{
+			"not by the heartbeats it took before a record's delete removed it, heard once the record went, which say it no more after": {
+				nodes:   []string{kindstest.NodeName},
+				moments: [][]time.Duration{{0, 300 * time.Millisecond, time.Second}},
+			},
+			"nor while it has said it for less than so long": {
+				nodes:   []string{kindstest.NodeName},
+				moments: [][]time.Duration{{0, 10 * time.Second, 20 * time.Second, 29 * time.Second}},
+			},
+			"but once it has, every word of it soon enough after the one before": {
+				nodes:   []string{kindstest.NodeName},
+				moments: [][]time.Duration{{0, 10 * time.Second, 20 * time.Second, 30 * time.Second}},
+				asked:   1,
+			},
+			"and not when it went for longer without a word of it in between, which starts it again": {
+				nodes:   []string{kindstest.NodeName},
+				moments: [][]time.Duration{{0, 31 * time.Second, 60 * time.Second}},
+			},
+			"nor by what another node said, by another clock": {
+				nodes:   []string{kindstest.NodeName, "node-2"},
+				moments: [][]time.Duration{{0, 10 * time.Second}, {20 * time.Second, 40 * time.Second}},
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				f := newFixture(t)
+				f.dispatch = dispatch.New(f.resources, f.producer, f.waiters, f.clock.Now, dispatch.OrphansAfter(after))
+
+				for i, nodeName := range tt.nodes {
+					said(t, f, nodeName, tt.moments[i]...)
+				}
+
+				assert.Equal(t, tt.asked, asked(t, f))
+			})
+		}
 	})
 }
 
