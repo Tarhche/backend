@@ -5,13 +5,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
 // TestSightings_prune holds what nothing has said for long enough to being
 // let go of, and not only hidden: a control plane that runs for months does
-// not keep everything a VM's terminal ever made.
+// not keep everything a VM's terminal ever made, nor every VM it heard of.
 func TestSightings_prune(t *testing.T) {
 	t.Parallel()
 
@@ -24,13 +25,17 @@ func TestSightings_prune(t *testing.T) {
 		return Seen{Node: "node-1", At: now, Manifest: kind.Raw{Kind: "container", Metadata: kind.Metadata{UUID: uuid}}}
 	}
 
+	s.Heard("node-1", "vm-gone", now)
 	s.Saw("container", seen("long-gone"))
 
 	now = now.Add(2 * time.Minute)
+	s.Heard("node-1", "vm-1", now)
 	s.Saw("container", seen("lately"))
 
 	assert.Len(t, s.seen["container"], 1, "what went stale is let go of")
 	assert.Contains(t, s.seen["container"], "lately")
+
+	assert.Equal(t, map[where]time.Time{{node: "node-1", vm: "vm-1"}: now}, s.heard, "and so is when a vm nothing was said of since was last heard of")
 }
 
 // TestSightings_labelled holds what the platform labelled as its own, with no
@@ -56,12 +61,15 @@ func TestSightings_labelled(t *testing.T) {
 		return s, &now
 	}
 
-	// web as node says it a moment after start, by its own clock, labelled
-	// as the platform's when labelled says, heard as soon as it is said.
+	// web, in vm-1, as node says it a moment after start, by its own clock,
+	// labelled as the platform's when labelled says, heard as soon as it is
+	// said.
+	web := kind.Raw{Kind: "container", Metadata: kind.Metadata{UUID: "web", Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}}}
+
 	said := func(s *Sightings, now *time.Time, node string, after time.Duration, labelled bool) {
 		*now = start.Add(after + 100*time.Millisecond)
 
-		s.Saw("container", Seen{Node: node, At: start.Add(after), Labelled: labelled, Manifest: kind.Raw{Kind: "container", Metadata: kind.Metadata{UUID: "web"}}})
+		s.Saw("container", Seen{Node: node, At: start.Add(after), Labelled: labelled, Manifest: web})
 	}
 
 	// beats has node say web every second from one moment to another, both
@@ -153,9 +161,9 @@ func TestSightings_labelled(t *testing.T) {
 			// another, and alone span longer than its node is waited on for.
 			for after := time.Duration(0); after < 35*time.Second; after += time.Second {
 				*now = start.Add(after + 35*time.Second)
-				s.Heard("node-1", *now)
+				s.Heard("node-1", "vm-1", *now)
 
-				s.Saw("container", Seen{Node: "node-1", At: start.Add(after), Labelled: true, Manifest: kind.Raw{Kind: "container", Metadata: kind.Metadata{UUID: "web"}}})
+				s.Saw("container", Seen{Node: "node-1", At: start.Add(after), Labelled: true, Manifest: web})
 				assert.False(t, shown(s), "said at %s", after)
 			}
 		},
@@ -163,21 +171,44 @@ func TestSightings_labelled(t *testing.T) {
 			s, now := sightings()
 
 			for after := time.Duration(0); after <= sure; after += time.Second {
-				s.Heard("node-1", start.Add(after))
+				s.Heard("node-1", "vm-1", start.Add(after))
 				said(s, now, "node-1", after, true)
 			}
 
 			assert.True(t, shown(s))
 
-			s.Heard("node-1", start.Add(2*sure-time.Second))
+			s.Heard("node-1", "vm-1", start.Add(2*sure-time.Second))
 			assert.True(t, shown(s), "not before its node went on as long without it")
 
-			s.Heard("node-1", start.Add(2*sure))
+			s.Heard("node-1", "vm-1", start.Add(2*sure))
 			assert.False(t, shown(s), "though it is not stale")
 
-			s.Heard("node-2", start.Add(time.Hour))
+			s.Heard("node-2", "vm-1", start.Add(time.Hour))
 			said(s, now, "node-1", 2*sure+time.Second, true)
 			assert.False(t, shown(s), "and its run starts again, by its node's clock, which another node's says nothing of")
+		},
+		"but what its node says of its other docker vms leaves nothing of this one's behind: one whose dockerd stopped answering keeps what it holds shown, and held, until it is stale": func(t *testing.T) {
+			s, now := sightings()
+
+			for after := time.Duration(0); after <= sure; after += time.Second {
+				s.Heard("node-1", "vm-1", start.Add(after))
+				said(s, now, "node-1", after, true)
+			}
+
+			require.True(t, shown(s))
+
+			// vm-1's dockerd answers no more, and vm-2's goes on.
+			for after := sure; after <= 2*sure; after += time.Second {
+				*now = start.Add(after + 100*time.Millisecond)
+				s.Heard("node-1", "vm-2", start.Add(after))
+			}
+
+			assert.True(t, shown(s), "not left behind by what its node says of another vm")
+			assert.Len(t, s.Held("container", "vm-1"), 1, "and held")
+
+			s.Heard("node-1", "vm-1", start.Add(2*sure))
+			assert.False(t, shown(s), "but by what it says of its own")
+			assert.Empty(t, s.Held("container", "vm-1"))
 		},
 		"what is labelled as the platform's is held by its vm's dockerd as soon as it is said, though it is shown only once said for long enough, and not once its node left it behind": func(t *testing.T) {
 			s, now := sightings()
@@ -195,14 +226,14 @@ func TestSightings_labelled(t *testing.T) {
 			assert.Len(t, s.Held("container", "vm-1"), 1, "but held")
 			assert.Empty(t, s.Held("container", "vm-2"), "in its own vm")
 
-			s.Heard("node-1", start.Add(sure))
+			s.Heard("node-1", "vm-1", start.Add(sure))
 			assert.Empty(t, s.Held("container", "vm-1"), "nor held once its node went on as long without it")
 		},
 		"what is not labelled as the platform's is shown until it is stale, whatever else its node says": func(t *testing.T) {
 			s, now := sightings()
 
 			said(s, now, "node-1", 0, false)
-			s.Heard("node-1", start.Add(sure))
+			s.Heard("node-1", "vm-1", start.Add(sure))
 			assert.True(t, shown(s))
 		},
 		"and what a command took away is seen anew, a heartbeat its node took before then never shown, whatever the control plane's clock": func(t *testing.T) {

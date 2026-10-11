@@ -268,6 +268,43 @@ func TestContainers_Admit(t *testing.T) {
 		assert.Equal(t, []string{"network/outlived", "volume/outlived-too"}, admitted.Spec.External, "its dockerd holds them, as docker would answer a name asked for again")
 	})
 
+	t.Run("and one shown in a vm whose dockerd stopped answering, as its node goes on saying what its other vms hold, until it is stale", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner"), vmtest.Docker("vm-2", "owner")))
+
+		// last said 35 s ago: not stale, and long enough ago for what its
+		// node said since of another vm alone to leave it behind.
+		start := time.Now().Add(-2*blockstest.SureAfter - 6*time.Second)
+
+		outlived := kind.Raw{
+			Kind:     networkKind.Name,
+			Metadata: kind.Metadata{UUID: "outlived-uuid", Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+			Status:   json.RawMessage(`{"state":"present","name":"outlived"}`),
+		}
+
+		// said every second for as long as it waits to be shown, and a
+		// moment more, with everything else its node says of vm-1.
+		for at := start; !at.After(start.Add(blockstest.SureAfter + time.Second)); at = at.Add(time.Second) {
+			w.Sightings.Heard(vmtest.Node, "vm-1", at)
+			w.Sightings.Saw(networkKind.Name, blocks.Seen{Node: vmtest.Node, At: at, Labelled: true, Manifest: outlived})
+		}
+
+		require.Len(t, w.Sightings.In(networkKind.Name, "vm-1"), 1, "shown")
+
+		// vm-1's dockerd answers no more, while vm-2's is heard up to now.
+		w.Sightings.Heard(vmtest.Node, "vm-2", time.Now())
+
+		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{
+			Image:    "nginx",
+			Networks: []string{"outlived"},
+		}, kind.Reference{Kind: "vm", UUID: "vm-1"}))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, []string{"network/outlived"}, admitted.Spec.External, "its dockerd still holds it, as far as anyone heard")
+	})
+
 	t.Run("and one something owns keeps what it was asked to say of it", func(t *testing.T) {
 		t.Parallel()
 

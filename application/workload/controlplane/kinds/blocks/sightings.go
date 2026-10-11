@@ -33,14 +33,18 @@ import (
 // it. What outlived its record, or is on a disk restored long ago, is said
 // beat after beat, and is shown once it has been said for long enough.
 //
-// Nor is it shown once its node has gone on saying what else its Docker VMs
-// hold, as heard here, for as long without a word of it (Heard): heartbeats
+// Nor is it shown once its node has gone on saying what else its Docker VM
+// holds, as heard here, for as long without a word of it (Heard): heartbeats
 // of one kind heard so late that they alone span as long, a backlog of them
 // taken before a delete removed what they say, leave it behind the node's
-// other heartbeats of that beat on, which are heard in time. A backlog of
-// every heartbeat a node sends alike, as long as a record may go unheard,
-// tells nothing apart, and what it says is shown until it is stale: a ghost
-// for as long as twice that, from the last word of it, by the node's clock.
+// other heartbeats of that VM and that beat on, which are heard in time. A
+// Docker VM whose dockerd answers says something every beat, its default
+// networks if nothing else, and one whose dockerd does not answer says
+// nothing, which leaves nothing of it behind: what it holds is shown until
+// it is stale, whatever the node says of its other VMs. A backlog of every
+// heartbeat a node sends alike, as long as a record may go unheard, tells
+// nothing apart, and what it says is shown until it is stale: a ghost for as
+// long as twice that, from the last word of it, by the node's clock.
 type Sightings struct {
 	lock sync.RWMutex
 
@@ -57,11 +61,18 @@ type Sightings struct {
 	// without a word of it in between.
 	sureAfter time.Duration
 
-	// heard is the latest moment each node said what its Docker VMs hold as
-	// of, by its own clock, in a heartbeat heard here, of any kind.
-	heard map[string]time.Time
+	// heard is the latest moment each node said what each of its Docker
+	// VMs holds as of, by its own clock, in a heartbeat heard here, of any
+	// kind.
+	heard map[where]time.Time
 
 	now func() time.Time
+}
+
+// where is a Docker VM on a node, as a node says what it holds.
+type where struct {
+	node string
+	vm   string
 }
 
 // Seen is what a node saw of one thing nobody keeps a record of.
@@ -97,19 +108,20 @@ type Seen struct {
 // labelled as its own only once its node has gone on saying it for as long
 // as sureAfter, never as long again without a word of it.
 func NewSightings(shownFor time.Duration, sureAfter time.Duration) *Sightings {
-	return &Sightings{seen: make(map[string]map[string]Seen), heard: make(map[string]time.Time), staleAfter: shownFor, sureAfter: sureAfter, now: time.Now}
+	return &Sightings{seen: make(map[string]map[string]Seen), heard: make(map[where]time.Time), staleAfter: shownFor, sureAfter: sureAfter, now: time.Now}
 }
 
-// Heard keeps that a node said what one of its Docker VMs holds as of a
+// Heard keeps that a node said what its Docker VM vmUUID names holds as of a
 // moment, by its own clock, in a heartbeat heard here, of whatever kind, a
-// record kept of it or not: what the platform labelled as its own that its
-// node goes on that long after without a word of is not shown.
-func (s *Sightings) Heard(nodeName string, at time.Time) {
+// record kept of it or not: what the platform labelled as its own in that VM
+// that its node goes on that long after without a word of is not shown.
+func (s *Sightings) Heard(nodeName string, vmUUID string, at time.Time) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if at.After(s.heard[nodeName]) {
-		s.heard[nodeName] = at
+	in := where{node: nodeName, vm: vmUUID}
+	if at.After(s.heard[in]) {
+		s.heard[in] = at
 	}
 }
 
@@ -257,10 +269,12 @@ func (s *Sightings) holds(seen Seen) bool {
 }
 
 // left reports whether what was seen was left behind by its node: it went on
-// saying what else its Docker VMs hold, as heard here, for sureAfter since it
-// last said it.
+// saying what else the Docker VM it is in holds, as heard here, for
+// sureAfter since it last said it.
 func (s *Sightings) left(seen Seen) bool {
-	return s.heard[seen.Node].Sub(seen.said) >= s.sureAfter
+	vm, _ := seen.Manifest.Metadata.Owner(blockKinds.Parent)
+
+	return s.heard[where{node: seen.Node, vm: vm.UUID}].Sub(seen.said) >= s.sureAfter
 }
 
 // stale reports whether what was seen was seen too long ago to show.
@@ -283,6 +297,14 @@ func (s *Sightings) prune() {
 			if s.stale(each) {
 				delete(seen, uuid)
 			}
+		}
+	}
+
+	// nor when a node last said what a Docker VM holds, once that is as
+	// long ago: a VM gone, or stopped, whose sightings went stale with it.
+	for in, at := range s.heard {
+		if now.Sub(at) > s.staleAfter {
+			delete(s.heard, in)
 		}
 	}
 }

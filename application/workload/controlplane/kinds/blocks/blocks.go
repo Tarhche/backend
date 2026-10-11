@@ -346,7 +346,10 @@ func (b *Blocks) request(ctx context.Context, r kind.Raw, action string, payload
 // is taken in again instead; and that look is kept on the VM's record
 // (looked).
 func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.Observation, kept bool, at time.Time) error {
-	b.Sightings.Heard(nodeName, at)
+	parent, in := ownerOf(instance.Owners, blockKinds.Parent)
+	if in {
+		b.Sightings.Heard(nodeName, parent.UUID, at)
+	}
 
 	if kept {
 		b.Sightings.Forget(b.descriptor.Name, instance.UUID)
@@ -354,7 +357,6 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 		return nil
 	}
 
-	parent, in := ownerOf(instance.Owners, blockKinds.Parent)
 	if !in {
 		return nil
 	}
