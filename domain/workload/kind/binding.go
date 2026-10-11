@@ -435,8 +435,9 @@ func (b *nodeBinding[Spec, Status, S]) Execute(ctx context.Context, command ActO
 // disowned is why the delete of what nobody keeps a record of (an orphan,
 // ActOnResource.Orphaned) is refused, or nothing: what the node holds under
 // its uuid was made later than its node first said it, as the strategy says
-// (Maker), and is another, made since, which somebody keeps a record of. A
-// strategy that cannot say deletes what it holds, as it always did. It is
+// (Maker), and is another, made since under the same uuid, not the one the
+// delete was asked of, whether or not somebody keeps a record of it by now.
+// A strategy that cannot say deletes what it holds, as it always did. It is
 // asked under the resource's lock, as the command is carried out, so that
 // nothing is made between the two.
 func (b *nodeBinding[Spec, Status, S]) disowned(ctx context.Context, command ActOnResource) error {
