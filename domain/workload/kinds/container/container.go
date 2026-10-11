@@ -652,9 +652,22 @@ func Descriptor() kind.Descriptor {
 // they are answered: a container runs before a restart as it does after it,
 // and a look its node took between the start being asked and carried out
 // says it is stopped, as it was, which says nothing of what the start came
-// to; and docker starts what it makes, so that a look taken while a
-// container to be stopped is made, before its node stops it, says it runs,
-// which says nothing of what the create came to either.
+// to; and a look taken while a container is made, before its node starts
+// it, says it is not running, as docker has it made and not started, which
+// says nothing of what the create came to either. One to be stopped is made
+// and never started, so that what its node says of it while it is made and
+// what its create's answer says agree.
+//
+// A create whose answer never comes, a result its node could not say or one
+// the control plane dropped as never to be taken, leaves the container
+// creating, whatever its node says of it, until the reconcile loop sends the
+// create again: once a node may have pulled its image (Action.Timeout) and
+// the loop's patience has passed, 18 minutes as served. Start, stop and
+// restart are refused meanwhile. Nothing tells such a create from one still
+// pulling sooner: what its node says of a container while its create is
+// answered is not taken, and the loop waits on every kind's commands alike,
+// a VM's restore among them, which its node says it carries out for as long
+// as it does.
 //
 // At rest, a container is what its node says: running, stopped or completed,
 // missing when its VM's dockerd has none of it, and waiting while its VM is

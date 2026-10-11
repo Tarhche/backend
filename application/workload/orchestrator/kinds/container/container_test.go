@@ -116,7 +116,7 @@ func TestNode_Execute(t *testing.T) {
 		assert.Equal(t, containerKind.Running, outcome.Status.Status.State)
 	})
 
-	t.Run("one that is to be stopped is stopped once it is made", func(t *testing.T) {
+	t.Run("one that is to be stopped is made and never started, and says it is stopped, as docker does", func(t *testing.T) {
 		t.Parallel()
 
 		strategy, dockerd, _ := newNode(t)
@@ -127,7 +127,30 @@ func TestNode_Execute(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, containerKind.Stopped, outcome.Status.Status.State)
+		assert.Equal(t, "created", outcome.Status.Docker.State)
+		assert.Equal(t, "created", dockerd.Held()[0].State, "made, and not started")
+		assert.Equal(t, 1, dockerd.Calls("CreateContainer"))
+		assert.Zero(t, dockerd.Calls("StartContainer"), "nothing started it")
+		assert.Zero(t, dockerd.Calls("StopContainer"), "and nothing had to stop it")
+	})
+
+	t.Run("and one there already that runs, its create asked again, is stopped", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd, _ := newNode(t)
+
+		_, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid", func(c *containerKind.Container) {
+			c.Status.Expected = containerKind.Stopped
+		}), containerKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, containerKind.Stopped, outcome.Status.Status.State)
+		assert.Len(t, dockerd.Held(), 1)
 		assert.Equal(t, "exited", dockerd.Held()[0].State)
+		assert.Equal(t, 1, dockerd.Calls("StopContainer"))
 	})
 
 	t.Run("what docker refuses fails it, in docker's words and the code every side knows", func(t *testing.T) {

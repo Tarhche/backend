@@ -273,9 +273,11 @@ func (d *Daemon) Container(ctx context.Context, id string) (docker.Container, er
 }
 
 // CreateContainer pulls the image when the VM does not hold it, then creates
-// the container and starts it. One that was created and would not start is
-// removed again, so a create either makes a running container or leaves
-// nothing behind.
+// the container and starts it, unless it is to be made stopped
+// (docker.ContainerSpec.Stopped), which is never started. One that was
+// created and would not start, or not join its networks, is removed again, so
+// a create either makes a container as it was asked for or leaves nothing
+// behind.
 func (d *Daemon) CreateContainer(ctx context.Context, spec docker.ContainerSpec) (docker.Container, error) {
 	var id string
 
@@ -309,12 +311,17 @@ func (d *Daemon) CreateContainer(ctx context.Context, spec docker.ContainerSpec)
 }
 
 // connectAndStart joins a created container to the networks beyond the one it
-// was created on, which docker takes only one of at a time, and starts it.
+// was created on, which docker takes only one of at a time, and starts it,
+// unless it is to be made stopped.
 func (d *Daemon) connectAndStart(ctx context.Context, cli *client.Client, id string, spec docker.ContainerSpec) error {
 	for _, name := range spec.Networks[min(1, len(spec.Networks)):] {
 		if err := cli.NetworkConnect(ctx, name, id, &network.EndpointSettings{Aliases: slices.Clone(spec.Aliases[name])}); err != nil {
 			return err
 		}
+	}
+
+	if spec.Stopped {
+		return nil
 	}
 
 	return cli.ContainerStart(ctx, id, container.StartOptions{})

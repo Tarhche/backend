@@ -175,9 +175,11 @@ func Observed(vmUUID string, c docker.Container) kind.Observed[containerKind.Sta
 // create makes a container that is not there, pulling its image first when
 // its VM does not hold it, labelled as the resource it is, with its spec
 // beside, and as its stack's service when it is one (labelsOf). One that is
-// there already, a create asked again, is what was asked for, and is left as
-// it is, but for being started when it is to be running. One that is to be
-// stopped is stopped once it is made.
+// to be stopped, a stopped stack's service, is made and never started, so
+// that it does not run a moment, and its answer says it is stopped, as its
+// node does. One that is there already, a create asked again, is what was
+// asked for, and is left as it is, but for being started when it is to be
+// running, and stopped when it is to be stopped.
 func (n *Node) create(ctx context.Context, daemon docker.Daemon, c containerKind.Container) (kind.Outcome[containerKind.Status], error) {
 	found, there, err := find(ctx, daemon, c)
 	if err != nil {
@@ -190,7 +192,10 @@ func (n *Node) create(ctx context.Context, daemon docker.Daemon, c containerKind
 			return failed(err)
 		}
 
-		if found, err = daemon.CreateContainer(ctx, c.Spec.Docker(c.Metadata.UUID, labels)); err != nil {
+		spec := c.Spec.Docker(c.Metadata.UUID, labels)
+		spec.Stopped = c.Status.Expected == containerKind.Stopped
+
+		if found, err = daemon.CreateContainer(ctx, spec); err != nil {
 			return failed(err)
 		}
 	}

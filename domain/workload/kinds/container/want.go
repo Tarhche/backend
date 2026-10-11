@@ -37,9 +37,9 @@ type Want struct {
 	// (Spec.External), among the rest.
 	Spec Spec `json:"spec"`
 
-	// Stopped says it is to be stopped once it is made, rather than running,
-	// as it is expected to be once it is admitted: a stack's service, made
-	// while its stack is expected stopped.
+	// Stopped says it is to be made stopped, never started, rather than
+	// running, as it is expected to be once it is admitted: a stack's
+	// service, made while its stack is expected stopped.
 	Stopped bool `json:"stopped,omitempty"`
 }
 

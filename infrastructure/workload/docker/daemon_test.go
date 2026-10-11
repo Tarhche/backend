@@ -446,6 +446,23 @@ func TestDaemon_CreateContainer(t *testing.T) {
 		assert.Equal(t, "data", given.HostConfig.Mounts[0].Source)
 	})
 
+	t.Run("one to be made stopped is created and never started", func(t *testing.T) {
+		t.Parallel()
+
+		fake := newFakeDocker()
+		daemons, _ := dockerVM(t, fake, nil, time.Minute)
+
+		stopped := spec
+		stopped.Stopped = true
+
+		created, err := daemons.Daemon("vm-1").CreateContainer(t.Context(), stopped)
+		require.NoError(t, err)
+
+		assert.Equal(t, container.StateCreated, created.State)
+		assert.Contains(t, fake.containers, "c2")
+		assert.False(t, fake.running["c2"], "nothing started it")
+	})
+
 	t.Run("what it is asked for beyond the rest reaches dockerd as docker names it", func(t *testing.T) {
 		t.Parallel()
 

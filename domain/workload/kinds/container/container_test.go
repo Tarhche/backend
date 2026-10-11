@@ -104,7 +104,7 @@ func TestMachine(t *testing.T) {
 
 	m := container.Machine()
 
-	assert.ElementsMatch(t, []kind.State{container.Creating, container.Starting, container.Restarting}, m.Answered, "a look taken before a start or a restart reached its node, or while a create made what docker starts as it makes it, says nothing of what it came to, so only their answers say")
+	assert.ElementsMatch(t, []kind.State{container.Creating, container.Starting, container.Restarting}, m.Answered, "a look taken before a start or a restart reached its node, or while a create made a container its node has not started yet, says nothing of what it came to, so only their answers say")
 
 	for name, tt := range map[string]struct {
 		from kind.State

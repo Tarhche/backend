@@ -395,7 +395,7 @@ func TestContainers_Reconcile(t *testing.T) {
 		"and so is one its vm lost": {
 			container: blockstest.AContainer("c", "vm-1", containerKind.Missing, containerKind.Running),
 		},
-		"even one that is to be stopped, which is stopped once it is made": {
+		"even one that is to be stopped, which is made stopped": {
 			container: blockstest.AContainer("c", "vm-1", containerKind.Missing, containerKind.Stopped),
 		},
 		"and one in a vm that does not run": {

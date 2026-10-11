@@ -230,10 +230,11 @@ func (d *Dockerd) CreateContainer(_ context.Context, spec docker.ContainerSpec) 
 		return docker.Container{}, fmt.Errorf("%w: the container name %q is already in use", docker.ErrInvalid, "/"+name)
 	}
 
+	// a port is taken as a container starts, which one made stopped does not.
 	for _, p := range spec.Ports {
 		for _, c := range d.containers {
 			for _, taken := range c.Ports {
-				if p.HostPort > 0 && taken.HostPort == p.HostPort && c.State == "running" {
+				if p.HostPort > 0 && taken.HostPort == p.HostPort && c.State == "running" && !spec.Stopped {
 					return docker.Container{}, fmt.Errorf("%w: port is already allocated: %d", docker.ErrInvalid, p.HostPort)
 				}
 			}
@@ -251,12 +252,17 @@ func (d *Dockerd) CreateContainer(_ context.Context, spec docker.ContainerSpec) 
 		}
 	}
 
+	state, status := "running", "Up Less than a second"
+	if spec.Stopped {
+		state, status = "created", "Created"
+	}
+
 	c := docker.Container{
 		ID:            fmt.Sprintf("c%04d", d.ids),
 		Name:          name,
 		Image:         spec.Image,
-		State:         "running",
-		Status:        "Up Less than a second",
+		State:         state,
+		Status:        status,
 		Command:       strings.Join(spec.Command, " "),
 		Ports:         slices.Clone(spec.Ports),
 		Networks:      networks,

@@ -1270,8 +1270,8 @@ func (d *dockerd) Allow(reference string) {
 }
 
 // HoldStops holds every container's stop, in every VM, from now on, until
-// what it hands back lets them go: a container docker started as it made it,
-// to be stopped once it is, runs until then, and is seen running.
+// what it hands back lets them go: a container started that is to be stopped
+// runs until then, and is seen running.
 func (d *dockerd) HoldStops() (release func()) {
 	held := make(chan struct{})
 

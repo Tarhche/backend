@@ -122,6 +122,11 @@ type ContainerSpec struct {
 	Runtime string
 
 	Labels map[string]string
+
+	// Stopped has it made and not started, as a container that is to be
+	// stopped is made: one started as it is made runs a moment before it is
+	// stopped, a stopped stack's worker taking a job meanwhile.
+	Stopped bool
 }
 
 // ContainerFilter narrows a listing of containers.
@@ -266,7 +271,8 @@ type Daemon interface {
 	Container(ctx context.Context, id string) (Container, error)
 
 	// CreateContainer pulls the image when the VM does not hold it, then
-	// creates the container and starts it.
+	// creates the container and starts it, unless it is to be made stopped
+	// (ContainerSpec.Stopped).
 	CreateContainer(ctx context.Context, spec ContainerSpec) (Container, error)
 
 	StartContainer(ctx context.Context, id string) error

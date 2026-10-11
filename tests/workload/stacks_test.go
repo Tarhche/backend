@@ -599,8 +599,9 @@ func TestAStacksGraph(t *testing.T) {
 		before := w.containerRecord(t, vmUUID, named("web"))
 		did := len(w.dockerd.Did(vmUUID))
 
-		// docker starts web as it makes it, and its node stops it once it is
-		// made, which waits: web runs, and its node says so, meanwhile.
+		// web is made stopped, and never started; were it started as it is
+		// made, its node's stop would wait, and web would run, and its node
+		// say so, meanwhile.
 		release := w.dockerd.HoldStops()
 		defer release()
 
@@ -611,11 +612,10 @@ func TestAStacksGraph(t *testing.T) {
 		require.Eventually(t, func() bool {
 			c, there := w.dockerd.Holds(t, vmUUID).Container(named("web"))
 
-			return there && c.Labels[blockKinds.Label(containerKind.Name)] != before.Metadata.UUID && c.State == "running"
+			return there && c.Labels[blockKinds.Label(containerKind.Name)] != before.Metadata.UUID && c.State == "created"
 		}, settle, beat, "web was never made again")
 
-		// what its node says of web while it is made says nothing of what its
-		// making came to: its record is never running, nor its stack running,
+		// web never runs: its record is never running, nor its stack running,
 		// in part or in full. It may wait meanwhile, on web being removed.
 		assert.Never(t, func() bool {
 			r, err := w.resources.GetOne(ctx, stackKind.Name, stackUUID)
@@ -658,7 +658,8 @@ func TestAStacksGraph(t *testing.T) {
 
 		made := w.dockerd.Did(vmUUID)[did:]
 		require.Contains(t, made, "create "+named("web"))
-		assert.Equal(t, "stop "+named("web"), made[len(made)-1], "what docker starts as it makes it is stopped once it is made, and nothing starts it after")
+		assert.NotContains(t, made, "start "+named("web"), "it is made stopped, and nothing starts it")
+		assert.NotContains(t, made, "stop "+named("web"), "nor has anything to stop it")
 	})
 
 	t.Run("deleted, it takes its containers and its network with it, and leaves its volume and its vm", func(t *testing.T) {
@@ -718,8 +719,8 @@ func TestAStacksGraph(t *testing.T) {
 // create fails, docker never having it, which fails the stack's plan; the
 // stack's detail lists it all the same, as its record says it is the
 // stack's. Once the image can be pulled, the run after makes it by its
-// create, still expected stopped, what docker starts as it makes it stopped,
-// and nothing asks it to run: the stack is stopped again, and not degraded.
+// create, still expected stopped, made stopped and never started, and nothing
+// asks it to run: the stack is stopped again, and not degraded.
 func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
 	t.Parallel()
 
@@ -836,7 +837,8 @@ func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
 
 	made := w.dockerd.Did(vmUUID)[did:]
 	require.Contains(t, made, "create "+web)
-	assert.Equal(t, "stop "+web, made[len(made)-1], "made by its create, what docker starts as it makes it stopped once it is made, and nothing starts it after")
+	assert.NotContains(t, made, "start "+web, "made by its create, stopped, and nothing starts it")
+	assert.NotContains(t, made, "stop "+web, "nor has anything to stop it")
 }
 
 // TestAStackWhoseFileCannotBeRead deletes a stack whose file the platform
