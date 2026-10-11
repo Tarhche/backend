@@ -53,6 +53,39 @@ func TestUseCase_Execute(t *testing.T) {
 		})
 	}
 
+	t.Run("a container of a stack whoever asks cannot see names no stack and links to none, and says the service it is, as its labels do", func(t *testing.T) {
+		t.Parallel()
+
+		// the stacks whoever asks sees are others than the one that made it.
+		var workload controlplane.MockClient
+		workload.On("Containers", mock.Anything, workloadtest.OwnerUUID, "").Once().Return([]workloadControlPlane.VMContainer{
+			{Container: workloadtest.Container(), VMUUID: "vm-uuid", VMName: "docker-1"},
+		}, nil)
+		workload.On("Stacks", mock.Anything, workloadtest.OwnerUUID, "", uint(1)).Once().Return(workloadControlPlane.Page[stack.Stack]{
+			Items:       []stack.Stack{{UUID: "blog-stack-uuid", Slug: "blog-fghij"}},
+			CurrentPage: 1,
+			TotalPages:  1,
+		}, nil)
+		defer workload.AssertExpectations(t)
+
+		response, err := NewUseCase(&workload, workloadtest.Translator()).Execute(context.Background(), &Request{OwnerUUID: workloadtest.OwnerUUID})
+		require.NoError(t, err)
+
+		presented, err := json.Marshal(response)
+		require.NoError(t, err)
+
+		var items []map[string]any
+		require.NoError(t, json.Unmarshal(presented, &struct {
+			Items *[]map[string]any `json:"items"`
+		}{&items}))
+
+		require.Len(t, items, 1, "listed all the same")
+		assert.Equal(t, "vm-uuid", items[0]["vm_uuid"])
+		assert.NotContains(t, items[0], "stack", "its stack is not named")
+		assert.NotContains(t, items[0], "stack_uuid", "nor linked")
+		assert.Equal(t, "web", items[0]["service"], "though it says which service it is")
+	})
+
 	t.Run("one VM's, and the stacks of that VM only", func(t *testing.T) {
 		t.Parallel()
 
