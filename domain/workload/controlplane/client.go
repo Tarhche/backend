@@ -58,6 +58,13 @@ type Client interface {
 	// answered with them (Deleted).
 	DeleteVM(ctx context.Context, ownerUUID string, uuid string, cascade bool) (Deleted, error)
 
+	// VMDependents is what needs a VM, as its delete would be answered with
+	// it now (Deleted): the containers and the stacks in it, which make it
+	// again once it is gone. It is read, and nothing is deleted, marked or
+	// asked of a node. One that is not there, or not ownerUUID's, is
+	// domain.ErrNotExists.
+	VMDependents(ctx context.Context, ownerUUID string, uuid string) (Deleted, error)
+
 	StartVM(ctx context.Context, ownerUUID string, uuid string) error
 	StopVM(ctx context.Context, ownerUUID string, uuid string) error
 	RestartVM(ctx context.Context, ownerUUID string, uuid string) error
@@ -106,12 +113,29 @@ type Client interface {
 	// the same.
 	DeleteNetwork(ctx context.Context, ownerUUID string, vmUUID string, id string, cascade bool) (Deleted, error)
 
+	// NetworkDependents is what needs a docker network of a Docker VM, named
+	// by its id or its name as DeleteNetwork names it, as its delete would be
+	// answered with it now (Deleted). It is read, and nothing is deleted,
+	// marked or asked of a node. One that is not there, or in a VM that is
+	// not ownerUUID's, is domain.ErrNotExists; and a VM that is not a Docker
+	// VM, or is neither running nor on its way up, is refused, as the delete
+	// is.
+	NetworkDependents(ctx context.Context, ownerUUID string, vmUUID string, id string) (Deleted, error)
+
 	// DeleteVolume removes a volume from a Docker VM by its name, as
 	// Docker(...).RemoveVolume does, and is answered with the containers that
 	// need it (Deleted): one a container mounts is refused, unless cascade
 	// deletes the containers that need it first, and is answered with them
 	// all the same.
 	DeleteVolume(ctx context.Context, ownerUUID string, vmUUID string, name string, force bool, cascade bool) (Deleted, error)
+
+	// VolumeDependents is what needs a volume of a Docker VM, named by its
+	// name as DeleteVolume names it, as its delete would be answered with it
+	// now (Deleted). It is read, and nothing is deleted, marked or asked of a
+	// node. One that is not there, or in a VM that is not ownerUUID's, is
+	// domain.ErrNotExists; and a VM that is not a Docker VM, or is neither
+	// running nor on its way up, is refused, as the delete is.
+	VolumeDependents(ctx context.Context, ownerUUID string, vmUUID string, name string) (Deleted, error)
 
 	// CreateContainer creates a container in the Docker VM the request
 	// chooses, making that VM first when it says so or when ownerUUID has
@@ -143,17 +167,18 @@ type Client interface {
 	RestartStack(ctx context.Context, ownerUUID string, uuid string) error
 }
 
-// Deleted is what deleting what containers need came to: the containers that
-// need it, nothing owning them, and whether one of them makes it again once
-// it is gone. What nothing needs has none.
+// Deleted is what deleting what roots need came to, or would come to, read
+// before it is asked: the roots that need it, containers nothing owns and
+// stacks, and whether one of them makes it again once it is gone. What
+// nothing needs has none.
 type Deleted struct {
 	Dependents []Dependent
 	Recreated  bool
 }
 
-// Dependent is what needs what was deleted: a container nothing owns, which
-// makes it again whenever it is gone, or, when it was there before it, only
-// waits on it while it is missing.
+// Dependent is what needs what was deleted: a root, a container nothing owns
+// or a stack, which makes it again whenever it is gone, or, when it was there
+// before it, only waits on it while it is missing.
 type Dependent struct {
 	Kind      string
 	UUID      string

@@ -58,6 +58,23 @@ func TestCommonShapes(t *testing.T) {
 		assert.JSONEq(t, `{"uuid": "vm-uuid", "name": "docker-1", "created": true}`, string(presented))
 	})
 
+	t.Run("what needs something, a list of none when nothing does", func(t *testing.T) {
+		t.Parallel()
+
+		presented, err := json.Marshal(NewNeeds(workloadControlPlane.Deleted{
+			Dependents: []workloadControlPlane.Dependent{{Kind: "stack", UUID: "s-uuid", Name: "shop", Recreates: true}, {Kind: "container", UUID: "c-uuid"}},
+			Recreated:  true,
+		}))
+		require.NoError(t, err)
+
+		assert.JSONEq(t, `{"dependents": [{"kind": "stack", "uuid": "s-uuid", "name": "shop", "recreates": true}, {"kind": "container", "uuid": "c-uuid", "recreates": false}], "recreated": true}`, string(presented))
+
+		presented, err = json.Marshal(NewNeeds(workloadControlPlane.Deleted{}))
+		require.NoError(t, err)
+
+		assert.JSONEq(t, `{"dependents": [], "recreated": false}`, string(presented))
+	})
+
 	t.Run("a VM's log, line by line, and where each came from", func(t *testing.T) {
 		t.Parallel()
 

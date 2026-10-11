@@ -523,6 +523,13 @@ func (c *Client) DeleteNetwork(ctx context.Context, ownerUUID string, vmUUID str
 	return (&blocks{client: c, ownerUUID: ownerUUID, vmUUID: vmUUID}).removeNetwork(ctx, id, cascade)
 }
 
+// NetworkDependents is what needs a network of a Docker VM, by its Docker id
+// or its name, as the control plane answers its delete with it now: read
+// with a GET of what needs it, inside the VM, which changes nothing.
+func (c *Client) NetworkDependents(ctx context.Context, ownerUUID string, vmUUID string, id string) (workloadControlPlane.Deleted, error) {
+	return (&blocks{client: c, ownerUUID: ownerUUID, vmUUID: vmUUID}).dependents(ctx, networksPath, id)
+}
+
 // removeNetwork removes a network by its Docker id or its name, with what
 // needs it when cascade says so, and is what needs it, whatever came of it.
 func (b *blocks) removeNetwork(ctx context.Context, id string, cascade bool) (workloadControlPlane.Deleted, error) {
@@ -592,6 +599,24 @@ func (b *blocks) RemoveVolume(ctx context.Context, name string, force bool) erro
 // what needs it goes first.
 func (c *Client) DeleteVolume(ctx context.Context, ownerUUID string, vmUUID string, name string, force bool, cascade bool) (workloadControlPlane.Deleted, error) {
 	return (&blocks{client: c, ownerUUID: ownerUUID, vmUUID: vmUUID}).removeVolume(ctx, name, force, cascade)
+}
+
+// VolumeDependents is what needs a volume of a Docker VM, by its name, as
+// the control plane answers its delete with it now: read with a GET of what
+// needs it, inside the VM, which changes nothing.
+func (c *Client) VolumeDependents(ctx context.Context, ownerUUID string, vmUUID string, name string) (workloadControlPlane.Deleted, error) {
+	return (&blocks{client: c, ownerUUID: ownerUUID, vmUUID: vmUUID}).dependents(ctx, volumesPath, name)
+}
+
+// dependents is what needs a building block of the VM, which name names
+// inside it, of the kind path is the plural of: the VM's building blocks have
+// to be up to be asked anything, as for its delete.
+func (b *blocks) dependents(ctx context.Context, path string, name string) (workloadControlPlane.Deleted, error) {
+	if err := b.up(ctx); err != nil {
+		return workloadControlPlane.Deleted{}, err
+	}
+
+	return b.client.dependents(ctx, path+"/"+url.PathEscape(name), b.query(nil))
 }
 
 // removeVolume removes a volume by its name, with what needs it when cascade

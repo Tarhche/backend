@@ -183,6 +183,14 @@ func (c *Client) DeleteVM(ctx context.Context, ownerUUID string, uuid string, ca
 	return answer.deleted(), nil
 }
 
+// VMDependents is what needs a VM, as the control plane answers its delete
+// with it now: read with a GET of what needs it, which changes nothing, so
+// that a control plane that does not know the question answers 404, and
+// nothing is deleted for asking it.
+func (c *Client) VMDependents(ctx context.Context, ownerUUID string, uuid string) (workloadControlPlane.Deleted, error) {
+	return c.dependents(ctx, vmPath(uuid), owned(ownerUUID, nil))
+}
+
 func (c *Client) StartVM(ctx context.Context, ownerUUID string, uuid string) error {
 	return c.vmCommand(ctx, ownerUUID, uuid, vmKind.ActionStart)
 }

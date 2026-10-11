@@ -9,6 +9,7 @@ import (
 	actOnResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	admitResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	deleteResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
+	getDependents "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getDependents"
 	getKinds "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
 	getPlan "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getPlan"
 	getResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
@@ -529,6 +530,43 @@ func (h *planHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	respond.JSON(rw, http.StatusOK, planShownOf(response))
+}
+
+type dependentsHandler struct {
+	useCase  *getDependents.UseCase
+	kindName string
+}
+
+func NewDependentsHandler(useCase *getDependents.UseCase, kindName string) *dependentsHandler {
+	return &dependentsHandler{useCase: useCase, kindName: kindName}
+}
+
+// @Summary		What needs a resource
+// @Description	the roots whose graphs need a resource, as its delete would be answered with them now, each with whether it makes it again once it is gone, and whether one of them does: none for a root, and none for what nobody keeps a record of. Nothing is changed, marked or asked of any node: it is a question, which a delete's answer would also say
+// @Tags			workload resources
+// @Produce		json
+// @Param			plural	path		string	true	"The kind's plural"
+// @Param			uuid	path		string	true	"Resource UUID, or what else names it inside its parent"
+// @Param			owner	query		string	false	"Only this owner's"
+// @Param			parent	query		string	false	"The resource it lives in: inside it, a kind may name it by more than its uuid"
+// @Success		200		{object}	dependentsShown
+// @Failure		404		{object}	map[string]interface{}
+// @Failure		500		{object}	map[string]interface{}
+// @Router			/{plural}/{uuid}/dependents [get]
+func (h *dependentsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	response, err := h.useCase.Execute(r.Context(), &getDependents.Request{
+		Kind:      h.kindName,
+		OwnerUUID: respond.Owner(r),
+		UUID:      r.PathValue("uuid"),
+		Parent:    r.URL.Query().Get("parent"),
+	})
+	if err != nil {
+		failed(rw, r, err)
+
+		return
+	}
+
+	respond.JSON(rw, http.StatusOK, dependentsShown{Dependents: dependentsOf(response.Dependents), Recreated: response.Recreated})
 }
 
 type kindsHandler struct {

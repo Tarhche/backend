@@ -3832,6 +3832,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/dashboard/my/workload/vms/{uuid}/dependents": {
+            "get": {
+                "description": "what needs a VM, read before it is asked to be deleted: the containers and the stacks in it, which make it again, under its uuid and as it was, once it is gone, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "What needs a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/my/workload/vms/{uuid}/images": {
             "get": {
                 "description": "the images a Docker VM holds, read from its dockerd as it is now",
@@ -4227,6 +4274,60 @@ const docTemplate = `{
                 }
             }
         },
+        "/dashboard/my/workload/vms/{uuid}/networks/{id}/dependents": {
+            "get": {
+                "description": "what needs a docker network of a Docker VM, found by its id or its name as its delete finds it, read before it is asked to be deleted: the containers and the stacks that need it, each saying whether it makes it again once it is gone, as one that owns it does, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "What needs a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Network id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/my/workload/vms/{uuid}/restart": {
             "post": {
                 "description": "ask for a VM to be stopped and started again in place",
@@ -4576,6 +4677,60 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/volumes/{name}/dependents": {
+            "get": {
+                "description": "what needs a volume of a Docker VM, found by its name as its delete finds it, read before it is asked to be deleted: the containers and the stacks that need it, a container that mounts it among them, each saying whether it makes it again once it is gone, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "What needs a volume",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Volume name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
                         }
                     },
                     "404": {
@@ -6723,6 +6878,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/dashboard/workload/vms/{uuid}/dependents": {
+            "get": {
+                "description": "what needs a VM, read before it is asked to be deleted: the containers and the stacks in it, which make it again, under its uuid and as it was, once it is gone, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "What needs a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/workload/vms/{uuid}/images": {
             "get": {
                 "description": "the images a Docker VM holds, read from its dockerd as it is now",
@@ -7101,6 +7303,60 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/networks/{id}/dependents": {
+            "get": {
+                "description": "what needs a docker network of a Docker VM, found by its id or its name as its delete finds it, read before it is asked to be deleted: the containers and the stacks that need it, each saying whether it makes it again once it is gone, as one that owns it does, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "What needs a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Network id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
                         }
                     },
                     "404": {
@@ -7526,6 +7782,60 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/volumes/{name}/dependents": {
+            "get": {
+                "description": "what needs a volume of a Docker VM, found by its name as its delete finds it, read before it is asked to be deleted: the containers and the stacks that need it, a container that mounts it among them, each saying whether it makes it again once it is gone, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "What needs a volume",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Volume name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
                         }
                     },
                     "404": {
@@ -11046,6 +11356,20 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "presenter.Needs": {
+            "type": "object",
+            "properties": {
+                "dependents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Dependent"
+                    }
+                },
+                "recreated": {
+                    "type": "boolean"
                 }
             }
         },

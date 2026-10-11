@@ -11,6 +11,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/createVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/deleteVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVM"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMDependents"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMLogs"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMs"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/restartVM"
@@ -44,6 +45,7 @@ func routes(client *controlplane.MockClient) *http.ServeMux {
 		mux.Handle("GET "+set.Prefix+"/vms/{uuid}", NewShowHandler(getVM.NewUseCase(client, owners, ingress), set.Owner))
 		mux.Handle("PATCH "+set.Prefix+"/vms/{uuid}", NewUpdateHandler(updateVM.NewUseCase(client, v, t, owners, ingress), set.Owner))
 		mux.Handle("DELETE "+set.Prefix+"/vms/{uuid}", NewDeleteHandler(deleteVM.NewUseCase(client, t), set.Owner))
+		mux.Handle("GET "+set.Prefix+"/vms/{uuid}/dependents", NewDependentsHandler(getVMDependents.NewUseCase(client, t), set.Owner))
 		mux.Handle("POST "+set.Prefix+"/vms/{uuid}/start", NewStartHandler(startVM.NewUseCase(client, t), set.Owner))
 		mux.Handle("POST "+set.Prefix+"/vms/{uuid}/stop", NewStopHandler(stopVM.NewUseCase(client, t), set.Owner))
 		mux.Handle("POST "+set.Prefix+"/vms/{uuid}/restart", NewRestartHandler(restartVM.NewUseCase(client, t), set.Owner))
@@ -161,6 +163,39 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 				},
 				status: http.StatusAccepted,
 				answer: `{"dependents": [{"kind": "container", "uuid": "c-uuid", "name": "web", "recreates": true}], "recreated": false}`,
+			},
+			{
+				name:   "what needs it, read and nothing deleted",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/dependents",
+				expect: func(client *controlplane.MockClient) {
+					client.On("VMDependents", mock.Anything, set.OwnerUUID, "vm-uuid").Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "stack", UUID: "stack-uuid", Name: "shop", Recreates: true}},
+						Recreated:  true,
+					}, nil)
+				},
+				status: http.StatusOK,
+				answer: `{"dependents": [{"kind": "stack", "uuid": "stack-uuid", "name": "shop", "recreates": true}], "recreated": true}`,
+			},
+			{
+				name:   "and of one nothing needs, a list of none",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/dependents",
+				expect: func(client *controlplane.MockClient) {
+					client.On("VMDependents", mock.Anything, set.OwnerUUID, "vm-uuid").Once().Return(workloadControlPlane.Deleted{}, nil)
+				},
+				status: http.StatusOK,
+				answer: `{"dependents": [], "recreated": false}`,
+			},
+			{
+				name:   "and of one that is not there, or not the caller's, nothing",
+				method: http.MethodGet,
+				target: "/vms/gone-uuid/dependents",
+				expect: func(client *controlplane.MockClient) {
+					client.On("VMDependents", mock.Anything, set.OwnerUUID, "gone-uuid").Once().Return(workloadControlPlane.Deleted{}, domain.ErrNotExists)
+				},
+				status: http.StatusNotFound,
+				answer: `{"code": "not_found"}`,
 			},
 			{
 				name:   "a start",

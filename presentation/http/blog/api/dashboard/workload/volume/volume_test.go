@@ -9,8 +9,10 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/createVolume"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumeDependents"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumes"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/workloadtest"
+	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -30,6 +32,7 @@ func routes(workload *controlplane.MockClient) *http.ServeMux {
 		mux.Handle("GET "+set.Prefix+"/vms/{uuid}/volumes", NewIndexHandler(getVolumes.NewUseCase(workload, t), set.Owner))
 		mux.Handle("POST "+set.Prefix+"/vms/{uuid}/volumes", NewCreateHandler(createVolume.NewUseCase(workload, v, t), set.Owner))
 		mux.Handle("DELETE "+set.Prefix+"/vms/{uuid}/volumes/{name}", NewDeleteHandler(deleteVolume.NewUseCase(workload, t), set.Owner))
+		mux.Handle("GET "+set.Prefix+"/vms/{uuid}/volumes/{name}/dependents", NewDependentsHandler(getVolumeDependents.NewUseCase(workload, t), set.Owner))
 	}
 
 	return mux
@@ -120,6 +123,49 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 				},
 				status: http.StatusAccepted,
 				answer: `{"dependents": [{"kind": "container", "uuid": "c-uuid", "name": "app", "recreates": true}], "recreated": false}`,
+			},
+			{
+				name:   "what needs it, read and nothing deleted",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/volumes/data/dependents",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("VolumeDependents", mock.Anything, ownerUUID, "vm-uuid", "data").Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "stack", UUID: "stack-uuid", Name: "shop", Recreates: true}},
+						Recreated:  true,
+					}, nil)
+				},
+				status: http.StatusOK,
+				answer: `{"dependents": [{"kind": "stack", "uuid": "stack-uuid", "name": "shop", "recreates": true}], "recreated": true}`,
+			},
+			{
+				name:   "and of one nothing needs, a list of none",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/volumes/data/dependents",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("VolumeDependents", mock.Anything, ownerUUID, "vm-uuid", "data").Once().Return(workloadControlPlane.Deleted{}, nil)
+				},
+				status: http.StatusOK,
+				answer: `{"dependents": [], "recreated": false}`,
+			},
+			{
+				name:   "and of one that is not there, or not the caller's, nothing",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/volumes/gone/dependents",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("VolumeDependents", mock.Anything, ownerUUID, "vm-uuid", "gone").Once().Return(workloadControlPlane.Deleted{}, domain.ErrNotExists)
+				},
+				status: http.StatusNotFound,
+				answer: `{"code": "not_found"}`,
+			},
+			{
+				name:   "and a workload that cannot be reached is a failure, which says nothing more",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/volumes/data/dependents",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("VolumeDependents", mock.Anything, ownerUUID, "vm-uuid", "data").Once().Return(workloadControlPlane.Deleted{}, workloadtest.ErrUnreachable)
+				},
+				status: http.StatusInternalServerError,
+				answer: `{"code": "internal"}`,
 			},
 		}
 

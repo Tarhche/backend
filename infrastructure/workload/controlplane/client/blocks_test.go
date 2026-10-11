@@ -533,3 +533,98 @@ func TestClient_deletes(t *testing.T) {
 		assert.JSONEq(t, `{}`, asked.body, "not by force")
 	})
 }
+
+// TestClient_dependents holds what needs a VM, a network and a volume to being
+// read with a GET of what needs it, inside the VM for what lives in one, and
+// to nothing else being asked: no delete, so that a control plane that does
+// not know the question deletes nothing for it.
+func TestClient_dependents(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	needs := map[string]any{
+		"dependents": []map[string]any{{"kind": "stack", "uuid": "s-uuid", "name": "shop", "recreates": true}},
+		"recreated":  true,
+	}
+
+	wanted := workloadControlPlane.Deleted{
+		Dependents: []workloadControlPlane.Dependent{{Kind: "stack", UUID: "s-uuid", Name: "shop", Recreates: true}},
+		Recreated:  true,
+	}
+
+	t.Run("a vm's is read with a get of what needs it, as its owner's", func(t *testing.T) {
+		t.Parallel()
+
+		c, p := newBlocksPlane(t)
+		p.answers(http.MethodGet, "/api/vms/vm-uuid/dependents", http.StatusOK, needs)
+
+		needed, err := c.VMDependents(ctx, "owner-uuid", "vm-uuid")
+		require.NoError(t, err)
+		assert.Equal(t, wanted, needed)
+
+		asked := p.last(http.MethodGet)
+		assert.Equal(t, "/api/vms/vm-uuid/dependents", asked.path)
+		assert.Equal(t, "owner=owner-uuid", asked.query)
+
+		assert.Empty(t, p.last(http.MethodDelete), "nothing is deleted")
+		assert.Empty(t, p.last(http.MethodPost), "nor asked")
+	})
+
+	t.Run("and one nothing needs is nothing", func(t *testing.T) {
+		t.Parallel()
+
+		c, p := newBlocksPlane(t)
+		p.answers(http.MethodGet, "/api/vms/vm-uuid/dependents", http.StatusOK, map[string]any{"dependents": []any{}, "recreated": false})
+
+		needed, err := c.VMDependents(ctx, "", "vm-uuid")
+		require.NoError(t, err)
+		assert.Equal(t, workloadControlPlane.Deleted{}, needed)
+	})
+
+	t.Run("a vm that is not there, or a control plane that does not know the question, is not there", func(t *testing.T) {
+		t.Parallel()
+
+		c, _ := newBlocksPlane(t)
+
+		_, err := c.VMDependents(ctx, "owner-uuid", "gone-uuid")
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	t.Run("a network's is read inside its vm, by its id or its name", func(t *testing.T) {
+		t.Parallel()
+
+		c, p := newBlocksPlane(t)
+		p.answers(http.MethodGet, "/api/networks/backend/dependents", http.StatusOK, needs)
+
+		needed, err := c.NetworkDependents(ctx, "owner-uuid", "vm-uuid", "backend")
+		require.NoError(t, err)
+		assert.Equal(t, wanted, needed)
+		assert.Equal(t, "owner=owner-uuid&parent=vm-uuid", p.last(http.MethodGet).query)
+		assert.Empty(t, p.last(http.MethodPost), "nothing is asked of it")
+	})
+
+	t.Run("a volume's is read inside its vm, by its name", func(t *testing.T) {
+		t.Parallel()
+
+		c, p := newBlocksPlane(t)
+		p.answers(http.MethodGet, "/api/volumes/data/dependents", http.StatusOK, needs)
+
+		needed, err := c.VolumeDependents(ctx, "", "vm-uuid", "data")
+		require.NoError(t, err)
+		assert.Equal(t, wanted, needed)
+		assert.Equal(t, "parent=vm-uuid", p.last(http.MethodGet).query)
+	})
+
+	t.Run("a network of a vm that is not there, and a volume that is not there, are not there", func(t *testing.T) {
+		t.Parallel()
+
+		c, _ := newBlocksPlane(t)
+
+		_, err := c.NetworkDependents(ctx, "owner-uuid", "gone-uuid", "backend")
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+
+		_, err = c.VolumeDependents(ctx, "owner-uuid", "vm-uuid", "nowhere")
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+}

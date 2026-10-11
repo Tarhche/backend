@@ -23,7 +23,9 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
 	controlplanecontainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/container"
 	deleteresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dependents"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
+	getdependents "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getDependents"
 	getkinds "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
 	getresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
 	getresources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
@@ -215,13 +217,14 @@ func controlPlaneTelling(t *testing.T, w *blockstest.Workload, relay *graph.Rela
 	mux := http.NewServeMux()
 
 	require.NoError(t, kindsAPI.Route(mux, w.Registry.Descriptors(), kindsAPI.UseCases{
-		Admit:  admission,
-		Act:    actonresource.NewUseCase(w.Registry, w.Resources, dispatcher, logger, actonresource.WithGraphs(roots, relay)),
-		Delete: deletion,
-		Get:    getresource.NewUseCase(w.Registry, w.Resources),
-		List:   getresources.NewUseCase(w.Registry, w.Resources),
-		Query:  queryresource.NewUseCase(w.Registry, w.Resources, requester, nil, nil),
-		Kinds:  getkinds.NewUseCase(w.Registry),
+		Admit:      admission,
+		Act:        actonresource.NewUseCase(w.Registry, w.Resources, dispatcher, logger, actonresource.WithGraphs(roots, relay)),
+		Delete:     deletion,
+		Get:        getresource.NewUseCase(w.Registry, w.Resources),
+		List:       getresources.NewUseCase(w.Registry, w.Resources),
+		Query:      queryresource.NewUseCase(w.Registry, w.Resources, requester, nil, nil),
+		Kinds:      getkinds.NewUseCase(w.Registry),
+		Dependents: getdependents.NewUseCase(w.Registry, w.Resources, dependents.New(w.Registry, w.Resources, dispatcher, roots, relay)),
 	}))
 
 	server := httptest.NewServer(mux)
@@ -796,6 +799,19 @@ func TestContract_Stacks(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Items, 1)
 	assert.Equal(t, "box", page.Items[0].VMName)
+
+	needed, err := c.VMDependents(ctx, "owner", "d1")
+	require.NoError(t, err)
+	require.Len(t, needed.Dependents, 1, "its vm is needed by the stack, as its delete would be answered")
+	assert.Equal(t, workloadControlPlane.Dependent{Kind: stackKind.Name, UUID: created.Stack.UUID, Name: "web", Recreates: true}, needed.Dependents[0])
+	assert.True(t, needed.Recreated, "which makes it again")
+
+	box, err := c.VM(ctx, "owner", "d1")
+	require.NoError(t, err)
+	assert.Equal(t, vm.Running, box.ExpectedState, "and asking deleted nothing")
+
+	_, err = c.VMDependents(ctx, "somebody-else", "d1")
+	assert.ErrorIs(t, err, domain.ErrNotExists, "nor is somebody else's vm there to ask about")
 
 	require.NoError(t, c.StopStack(ctx, "owner", created.Stack.UUID), "a stack that runs is stopped")
 

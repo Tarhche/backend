@@ -11,8 +11,13 @@ import (
 )
 
 // PlanAction is the name the plan of a root of a graph is served under on the
-// resource API, beside a resource's queries, which no action takes.
-const PlanAction = "plan"
+// resource API, beside a resource's queries, which no action takes; and
+// DependentsAction the name what needs a resource is served under, the roots
+// whose graphs need it, which no action takes either.
+const (
+	PlanAction       = "plan"
+	DependentsAction = "dependents"
+)
 
 var (
 	// word is a kind's name, its plural, its parent and its actions' names.
@@ -53,7 +58,8 @@ func IsWord(name string) bool {
 //     command given a timeout runs on a node, and the timeout is one of the
 //     names a service sizes.
 //   - No action is named plan (PlanAction), which is what the plan of a root
-//     of a graph is served as, beside a resource's queries.
+//     of a graph is served as, beside a resource's queries, nor dependents
+//     (DependentsAction), which is what needs a resource is served as.
 //   - Every action has a permission, but an internal one, which only a
 //     command can be; and only a stream is public. A kind whose actions are
 //     asked under another kind's permissions names that kind's plural, a
@@ -182,6 +188,10 @@ func checkAction(d Descriptor, a Action, add func(format string, args ...any)) {
 
 	if a.Name == PlanAction {
 		add("action %q is named as a root's plan is served on the resource API, which it would be taken for", a.Name)
+	}
+
+	if a.Name == DependentsAction {
+		add("action %q is named as what needs a resource is served on the resource API, which it would be taken for", a.Name)
 	}
 
 	if !a.Runs.IsValid() {

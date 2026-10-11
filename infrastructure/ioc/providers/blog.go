@@ -106,6 +106,7 @@ import (
 	dashboardPullImage "github.com/khanzadimahdi/testproject/application/dashboard/workload/image/pullImage"
 	dashboardCreateNetwork "github.com/khanzadimahdi/testproject/application/dashboard/workload/network/createNetwork"
 	dashboardDeleteNetwork "github.com/khanzadimahdi/testproject/application/dashboard/workload/network/deleteNetwork"
+	dashboardGetNetworkDependents "github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworkDependents"
 	dashboardGetNetworks "github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworks"
 	dashboardWorkloadPresenter "github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	dashboardCreateSnapshot "github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/createSnapshot"
@@ -123,6 +124,7 @@ import (
 	dashboardCreateVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/createVM"
 	dashboardDeleteVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/deleteVM"
 	dashboardGetVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVM"
+	dashboardGetVMDependents "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMDependents"
 	dashboardGetVMLogs "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMLogs"
 	dashboardGetVMs "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMs"
 	dashboardRestartVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/restartVM"
@@ -132,6 +134,7 @@ import (
 	dashboardUpdateVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/updateVM"
 	dashboardCreateVolume "github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/createVolume"
 	dashboardDeleteVolume "github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
+	dashboardGetVolumeDependents "github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumeDependents"
 	dashboardGetVolumes "github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumes"
 	"github.com/khanzadimahdi/testproject/application/element"
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
@@ -797,6 +800,9 @@ func blog(
 	mux.Handle("DELETE /api/dashboard/workload/vms/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardVMAPI.NewDeleteHandler(dashboardDeleteVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
 	}), authorizer, permission.WorkloadVMsDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/dependents", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewDependentsHandler(dashboardGetVMDependents.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadVMsDelete), jwt, userRepository))
 	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/start", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardVMAPI.NewStartHandler(dashboardStartVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
 	}), authorizer, permission.WorkloadVMsManage), jwt, userRepository))
@@ -823,6 +829,9 @@ func blog(
 	}), authorizer, permission.SelfWorkloadVMsUpdate), jwt, userRepository))
 	mux.Handle("DELETE /api/dashboard/my/workload/vms/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardVMAPI.NewDeleteHandler(dashboardDeleteVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadVMsDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/dependents", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewDependentsHandler(dashboardGetVMDependents.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
 	}), authorizer, permission.SelfWorkloadVMsDelete), jwt, userRepository))
 	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/start", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardVMAPI.NewStartHandler(dashboardStartVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
@@ -968,6 +977,9 @@ func blog(
 	mux.Handle("DELETE /api/dashboard/workload/vms/{uuid}/networks/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardNetworkAPI.NewDeleteHandler(dashboardDeleteNetwork.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
 	}), authorizer, permission.WorkloadContainersDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/networks/{id}/dependents", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNetworkAPI.NewDependentsHandler(dashboardGetNetworkDependents.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersDelete), jwt, userRepository))
 
 	// one's own networks in docker vms
 	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/networks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
@@ -978,6 +990,9 @@ func blog(
 	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
 	mux.Handle("DELETE /api/dashboard/my/workload/vms/{uuid}/networks/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardNetworkAPI.NewDeleteHandler(dashboardDeleteNetwork.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/networks/{id}/dependents", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNetworkAPI.NewDependentsHandler(dashboardGetNetworkDependents.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
 	}), authorizer, permission.SelfWorkloadContainersDelete), jwt, userRepository))
 
 	// workload volumes in docker vms
@@ -990,6 +1005,9 @@ func blog(
 	mux.Handle("DELETE /api/dashboard/workload/vms/{uuid}/volumes/{name}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardVolumeAPI.NewDeleteHandler(dashboardDeleteVolume.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
 	}), authorizer, permission.WorkloadContainersDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/volumes/{name}/dependents", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVolumeAPI.NewDependentsHandler(dashboardGetVolumeDependents.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersDelete), jwt, userRepository))
 
 	// one's own volumes in docker vms
 	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/volumes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
@@ -1000,6 +1018,9 @@ func blog(
 	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
 	mux.Handle("DELETE /api/dashboard/my/workload/vms/{uuid}/volumes/{name}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardVolumeAPI.NewDeleteHandler(dashboardDeleteVolume.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/volumes/{name}/dependents", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVolumeAPI.NewDependentsHandler(dashboardGetVolumeDependents.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
 	}), authorizer, permission.SelfWorkloadContainersDelete), jwt, userRepository))
 
 	// workload stacks

@@ -21,7 +21,9 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dependents"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getDependents"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getPlan"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
@@ -170,11 +172,13 @@ func newAPIWith(t *testing.T, told *graphtest.Told) *api {
 		deleting []deleteResource.Option
 		roots    graph.Roots
 		graphs   planResource.Graphs
+		needs    graph.Graphs
 	)
 
 	if told != nil {
 		roots = graph.Roots{kindstest.Kind}
 		graphs = previews{Told: told}
+		needs = told
 
 		acting = append(acting, actOnResource.WithGraphs(roots, told))
 		deleting = append(deleting, deleteResource.WithGraphs(roots, told))
@@ -184,15 +188,16 @@ func newAPIWith(t *testing.T, told *graphtest.Told) *api {
 
 	mux := http.NewServeMux()
 	require.NoError(t, Route(mux, registry.Descriptors(), UseCases{
-		Admit:   admission,
-		Act:     actOnResource.NewUseCase(registry, a.resources, dispatcher, slog.New(slog.DiscardHandler), acting...),
-		Delete:  deleteResource.NewUseCase(registry, a.resources, dispatcher, deleting...),
-		Get:     getResource.NewUseCase(registry, a.resources),
-		List:    getResources.NewUseCase(registry, a.resources),
-		Query:   queryResource.NewUseCase(registry, a.resources, requester, observer, nil),
-		Kinds:   getKinds.NewUseCase(registry),
-		Plan:    planResource.NewUseCase(registry, a.resources, admission, roots, graphs),
-		GetPlan: getPlan.NewUseCase(registry, a.resources, a.executions, a.leases, roots),
+		Admit:      admission,
+		Act:        actOnResource.NewUseCase(registry, a.resources, dispatcher, slog.New(slog.DiscardHandler), acting...),
+		Delete:     deleteResource.NewUseCase(registry, a.resources, dispatcher, deleting...),
+		Get:        getResource.NewUseCase(registry, a.resources),
+		List:       getResources.NewUseCase(registry, a.resources),
+		Query:      queryResource.NewUseCase(registry, a.resources, requester, observer, nil),
+		Kinds:      getKinds.NewUseCase(registry),
+		Plan:       planResource.NewUseCase(registry, a.resources, admission, roots, graphs),
+		GetPlan:    getPlan.NewUseCase(registry, a.resources, a.executions, a.leases, roots),
+		Dependents: getDependents.NewUseCase(registry, a.resources, dependents.New(registry, a.resources, dispatcher, roots, needs)),
 	}))
 
 	a.handler = mux
@@ -810,6 +815,51 @@ func TestRoutes(t *testing.T) {
 		}
 	})
 
+	t.Run("what needs a resource is read, which changes nothing and sends nothing: the roots that need it, none for a root or for what nothing needs, and what is not there is not there", func(t *testing.T) {
+		t.Parallel()
+
+		root := graph.Ref{Kind: kindstest.Kind, UUID: "web"}
+		needed := graph.Ref{Kind: kindstest.Kind, UUID: "needed"}
+
+		told := &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: {{Root: root, Name: "kitchen", Recreates: true}}}}
+
+		a := newAPIWith(t, told)
+		a.keep(t, kindstest.AFan("web", kindstest.Running, kindstest.Running))
+		a.keep(t, kindstest.AFan("needed", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
+			f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "web"}}
+		}))
+		a.keep(t, kindstest.AFan("spare", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
+			f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "web"}}
+		}))
+
+		status, body := a.do(t, http.MethodGet, "/api/fans/needed/dependents?owner=owner-uuid&parent="+kindstest.House, "")
+		require.Equal(t, http.StatusOK, status, body)
+		assert.JSONEq(t, `{"dependents": [{"kind": "fan", "uuid": "web", "name": "kitchen", "recreates": true}], "recreated": true}`, body)
+
+		status, body = a.do(t, http.MethodGet, "/api/fans/spare/dependents", "")
+		require.Equal(t, http.StatusOK, status, body)
+		assert.JSONEq(t, `{"dependents": [], "recreated": false}`, body, "none is a list of none")
+
+		status, body = a.do(t, http.MethodGet, "/api/fans/web/dependents", "")
+		require.Equal(t, http.StatusOK, status, body)
+		assert.JSONEq(t, `{"dependents": [], "recreated": false}`, body, "a root is needed by nothing")
+
+		for _, uuid := range []string{"web", "needed", "spare"} {
+			fan, kept := a.stored(t, uuid)
+			require.True(t, kept)
+			assert.Equal(t, kindstest.Running, fan.Status.Expected, "%s is as it was", uuid)
+			assert.True(t, fan.Metadata.DeletionRequestedAt.IsZero(), "%s is not marked to go", uuid)
+		}
+
+		assert.Empty(t, a.node.commands(), "nothing is asked of a node")
+		assert.Empty(t, told.Queued(), "and nothing is queued")
+
+		for _, target := range []string{"/api/fans/nowhere/dependents", "/api/fans/needed/dependents?owner=somebody-else", "/api/fans/needed/dependents?parent=house-2"} {
+			status, _ := a.do(t, http.MethodGet, target, "")
+			assert.Equal(t, http.StatusNotFound, status, target)
+		}
+	})
+
 	t.Run("somebody else's is not there to delete", func(t *testing.T) {
 		t.Parallel()
 
@@ -951,7 +1001,7 @@ func TestRoute(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("served with no dry runs, a dry run is refused rather than done, and no plan is served", func(t *testing.T) {
+	t.Run("served with no dry runs, a dry run is refused rather than done, and no plan, nor what needs a resource, is served", func(t *testing.T) {
 		t.Parallel()
 
 		mux := http.NewServeMux()
@@ -971,6 +1021,10 @@ func TestRoute(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/fans/fan-uuid/plan", nil))
 		assert.Equal(t, http.StatusNotFound, recorder.Code, "no query is called plan either")
+
+		recorder = httptest.NewRecorder()
+		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/fans/fan-uuid/dependents", nil))
+		assert.Equal(t, http.StatusNotFound, recorder.Code, "nor dependents")
 	})
 }
 

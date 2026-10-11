@@ -8,6 +8,7 @@
 //	DELETE /api/{plural}/{uuid}?owner=&parent=&wait=&cascade=&dry_run= delete one
 //	POST   /api/{plural}/{uuid}/actions/{action}?owner=&parent=&wait=&cascade=   a command
 //	GET    /api/{plural}/{uuid}/plan?owner=&parent=  how a root's plan went
+//	GET    /api/{plural}/{uuid}/dependents?owner=&parent=  which roots need it
 //	GET    /api/{plural}/{uuid}/{query}?owner=&parent=&…     a query, its payload as parameters
 //	GET    /api/kinds                                every kind, as it describes itself
 //
@@ -17,7 +18,10 @@
 //
 // A delete, or a command that deletes, of what the graphs of roots need is
 // answered with those roots, and whether one of them makes it again, as 202
-// whatever came of it; cascade deletes them with it.
+// whatever came of it; cascade deletes them with it. The same roots are read
+// with a GET of what needs it (getDependents), which changes nothing and asks
+// nothing of any node, whatever else the control plane knows: a delete that
+// was only to be asked about is never made.
 //
 // dry_run asks what an admission or a delete would do, and does nothing
 // (planResource): 200 with what would be admitted, and, of a root, what
@@ -44,6 +48,7 @@ import (
 	actOnResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	admitResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	deleteResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
+	getDependents "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getDependents"
 	getKinds "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
 	getPlan "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getPlan"
 	getResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
@@ -53,19 +58,21 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
-// UseCases are what the resource API is served by. Plan, the dry runs, and
-// GetPlan, how a root's plan went, may be nothing: a route then refuses a dry
-// run, and no kind's plan is served.
+// UseCases are what the resource API is served by. Plan, the dry runs,
+// GetPlan, how a root's plan went, and Dependents, which roots need a
+// resource, may be nothing: a route then refuses a dry run, and no kind's
+// plan, nor what needs one of its resources, is served.
 type UseCases struct {
-	Admit   *admitResource.UseCase
-	Act     *actOnResource.UseCase
-	Delete  *deleteResource.UseCase
-	Get     *getResource.UseCase
-	List    *getResources.UseCase
-	Query   *queryResource.UseCase
-	Kinds   *getKinds.UseCase
-	Plan    *planResource.UseCase
-	GetPlan *getPlan.UseCase
+	Admit      *admitResource.UseCase
+	Act        *actOnResource.UseCase
+	Delete     *deleteResource.UseCase
+	Get        *getResource.UseCase
+	List       *getResources.UseCase
+	Query      *queryResource.UseCase
+	Kinds      *getKinds.UseCase
+	Plan       *planResource.UseCase
+	GetPlan    *getPlan.UseCase
+	Dependents *getDependents.UseCase
 }
 
 // Route serves the resource API on mux for every kind described, under its
@@ -91,9 +98,14 @@ func Route(mux *http.ServeMux, descriptors []kind.Descriptor, useCases UseCases)
 		mux.Handle("GET "+base+"/{uuid}/{query}", NewQueryHandler(useCases.Query, d))
 
 		// a plan is no query of a kind's, and takes the place of none: no kind
-		// may name an action after it (kind.Check).
+		// may name an action after it (kind.Check); and nor is what needs a
+		// resource.
 		if useCases.GetPlan != nil {
 			mux.Handle("GET "+base+"/{uuid}/"+kind.PlanAction, NewPlanHandler(useCases.GetPlan, d.Name))
+		}
+
+		if useCases.Dependents != nil {
+			mux.Handle("GET "+base+"/{uuid}/"+kind.DependentsAction, NewDependentsHandler(useCases.Dependents, d.Name))
 		}
 	}
 

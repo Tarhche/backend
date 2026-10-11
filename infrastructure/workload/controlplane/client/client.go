@@ -20,6 +20,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
@@ -179,6 +180,18 @@ func (a deletedAnswer) deleted() workloadControlPlane.Deleted {
 	deleted.Recreated = a.Recreated
 
 	return deleted
+}
+
+// dependents is what needs the resource path names, as the control plane
+// reads it with a GET of it (kind.DependentsAction), the request's query
+// saying whose and where.
+func (c *Client) dependents(ctx context.Context, path string, query url.Values) (workloadControlPlane.Deleted, error) {
+	var answer deletedAnswer
+	if err := c.call(ctx, http.MethodGet, c.path(path+"/"+kind.DependentsAction, query), nil, &answer); err != nil {
+		return workloadControlPlane.Deleted{}, err
+	}
+
+	return answer.deleted(), nil
 }
 
 // cascading is the query that asks a delete to take what needs it with it,

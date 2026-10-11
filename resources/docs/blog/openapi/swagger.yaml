@@ -2074,6 +2074,15 @@ definitions:
       type:
         type: string
     type: object
+  presenter.Needs:
+    properties:
+      dependents:
+        items:
+          $ref: '#/definitions/presenter.Dependent'
+        type: array
+      recreated:
+        type: boolean
+    type: object
   presenter.Network:
     properties:
       egress:
@@ -5322,6 +5331,41 @@ paths:
       summary: Stop a container
       tags:
       - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/dependents:
+    get:
+      description: 'what needs a VM, read before it is asked to be deleted: the containers
+        and the stacks in it, which make it again, under its uuid and as it was, once
+        it is gone, and whether one of them does, as its delete would be answered
+        with them now; a list of none when nothing does. Reading it deletes nothing,
+        and asks nothing of its node'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Needs'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: What needs a VM
+      tags:
+      - dashboard workload vms
   /dashboard/my/workload/vms/{uuid}/images:
     get:
       description: the images a Docker VM holds, read from its dockerd as it is now
@@ -5593,6 +5637,47 @@ paths:
       summary: Remove a network
       tags:
       - dashboard workload networks
+  /dashboard/my/workload/vms/{uuid}/networks/{id}/dependents:
+    get:
+      description: 'what needs a docker network of a Docker VM, found by its id or
+        its name as its delete finds it, read before it is asked to be deleted: the
+        containers and the stacks that need it, each saying whether it makes it again
+        once it is gone, as one that owns it does, and whether one of them does, as
+        its delete would be answered with them now; a list of none when nothing does.
+        Reading it deletes nothing, and asks nothing of its node'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Network id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Needs'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: What needs a network
+      tags:
+      - dashboard workload networks
   /dashboard/my/workload/vms/{uuid}/restart:
     post:
       description: ask for a VM to be stopped and started again in place
@@ -5841,6 +5926,47 @@ paths:
           schema:
             $ref: '#/definitions/workload.Failure'
       summary: Remove a volume
+      tags:
+      - dashboard workload volumes
+  /dashboard/my/workload/vms/{uuid}/volumes/{name}/dependents:
+    get:
+      description: 'what needs a volume of a Docker VM, found by its name as its delete
+        finds it, read before it is asked to be deleted: the containers and the stacks
+        that need it, a container that mounts it among them, each saying whether it
+        makes it again once it is gone, and whether one of them does, as its delete
+        would be answered with them now; a list of none when nothing does. Reading
+        it deletes nothing, and asks nothing of its node'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Volume name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Needs'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: What needs a volume
       tags:
       - dashboard workload volumes
   /dashboard/permissions:
@@ -7302,6 +7428,41 @@ paths:
       summary: Stop a container
       tags:
       - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/dependents:
+    get:
+      description: 'what needs a VM, read before it is asked to be deleted: the containers
+        and the stacks in it, which make it again, under its uuid and as it was, once
+        it is gone, and whether one of them does, as its delete would be answered
+        with them now; a list of none when nothing does. Reading it deletes nothing,
+        and asks nothing of its node'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Needs'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: What needs a VM
+      tags:
+      - dashboard workload vms
   /dashboard/workload/vms/{uuid}/images:
     get:
       description: the images a Docker VM holds, read from its dockerd as it is now
@@ -7571,6 +7732,47 @@ paths:
           schema:
             $ref: '#/definitions/workload.Failure'
       summary: Remove a network
+      tags:
+      - dashboard workload networks
+  /dashboard/workload/vms/{uuid}/networks/{id}/dependents:
+    get:
+      description: 'what needs a docker network of a Docker VM, found by its id or
+        its name as its delete finds it, read before it is asked to be deleted: the
+        containers and the stacks that need it, each saying whether it makes it again
+        once it is gone, as one that owns it does, and whether one of them does, as
+        its delete would be answered with them now; a list of none when nothing does.
+        Reading it deletes nothing, and asks nothing of its node'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Network id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Needs'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: What needs a network
       tags:
       - dashboard workload networks
   /dashboard/workload/vms/{uuid}/restart:
@@ -7861,6 +8063,47 @@ paths:
           schema:
             $ref: '#/definitions/workload.Failure'
       summary: Remove a volume
+      tags:
+      - dashboard workload volumes
+  /dashboard/workload/vms/{uuid}/volumes/{name}/dependents:
+    get:
+      description: 'what needs a volume of a Docker VM, found by its name as its delete
+        finds it, read before it is asked to be deleted: the containers and the stacks
+        that need it, a container that mounts it among them, each saying whether it
+        makes it again once it is gone, and whether one of them does, as its delete
+        would be answered with them now; a list of none when nothing does. Reading
+        it deletes nothing, and asks nothing of its node'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Volume name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Needs'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: What needs a volume
       tags:
       - dashboard workload volumes
   /files/{uuid}:

@@ -37,9 +37,10 @@ func NewChosenVM(chosen workloadControlPlane.ChosenVM) ChosenVM {
 	}
 }
 
-// Dependent is what needs what was deleted: a container nothing owns, which
-// makes it again whenever it is gone (Recreates), or, when it was there before
-// the container, only waits on it while it is missing.
+// Dependent is what needs what was deleted, or would be: a root, a container
+// nothing owns or a stack, which makes it again whenever it is gone
+// (Recreates), or, when it was there before the root, only waits on it while
+// it is missing.
 type Dependent struct {
 	Kind      string `json:"kind"`
 	UUID      string `json:"uuid"`
@@ -60,6 +61,25 @@ func NewDependents(deleted workloadControlPlane.Deleted) []Dependent {
 	}
 
 	return dependents
+}
+
+// Needs is what needs something, as the dashboard reads it before it asks for
+// it to be deleted: the roots that need it, a list of none when nothing does,
+// and whether one of them makes it again once it is gone, as its delete would
+// be answered with them now.
+type Needs struct {
+	Dependents []Dependent `json:"dependents"`
+	Recreated  bool        `json:"recreated"`
+}
+
+// NewNeeds is what needs something, as the dashboard shows it.
+func NewNeeds(needed workloadControlPlane.Deleted) Needs {
+	dependents := NewDependents(needed)
+	if dependents == nil {
+		dependents = []Dependent{}
+	}
+
+	return Needs{Dependents: dependents, Recreated: needed.Recreated}
 }
 
 // VMLogLine is one line of what a VM wrote, and where it came from: kernel,

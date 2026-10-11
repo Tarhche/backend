@@ -67,14 +67,32 @@ func (m *MockClient) DeleteVM(ctx context.Context, ownerUUID string, uuid string
 	return args.Get(0).(workloadControlPlane.Deleted), args.Error(1)
 }
 
+func (m *MockClient) VMDependents(ctx context.Context, ownerUUID string, uuid string) (workloadControlPlane.Deleted, error) {
+	args := m.Called(ctx, ownerUUID, uuid)
+
+	return args.Get(0).(workloadControlPlane.Deleted), args.Error(1)
+}
+
 func (m *MockClient) DeleteNetwork(ctx context.Context, ownerUUID string, vmUUID string, id string, cascade bool) (workloadControlPlane.Deleted, error) {
 	args := m.Called(ctx, ownerUUID, vmUUID, id, cascade)
 
 	return args.Get(0).(workloadControlPlane.Deleted), args.Error(1)
 }
 
+func (m *MockClient) NetworkDependents(ctx context.Context, ownerUUID string, vmUUID string, id string) (workloadControlPlane.Deleted, error) {
+	args := m.Called(ctx, ownerUUID, vmUUID, id)
+
+	return args.Get(0).(workloadControlPlane.Deleted), args.Error(1)
+}
+
 func (m *MockClient) DeleteVolume(ctx context.Context, ownerUUID string, vmUUID string, name string, force bool, cascade bool) (workloadControlPlane.Deleted, error) {
 	args := m.Called(ctx, ownerUUID, vmUUID, name, force, cascade)
+
+	return args.Get(0).(workloadControlPlane.Deleted), args.Error(1)
+}
+
+func (m *MockClient) VolumeDependents(ctx context.Context, ownerUUID string, vmUUID string, name string) (workloadControlPlane.Deleted, error) {
+	args := m.Called(ctx, ownerUUID, vmUUID, name)
 
 	return args.Get(0).(workloadControlPlane.Deleted), args.Error(1)
 }

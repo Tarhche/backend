@@ -114,8 +114,8 @@ func TestTheWorkloadsRoutesActOnWhoseThingsTheySay(t *testing.T) {
 		})
 	}
 
-	assert.Equal(t, 43, anybodys, "every route of the workload's set, creates included")
-	assert.Equal(t, 39, mine, "every route of the my set, which has no creates")
+	assert.Equal(t, 46, anybodys, "every route of the workload's set, creates included")
+	assert.Equal(t, 42, mine, "every route of the my set, which has no creates")
 }
 
 // TestAWorkloadRouteIsServedUnderItsOwnKindOfPermission holds each route to

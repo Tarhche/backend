@@ -9,7 +9,9 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dependents"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getDependents"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
@@ -51,7 +53,8 @@ type ControlPlaneKinds struct {
 	// is an error for a kind whose routes are taken already: its dry runs say
 	// what would be admitted, and which roots need what would be deleted, but
 	// nothing of what carrying a root's graph out would do, and no root's
-	// plan is served. UseCases are what it serves, for a control plane that
+	// plan is served; which roots need a resource is read as its delete
+	// works them out. UseCases are what it serves, for a control plane that
 	// keeps the graphs of roots to serve with what previews them and keeps
 	// how their plans went.
 	Route    func(mux *http.ServeMux) error
@@ -233,6 +236,10 @@ func NewControlPlaneKinds(
 		Query:  queryResource.NewUseCase(registry, resources, requester, observer, nil),
 		Kinds:  getKinds.NewUseCase(registry),
 		Plan:   planResource.NewUseCase(registry, resources, admission, nil, nil),
+
+		// which roots need a resource, worked out as its delete works them
+		// out, and read without it.
+		Dependents: getDependents.NewUseCase(registry, resources, dependents.New(registry, resources, dispatcher, settings.roots, settings.graphs)),
 	}
 
 	recording = append(recording, recordResult.WithRestorer(resources.Cascade()))

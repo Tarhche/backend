@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/deleteContainer"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/getVMContainers"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/image/getImages"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworkDependents"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/createStack"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/deleteStack"
@@ -23,9 +24,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/restartStack"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/startStack"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/stopStack"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMDependents"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/startVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/stopVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumeDependents"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -493,6 +496,36 @@ func TestAStacksGraph(t *testing.T) {
 		}, settle, beat, "the volume, and then the container mounting it, were never made again")
 
 		w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+	})
+
+	t.Run("what needs its vm, its network and its volume is read from the dashboard, as each one's delete would say, and nothing is deleted or asked for it", func(t *testing.T) {
+		did := len(w.dockerd.Did(vmUUID))
+		store := []presenter.Dependent{{Kind: stackKind.Name, UUID: stackUUID, Name: "store", Recreates: true}}
+
+		vmNeeds, err := getVMDependents.NewUseCase(w.client, w.translator).Execute(ctx, &getVMDependents.Request{UUID: vmUUID, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, vmNeeds.ValidationErrors)
+		assert.Equal(t, store, vmNeeds.Dependents, "it makes its vm again")
+		assert.True(t, vmNeeds.Recreated)
+
+		networkNeeds, err := getNetworkDependents.NewUseCase(w.client, w.translator).Execute(ctx, &getNetworkDependents.Request{VMUUID: vmUUID, ID: named("backend"), OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, networkNeeds.ValidationErrors)
+		assert.Equal(t, store, networkNeeds.Dependents, "and its network, named as it is in its vm")
+
+		volumeNeeds, err := getVolumeDependents.NewUseCase(w.client, w.translator).Execute(ctx, &getVolumeDependents.Request{VMUUID: vmUUID, Name: named("data"), OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, volumeNeeds.ValidationErrors)
+		assert.Equal(t, store, volumeNeeds.Dependents, "and its volume, which it uses")
+
+		_, err = getVMDependents.NewUseCase(w.client, w.translator).Execute(ctx, &getVMDependents.Request{UUID: vmUUID, OwnerUUID: "somebody-else"})
+		assert.ErrorIs(t, err, domain.ErrNotExists, "somebody else's vm is not there to ask about")
+
+		v := w.stored(t, vmUUID, "as it was", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+		assert.Equal(t, vmKind.Running, v.Status.Expected, "asking deleted nothing")
+		assert.True(t, v.Metadata.DeletionRequestedAt.IsZero())
+		assert.Equal(t, stackKind.Running, w.stackRecord(t, stackUUID).Status.Expected)
+		assert.Len(t, w.dockerd.Did(vmUUID), did, "and nothing was done to its containers")
 	})
 
 	t.Run("its vm, deleted, is made again under its uuid and its slug, and then everything in it", func(t *testing.T) {

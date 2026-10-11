@@ -269,7 +269,22 @@ var unreachable = map[string]string{
 	"POST /oauth/token":                             "where an application collects a session; it is how a tool call is authorized, not one",
 	"GET /api/oauth/authorization":                  "what the consent page reads to say what is being asked",
 	"POST /api/oauth/authorization":                 "somebody's answer to that question, given in a browser",
+
+	// what the dashboard's delete dialogs read before they ask: a tool's
+	// delete is answered with the same, so an agent reads it there.
+	"GET /api/dashboard/workload/vms/{uuid}/dependents":                   neededFirst,
+	"GET /api/dashboard/my/workload/vms/{uuid}/dependents":                neededFirst,
+	"GET /api/dashboard/workload/vms/{uuid}/networks/{id}/dependents":     neededFirst,
+	"GET /api/dashboard/my/workload/vms/{uuid}/networks/{id}/dependents":  neededFirst,
+	"GET /api/dashboard/workload/vms/{uuid}/volumes/{name}/dependents":    neededFirst,
+	"GET /api/dashboard/my/workload/vms/{uuid}/volumes/{name}/dependents": neededFirst,
 }
+
+// neededFirst is why what needs a VM, a network or a volume is no tool: it is
+// what the dashboard's delete dialog asks before it asks for the delete, and
+// the tools' deletes are answered with what needs what they delete, and take
+// it with them when they are asked to (cascade).
+const neededFirst = "what a delete dialog reads before it asks: a tool's delete is answered with what needs what it deletes, and takes it with it when it is asked to"
 
 // authenticated refuses an MCP request that identifies nobody, and says where
 // to go and be given a session.

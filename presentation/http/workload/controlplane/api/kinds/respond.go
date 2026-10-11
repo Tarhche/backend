@@ -80,6 +80,13 @@ type deleted struct {
 	Recreated  bool        `json:"recreated"`
 }
 
+// dependentsShown is which roots need a resource, as the API shows it: each
+// root, none when nothing does, and whether one of them makes it again.
+type dependentsShown struct {
+	Dependents []dependent `json:"dependents"`
+	Recreated  bool        `json:"recreated"`
+}
+
 // previewedAdmission is what a dry run says admitting a resource would do:
 // what would be admitted, and, of a root, what carrying out its graph would.
 type previewedAdmission struct {

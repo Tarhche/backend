@@ -9,8 +9,10 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/createNetwork"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/deleteNetwork"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworkDependents"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworks"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/workloadtest"
+	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -30,6 +32,7 @@ func routes(workload *controlplane.MockClient) *http.ServeMux {
 		mux.Handle("GET "+set.Prefix+"/vms/{uuid}/networks", NewIndexHandler(getNetworks.NewUseCase(workload, t), set.Owner))
 		mux.Handle("POST "+set.Prefix+"/vms/{uuid}/networks", NewCreateHandler(createNetwork.NewUseCase(workload, v, t), set.Owner))
 		mux.Handle("DELETE "+set.Prefix+"/vms/{uuid}/networks/{id}", NewDeleteHandler(deleteNetwork.NewUseCase(workload, t), set.Owner))
+		mux.Handle("GET "+set.Prefix+"/vms/{uuid}/networks/{id}/dependents", NewDependentsHandler(getNetworkDependents.NewUseCase(workload, t), set.Owner))
 	}
 
 	return mux
@@ -133,6 +136,49 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 				},
 				status: http.StatusBadRequest,
 				answer: `{"errors": {"docker": "Docker refused the request: network backend has active endpoints"}, "dependents": [{"kind": "container", "uuid": "c-uuid", "name": "web", "recreates": true}], "recreated": true}`,
+			},
+			{
+				name:   "what needs it, read and nothing deleted",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/networks/backend/dependents",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("NetworkDependents", mock.Anything, ownerUUID, "vm-uuid", "backend").Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "stack", UUID: "stack-uuid", Name: "shop", Recreates: true}},
+						Recreated:  true,
+					}, nil)
+				},
+				status: http.StatusOK,
+				answer: `{"dependents": [{"kind": "stack", "uuid": "stack-uuid", "name": "shop", "recreates": true}], "recreated": true}`,
+			},
+			{
+				name:   "and of one nothing needs, a list of none",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/networks/backend/dependents",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("NetworkDependents", mock.Anything, ownerUUID, "vm-uuid", "backend").Once().Return(workloadControlPlane.Deleted{}, nil)
+				},
+				status: http.StatusOK,
+				answer: `{"dependents": [], "recreated": false}`,
+			},
+			{
+				name:   "and of one that is not there, or not the caller's, nothing",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/networks/gone/dependents",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("NetworkDependents", mock.Anything, ownerUUID, "vm-uuid", "gone").Once().Return(workloadControlPlane.Deleted{}, domain.ErrNotExists)
+				},
+				status: http.StatusNotFound,
+				answer: `{"code": "not_found"}`,
+			},
+			{
+				name:   "and of one in a vm that is not running, refused as its removal is",
+				method: http.MethodGet,
+				target: "/vms/vm-uuid/networks/backend/dependents",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("NetworkDependents", mock.Anything, ownerUUID, "vm-uuid", "backend").Once().Return(workloadControlPlane.Deleted{}, &noderequest.Error{Code: noderequest.CodeNotRunning})
+				},
+				status: http.StatusBadRequest,
+				answer: `{"errors": {"vm": "the VM is not running"}}`,
 			},
 		}
 
