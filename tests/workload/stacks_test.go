@@ -563,6 +563,8 @@ func TestAStacksGraph(t *testing.T) {
 	})
 
 	t.Run("deleted, it takes its containers and its network with it, and leaves its volume and its vm", func(t *testing.T) {
+		before := len(w.dockerd.Did(vmUUID))
+
 		deleted, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
@@ -588,7 +590,9 @@ func TestAStacksGraph(t *testing.T) {
 		_, networked := held.Network(named("backend"))
 		assert.False(t, networked, "and so did its network")
 
-		did := w.dockerd.Did(vmUUID)
+		did := w.dockerd.Did(vmUUID)[before:]
+		require.Contains(t, did, "remove "+named("web"))
+		require.Contains(t, did, "remove "+named("db"))
 		assert.Less(t, slices.Index(did, "remove "+named("web")), slices.Index(did, "remove "+named("db")), "web, which depends on db, first")
 
 		assert.True(t, held.Volume(named("data")), "its volume stays")
