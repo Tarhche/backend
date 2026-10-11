@@ -115,9 +115,10 @@ func registry(t *testing.T) *kind.Registry[kind.ControlPlaneBinding] {
 
 // fixture is reconcilers of roots whose graphs are made of one fake kind, or
 // of what a test has stand for one of its kinds (overrides), which owns the
-// records it holds as a test says, unless a test has the records say it; over records kept in memory, which every read and write of
-// is counted; keeping how each node went in memory, every save recorded; and
-// the leases in memory, on a clock a test moves on.
+// records it holds as a test says, unless a test has the records say it;
+// over records kept in memory, which every read and write of is counted;
+// keeping how each node went in memory, every save recorded; and the leases
+// in memory, on a clock a test moves on.
 type fixture struct {
 	kinds      *graphtest.Kind
 	overrides  graph.Kinds

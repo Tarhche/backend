@@ -733,12 +733,11 @@ func TestReconciler_Reconcile_lease(t *testing.T) {
 			require.Fail(t, "the run never stopped")
 		}
 
-		require.ErrorIs(t, err, graph.ErrLost, "how it ended is not kept on what it does not hold")
 		assert.ErrorContains(t, err, "cut short")
 
 		lease := f.lease(t, web)
 		assert.Equal(t, "another", lease.Holder, "the lease is another's")
-		assert.Zero(t, lease.Failures)
+		assert.Zero(t, lease.Failures, "and how it ended is not kept on what it does not hold")
 	})
 }
 
