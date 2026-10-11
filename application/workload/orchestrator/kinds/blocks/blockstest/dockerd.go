@@ -21,10 +21,12 @@ import (
 //
 // It refuses what docker refuses that the strategies are held to: a name
 // taken, an image nobody has, a network or a volume of a name there already,
-// one in use, and a running container removed without force. It keeps the
-// aliases each container is on each of its networks under (Aliases). Down
-// has every request fail as a dockerd that does not answer, and Refuse fails
-// the requests it names, by method, with what it says.
+// one in use, a running container removed without force, a container started
+// onto a host port a running one holds, and a running container put on a
+// network it is on, as docker does nothing for one that is not running. It
+// keeps the aliases each container is on each of its networks under
+// (Aliases). Down has every request fail as a dockerd that does not answer,
+// and Refuse fails the requests it names, by method, with what it says.
 type Dockerd struct {
 	lock sync.Mutex
 
@@ -250,13 +252,9 @@ func (d *Dockerd) CreateContainer(_ context.Context, spec docker.ContainerSpec) 
 	}
 
 	// a port is taken as a container starts, which one made stopped does not.
-	for _, p := range spec.Ports {
-		for _, c := range d.containers {
-			for _, taken := range c.Ports {
-				if p.HostPort > 0 && taken.HostPort == p.HostPort && c.State == "running" && !spec.Stopped {
-					return docker.Container{}, fmt.Errorf("%w: port is already allocated: %d", docker.ErrInvalid, p.HostPort)
-				}
-			}
+	if !spec.Stopped {
+		if err := d.allocated(spec.Ports, ""); err != nil {
+			return docker.Container{}, err
 		}
 	}
 
@@ -305,6 +303,12 @@ func (d *Dockerd) CreateContainer(_ context.Context, spec docker.ContainerSpec) 
 
 func (d *Dockerd) StartContainer(_ context.Context, id string) error {
 	return d.change("StartContainer", id, func(c *docker.Container) error {
+		if c.State != "running" {
+			if err := d.allocated(c.Ports, c.ID); err != nil {
+				return err
+			}
+		}
+
 		c.State, c.Status = "running", "Up Less than a second"
 
 		return nil
@@ -321,6 +325,10 @@ func (d *Dockerd) StopContainer(_ context.Context, id string) error {
 
 func (d *Dockerd) RestartContainer(_ context.Context, id string) error {
 	return d.change("RestartContainer", id, func(c *docker.Container) error {
+		if err := d.allocated(c.Ports, c.ID); err != nil {
+			return err
+		}
+
 		c.State, c.Status = "running", "Up Less than a second"
 
 		return nil
@@ -406,8 +414,15 @@ func (d *Dockerd) ConnectNetwork(_ context.Context, network string, id string, a
 		return fmt.Errorf("%w: no such container: %s", domain.ErrNotExists, id)
 	}
 
+	// docker refuses to put a running container on a network it is on, and
+	// does nothing for one that is not running, which keeps the aliases it
+	// was put on it with.
 	name := d.networks[at].Name
 	if slices.Contains(d.containers[i].Networks, name) {
+		if d.containers[i].State != "running" {
+			return nil
+		}
+
 		return fmt.Errorf("%w: endpoint with name %s already exists in network %s", docker.ErrInvalid, d.containers[i].Name, name)
 	}
 
@@ -651,6 +666,27 @@ func (d *Dockerd) change(method string, id string, what func(c *docker.Container
 	}
 
 	return what(&d.containers[i])
+}
+
+// allocated is why ports cannot be published as a container starts, as
+// docker says it, or nothing: a host port among them that a running
+// container holds, but for the one id names, which is starting again.
+func (d *Dockerd) allocated(ports []docker.PortBinding, id string) error {
+	for _, p := range ports {
+		for _, c := range d.containers {
+			if c.ID == id || c.State != "running" {
+				continue
+			}
+
+			for _, taken := range c.Ports {
+				if p.HostPort > 0 && taken.HostPort == p.HostPort {
+					return fmt.Errorf("%w: port is already allocated: %d", docker.ErrInvalid, p.HostPort)
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (d *Dockerd) containerAt(id string) int {
