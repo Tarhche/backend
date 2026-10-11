@@ -368,14 +368,22 @@ func TestStacks(t *testing.T) {
 
 		// its record goes last of all, once its containers have: none of
 		// them is listed any more, by its id or by its name, though nothing
-		// names a stack that is gone as theirs.
-		var left page[containerView]
-		user.call(t, http.MethodGet, dockerPath(vmUUID, "/containers"), nil, http.StatusOK, &left)
-		for _, c := range left.Items {
-			if slices.ContainsFunc(its, func(gone containerView) bool { return c.ID == gone.ID || c.Name == gone.Name }) {
-				t.Fatalf("the stack's container %s outlived it", c.Name)
+		// names a stack that is gone as theirs. What a heartbeat its node took
+		// before one of them went says of it may be shown, as nobody's, until
+		// it has gone unheard for a minute, twice the time a resource may.
+		eventually(t, "the stack's containers", 3*time.Minute, func() (bool, string) {
+			var left page[containerView]
+			user.call(t, http.MethodGet, dockerPath(vmUUID, "/containers"), nil, http.StatusOK, &left)
+
+			var outlived []string
+			for _, c := range left.Items {
+				if slices.ContainsFunc(its, func(gone containerView) bool { return c.ID == gone.ID || c.Name == gone.Name }) {
+					outlived = append(outlived, c.Name)
+				}
 			}
-		}
+
+			return len(outlived) == 0, fmt.Sprintf("listed still: %v", outlived)
+		})
 
 		var volumes page[struct {
 			Name string `json:"name"`
