@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"maps"
 	"math"
 	"net/netip"
@@ -351,7 +350,7 @@ func Field(path string) string {
 // strictly into that shape too (yaml.Decoder.KnownFields), which refuses
 // nothing it was not refused for already: what that refuses all the same is a
 // mistake of the reading's, which refuses the file under its own path,
-// compose, and is logged. What it takes:
+// compose, as one the platform does not read. What it takes:
 //
 //   - at the top, services, at least one, and the volumes and the networks it
 //     declares, each by its name and with nothing beneath it;
@@ -437,11 +436,9 @@ func parse(compose string, decode func(compose string) error) (File, domain.Vali
 
 	// a key shaped refused under its path, as yaml.Decoder.KnownFields would
 	// refuse it, and so a file decode refuses all the same is one shaped took
-	// by its mistake: it is refused, as what the platform does not read, and
-	// the mistake is said.
+	// by its mistake: it is refused, as what the platform does not read. The
+	// tests of the reading hold every file they read to the two agreeing.
 	if err := decode(compose); err != nil {
-		slog.Error("a stack's file the platform's reading took was refused by its strict decode, which the reading is to refuse first, under its path", "error", err)
-
 		invalid[Field("")] = "invalid_value"
 
 		return File{}, invalid
