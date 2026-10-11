@@ -361,7 +361,8 @@ func (s *Containers) Apply(_ context.Context, _ containerKind.Container, action 
 // network, or taking it off one, changes the networks its spec names, which
 // are what it is put back on. A network it is put on is there already, and is
 // not its own (Spec.External) unless its graph made it for it; one it is
-// taken off it names no more.
+// taken off it names no more, and is one its spec names, or that its VM's
+// dockerd last said it is on.
 func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, action string, payload any) (containerKind.Container, domain.ValidationErrors, error) {
 	switch action {
 	case containerKind.ActionDelete:
@@ -424,8 +425,17 @@ func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, act
 			return containerKind.Container{}, nil, &noderequest.Error{Code: noderequest.CodeNotFound, Message: fmt.Sprintf("network %s not found", disconnect.Network)}
 		}
 
-		if seen := c.Status.Docker; seen != nil && !slices.Contains(seen.Networks, network) {
-			return containerKind.Container{}, nil, blocks.Refused("container %s is not connected to network %s", seen.Name, disconnect.Network)
+		// on its way onto it, the spec naming it before its node's word that
+		// it is on it is taken onto its record, or named by a spec it could
+		// not be put back on, it is taken off it all the same: only one
+		// neither says it is on is not.
+		if seen := c.Status.Docker; !slices.Contains(c.Spec.Networks, network) && (seen == nil || !slices.Contains(seen.Networks, network)) {
+			name := c.Spec.Name
+			if seen != nil && len(seen.Name) > 0 {
+				name = seen.Name
+			}
+
+			return containerKind.Container{}, nil, blocks.Refused("container %s is not connected to network %s", name, disconnect.Network)
 		}
 
 		disconnect.Network = network

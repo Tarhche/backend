@@ -1,6 +1,7 @@
 package container_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -256,6 +257,47 @@ func TestNode_Execute(t *testing.T) {
 
 		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: "nowhere"})
 		assert.ErrorIs(t, err, domain.ErrNotExists, "a network that is not there is not there")
+	})
+
+	t.Run("taken off a network it is not on, which docker refuses, it is off it, as asked, by the network's name or its docker id", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd, _ := newNode(t)
+		dockerd.HoldNetwork(docker.Network{ID: "n1", Name: "backend"})
+
+		_, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		for _, network := range []string{"backend", "n1"} {
+			outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: network})
+			require.NoError(t, err, network)
+			assert.NotContains(t, outcome.Status.Docker.Networks, "backend", network)
+		}
+	})
+
+	t.Run("but what dockerd refuses of one it has on the network, or of a network it has not, fails it", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd, _ := newNode(t)
+		dockerd.HoldNetwork(docker.Network{ID: "n1", Name: "backend"})
+
+		_, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend"})
+		require.NoError(t, err)
+
+		dockerd.Refuse["DisconnectNetwork"] = fmt.Errorf("%w: it would not", docker.ErrInvalid)
+
+		for _, network := range []string{"backend", "n1"} {
+			_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: network})
+			assert.ErrorIs(t, err, docker.ErrInvalid, "on it still: %s", network)
+		}
+
+		delete(dockerd.Refuse, "DisconnectNetwork")
+
+		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: "nowhere"})
+		assert.Error(t, err, "a network its vm has not is no network it is off")
 	})
 
 	t.Run("removed, running or not, and one already gone is gone", func(t *testing.T) {

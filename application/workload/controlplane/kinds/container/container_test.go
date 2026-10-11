@@ -500,8 +500,10 @@ func TestContainers_Prepare(t *testing.T) {
 		assert.Equal(t, []string{"network/backend"}, prepared.Spec.External, "it was there before it was put on it")
 
 		taken, _, err := w.Containers.Prepare(ctx, prepared, containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: "backend"})
-		require.ErrorAs(t, err, new(*noderequest.Error), "what docker has not done, it is not undone")
+		require.NoError(t, err, "taken off it before its node's word that it is on it is on its record, as its spec names it")
 		assert.Empty(t, taken.Spec.Networks)
+		assert.Nil(t, taken.Spec.Aliases)
+		assert.Nil(t, taken.Spec.External)
 
 		// what its node saw since, on a copy of its own: the one before is
 		// every other test's.
@@ -587,6 +589,50 @@ func TestContainers_Prepare(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, taken.Spec.Networks)
 		assert.Nil(t, taken.Spec.Aliases)
+	})
+
+	t.Run("one is taken off a network its spec names, or its vm's dockerd last said it is on, and refused as docker would only when neither does", func(t *testing.T) {
+		t.Parallel()
+
+		for name, tt := range map[string]struct {
+			spec    []string
+			seen    []string
+			unseen  bool
+			refused bool
+		}{
+			"its spec names it, put on it a moment ago, or not put back on it, which its vm's dockerd has not said it is on": {spec: []string{"backend"}, seen: []string{"bridge"}},
+			"its vm's dockerd said it is on it, though its spec does not name it":                                            {seen: []string{"backend", "bridge"}},
+			"its spec names it, and its vm's dockerd has said nothing of it yet":                                             {spec: []string{"backend"}, unseen: true},
+			"neither":                    {seen: []string{"bridge"}, refused: true},
+			"nor, docker saying nothing": {unseen: true, refused: true},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				c := typed(t, blockstest.AContainer("c", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+					c.Spec.Networks = tt.spec
+					c.Status.Docker.Networks = tt.seen
+
+					if tt.unseen {
+						c.Status.Docker = nil
+					}
+				}))
+
+				taken, _, err := w.Containers.Prepare(ctx, c, containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: "backend"})
+
+				if tt.refused {
+					var refused *noderequest.Error
+					require.ErrorAs(t, err, &refused)
+					assert.Equal(t, noderequest.CodeInvalid, refused.Code)
+					assert.Equal(t, "container web is not connected to network backend", refused.Message, "in docker's words")
+
+					return
+				}
+
+				require.NoError(t, err)
+				assert.Empty(t, taken.Spec.Networks, "its spec names it no more")
+			})
+		}
 	})
 
 	t.Run("one is not taken off a network its vm has not", func(t *testing.T) {

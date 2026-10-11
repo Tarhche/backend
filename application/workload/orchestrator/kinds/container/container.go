@@ -87,7 +87,7 @@ func (n *Node) Execute(ctx context.Context, c containerKind.Container, action st
 		disconnect, _ := payload.(containerKind.DisconnectPayload)
 
 		return n.on(ctx, daemon, c, func(id string) error {
-			return daemon.DisconnectNetwork(ctx, disconnect.Network, id, disconnect.Force)
+			return disconnected(ctx, daemon, id, disconnect)
 		})
 	case containerKind.ActionDelete:
 		return n.remove(ctx, daemon, c)
@@ -310,6 +310,38 @@ func (n *Node) on(ctx context.Context, daemon docker.Daemon, c containerKind.Con
 	}
 
 	return n.inspected(ctx, daemon, found.ID)
+}
+
+// disconnected takes the container id names off a network, by its name or its
+// Docker id, as disconnect asks. One the network is there for, and that its
+// VM's dockerd does not have on it once it answered, which docker refuses to
+// take off a network it is not on, is off it, as asked, and no failure: what
+// the control plane takes off a network its spec names, which the container
+// was not put on yet, or could not be put back on. What dockerd answers of a
+// network or a container it does not have, of one it still has on the
+// network, or when it cannot be asked which, fails the command, as it did.
+func disconnected(ctx context.Context, daemon docker.Daemon, id string, disconnect containerKind.DisconnectPayload) error {
+	err := daemon.DisconnectNetwork(ctx, disconnect.Network, id, disconnect.Force)
+	if err == nil || errors.Is(err, domain.ErrNotExists) {
+		return err
+	}
+
+	found, inspected := daemon.Container(ctx, id)
+	if inspected != nil {
+		return err
+	}
+
+	networks, listed := daemon.Networks(ctx)
+	if listed != nil {
+		return err
+	}
+
+	at := slices.IndexFunc(networks, func(n docker.Network) bool { return n.Name == disconnect.Network || n.ID == disconnect.Network })
+	if at < 0 || slices.Contains(found.Networks, networks[at].Name) {
+		return err
+	}
+
+	return nil
 }
 
 // remove removes a container, running or not: whether one that runs may be
