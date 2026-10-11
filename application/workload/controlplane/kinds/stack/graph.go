@@ -248,11 +248,12 @@ func (g *Graph) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 
 // Create makes the stack the want names, once its graph made each of its
 // containers, handed among the records of what it needs: what it was asked,
-// a start, a stop or a restart, is carried out (act); and then its record says
-// of each of its services the container made of it, and what it is doing, and
-// it is what they make it, written only when that changed. A stack whose
-// record is gone is gone, with whatever was making it: a root is never
-// admitted again. One on its way out waits.
+// a start, a stop or a restart, is carried out (act), and so is what it was
+// asked meanwhile, as its record says once it is read again; and then its
+// record says of each of its services the container made of it, and what it
+// is doing, and it is what they make it, written only when that changed. A
+// stack whose record is gone is gone, with whatever was making it: a root is
+// never admitted again. One on its way out waits.
 func (g *Graph) Create(ctx context.Context, spec any, deps map[graph.NodeID]graph.Ref) (graph.Ref, error) {
 	w, err := wantOf(spec)
 	if err != nil {
@@ -271,7 +272,12 @@ func (g *Graph) Create(ctx context.Context, spec any, deps map[graph.NodeID]grap
 }
 
 // finish has the record of the stack w names say what its containers, among
-// deps, make it, once.
+// deps, make it, once what it was asked is carried out. Read again once that
+// is done, the stack may have been asked something else meanwhile, a person's
+// stop say, which is carried out then: what its containers make it is said
+// only of the state it was last acted on as, and never over what it was asked
+// after it was read, which would be lost. Asked something else each of tries
+// times, it waits, and is carried out again.
 func (g *Graph) finish(ctx context.Context, w stackKind.Want, deps map[graph.NodeID]graph.Ref) (graph.Ref, error) {
 	r, s, err := g.stack(ctx, w)
 	if err != nil {
@@ -287,17 +293,28 @@ func (g *Graph) finish(ctx context.Context, w stackKind.Want, deps map[graph.Nod
 		return graph.Ref{}, err
 	}
 
-	if err := g.act(ctx, w, r, s, containers); err != nil {
-		return graph.Ref{}, err
-	}
+	for round := 1; ; round++ {
+		acted, err := g.act(ctx, w, r, s, containers)
+		if err != nil {
+			return graph.Ref{}, err
+		}
 
-	// what carrying it out took, the stack may have been asked meanwhile.
-	if r, s, err = g.stack(ctx, w); err != nil {
-		return graph.Ref{}, err
-	}
+		// what carrying it out took, the stack may have been asked meanwhile.
+		if r, s, err = g.stack(ctx, w); err != nil {
+			return graph.Ref{}, err
+		}
 
-	if going(s) {
-		return graph.Ref{}, &graph.Waiting{Reason: "it is being removed"}
+		if going(s) {
+			return graph.Ref{}, &graph.Waiting{Reason: "it is being removed"}
+		}
+
+		if s.Status.State == acted {
+			break
+		}
+
+		if round == tries {
+			return graph.Ref{}, &graph.Waiting{Reason: "it was asked something else each time what it was asked was carried out"}
+		}
 	}
 
 	if err := g.settle(ctx, r, s, servicesOf(w, containers)); err != nil {
@@ -309,18 +326,19 @@ func (g *Graph) finish(ctx context.Context, w stackKind.Want, deps map[graph.Nod
 
 // act carries out what the stack s, whose record is r, was asked, on its
 // containers, by their services, which are as it left them once it is
-// carried out: started, stopped, or stopped and started again. Restarted,
-// its record says it is starting once its containers are stopped, so that a
-// restart cut short after that is taken up as the start it is then.
-func (g *Graph) act(ctx context.Context, w stackKind.Want, r resource.Record, s stackKind.Stack, containers map[string]resource.Record) error {
+// carried out: started, stopped, or stopped and started again. It is the
+// state it leaves the stack's record in: restarted, its record says it is
+// starting once its containers are stopped, so that a restart cut short
+// after that is taken up as the start it is then.
+func (g *Graph) act(ctx context.Context, w stackKind.Want, r resource.Record, s stackKind.Stack, containers map[string]resource.Record) (kind.State, error) {
 	switch s.Status.State {
 	case stackKind.Starting:
-		return g.start(ctx, w, containers)
+		return s.Status.State, g.start(ctx, w, containers)
 	case stackKind.Stopping:
-		return g.stop(ctx, w, containers)
+		return s.Status.State, g.stop(ctx, w, containers)
 	case stackKind.Restarting:
 		if err := g.stop(ctx, w, containers); err != nil {
-			return err
+			return s.Status.State, err
 		}
 
 		if to, moved := stackKind.Machine().Next(s.Status.State, kind.OnObserved(stackKind.Starting)); moved && to != s.Status.State {
@@ -328,14 +346,14 @@ func (g *Graph) act(ctx context.Context, w stackKind.Want, r resource.Record, s 
 			s.Status.Since = g.records.Dispatcher.Now()
 
 			if err := g.write(ctx, r, s); err != nil {
-				return err
+				return s.Status.State, err
 			}
 		}
 
-		return g.start(ctx, w, containers)
+		return s.Status.State, g.start(ctx, w, containers)
 	}
 
-	return nil
+	return s.Status.State, nil
 }
 
 // start starts the containers of the stack w names, by their services, that

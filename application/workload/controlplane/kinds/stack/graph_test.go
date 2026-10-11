@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/execute"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/ownership"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/requirements"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/requirements/requirementstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
@@ -654,6 +656,99 @@ func TestGraph_Create(t *testing.T) {
 
 		s, _, _ := storedStack(t, g, "s-1")
 		assert.Equal(t, stackKind.Deploying, s.Status.State, "as it was")
+	})
+}
+
+// interloping keeps records as the repository it wraps does, but does what a
+// test says the first time the record of a kind under a uuid is read: what a
+// person asks of a stack while its graph reads what it needs, say.
+type interloping struct {
+	resource.Repository
+
+	kindName string
+	uuid     string
+	do       func()
+	once     sync.Once
+}
+
+func (i *interloping) GetOne(ctx context.Context, kindName string, uuid string) (resource.Record, error) {
+	if kindName == i.kindName && uuid == i.uuid {
+		i.once.Do(i.do)
+	}
+
+	return i.Repository.GetOne(ctx, kindName, uuid)
+}
+
+// interloped is the stack kind as a graph needs it, over g's records, but
+// for doing what do says the first time the record of a kind under a uuid is
+// read.
+func interloped(g *stackGraph, kindName string, uuid string, do func()) *stack.Graph {
+	dependencies := g.Requirements.Dependencies
+	dependencies.Resources = &interloping{Repository: g.Resources, kindName: kindName, uuid: uuid, do: do}
+
+	return stack.NewGraph(requirements.New(dependencies))
+}
+
+func TestGraph_Create_askedMeanwhile(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// atRest is a stack at rest, as it is asked to be.
+	atRest := func(state kind.State, expected kind.State) func(s *stackKind.Stack) {
+		return func(s *stackKind.Stack) {
+			s.Status.State = state
+			s.Status.Expected = expected
+		}
+	}
+
+	t.Run("a stop asked once the stack was read, made again once a container of it exited, is carried out, not said over as what its containers made it", func(t *testing.T) {
+		t.Parallel()
+
+		g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		carrying(g)
+
+		g.Keep(aStack("s-1", "vm-1", twoServices, atRest(stackKind.Running, stackKind.Running)))
+		g.Keep(serviceContainer("c-web", "s-1", "web"))
+		g.Keep(serviceContainer("c-migrate", "s-1", "migrate", exited(1, containerKind.Completed)))
+
+		// stopped as its graph reads its containers, after it read the stack.
+		stacks := interloped(g, containerKind.Name, "c-web", func() { askStack(t, g, stackKind.ActionStop) })
+
+		_, err := stacks.Create(ctx, wantOf(t, aStack("s-1", "vm-1", twoServices)), deps)
+		require.NoError(t, err)
+
+		s, _, _ := storedStack(t, g, "s-1")
+		assert.Equal(t, stackKind.Stopped, s.Status.State, "stopped, as it was asked, and not degraded, as it was when it was read")
+		assert.Equal(t, stackKind.Stopped, s.Status.Expected)
+		assert.Equal(t, []string{"stop container/shop_web"}, commands(g, containerKind.Name))
+
+		for _, service := range []string{"web", "migrate"} {
+			c := blockRecord(t, g, containerKind.Name, "shop_"+service)
+			common, err := c.Common()
+			require.NoError(t, err)
+			assert.Equal(t, containerKind.Stopped, common.Expected, "%s is held stopped", service)
+		}
+	})
+
+	t.Run("and so is a start of one that waited, its containers started in order", func(t *testing.T) {
+		t.Parallel()
+
+		g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		carrying(g)
+
+		g.Keep(aStack("s-1", "vm-1", twoServices, atRest(stackKind.Waiting, stackKind.Running)))
+		g.Keep(serviceContainer("c-web", "s-1", "web", exited(0, containerKind.Stopped)))
+		g.Keep(serviceContainer("c-migrate", "s-1", "migrate", exited(0, containerKind.Stopped)))
+
+		stacks := interloped(g, containerKind.Name, "c-web", func() { askStack(t, g, stackKind.ActionStart) })
+
+		_, err := stacks.Create(ctx, wantOf(t, aStack("s-1", "vm-1", twoServices)), deps)
+		require.NoError(t, err)
+
+		s, _, _ := storedStack(t, g, "s-1")
+		assert.Equal(t, stackKind.Running, s.Status.State, "started, and not stopped, as it was when it was read")
+		assert.ElementsMatch(t, []string{"start container/shop_migrate", "start container/shop_web"}, commands(g, containerKind.Name))
 	})
 }
 

@@ -41,6 +41,31 @@ func stated(state kind.State) func(r *resource.Record) {
 	}
 }
 
+// moveTo has the record of the root the node id names say it is in state
+// from now on, as what a person asks of a stack has it say.
+func (f *fixture) moveTo(ctx context.Context, id graph.NodeID, state kind.State) error {
+	r, err := f.records.GetOne(ctx, id.Kind(), id.Name())
+	if err != nil {
+		return err
+	}
+
+	common, err := r.Common()
+	if err != nil {
+		return err
+	}
+
+	common.State = state
+	common.Since = f.clock.Now()
+
+	if err := r.SetCommon(common); err != nil {
+		return err
+	}
+
+	_, err = f.records.Update(ctx, r)
+
+	return err
+}
+
 // rooted is the record of the root web, as changes say.
 func rooted(changes ...func(r *resource.Record)) resource.Record {
 	r := root()
@@ -362,6 +387,44 @@ func TestReconciler_Reconcile_explainsAStack(t *testing.T) {
 		now := f.saidOfRoot(t, store)
 		assert.Equal(t, stackKind.Starting, now.State)
 		assert.Equal(t, "network/s_default: its vm is stopped", now.Reason)
+	})
+
+	t.Run("but a state that began after its run read it, a person's start say, is no failure of it: it is left as it is, and the stack runs again, which fails it then", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := stacked()
+
+		var f *fixture
+
+		// started while its plan runs, which then fails.
+		kinds.On(graphtest.Create, vm, func(ctx context.Context) error {
+			if err := f.moveTo(ctx, store, stackKind.Starting); err != nil {
+				return err
+			}
+
+			return refused
+		})
+
+		f = newFixture(t, kinds, aStack(stackKind.Degraded))
+		r := f.reconciler(t, "one", patient(), stackKind.Name)
+
+		require.ErrorIs(t, r.Reconcile(ctx, refOf(store)), refused)
+
+		now := f.saidOfRoot(t, store)
+		assert.Equal(t, stackKind.Starting, now.State, "what it was asked is not failed by a run that read it before")
+		assert.Empty(t, now.Reason)
+		assert.Nil(t, now.Failure)
+		assert.Equal(t, []graph.Ref{refOf(store)}, r.Queued(), "and it runs again, to carry it out")
+
+		// the next run, which reads it starting, fails it.
+		kinds.On(graphtest.Create, vm, func(context.Context) error { return refused })
+
+		require.ErrorIs(t, r.Reconcile(ctx, refOf(store)), refused)
+
+		now = f.saidOfRoot(t, store)
+		assert.Equal(t, stackKind.Failed, now.State)
+		require.NotNil(t, now.Failure)
+		assert.Equal(t, "no_capacity", now.Failure.Code)
 	})
 
 	t.Run("and a run cut short, its control plane stopping, says nothing of it", func(t *testing.T) {

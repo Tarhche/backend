@@ -237,7 +237,9 @@ func New(dependencies Dependencies, config Config) (*Reconciler, error) {
 //
 // How it ended is kept on its lease as it is let go of: done, waiting, or
 // failed, which a plan that could not be made is, and a run that was
-// interrupted too, saying why; and a root removed has its lease forgotten. It
+// interrupted too, saying why; and a root removed has its lease forgotten. A
+// root asked something after its run read it, which that run says nothing
+// of (explain), is queued to run again once its lease is let go of. It
 // is nothing when its plan is done, waits, or it is gone, and what failed
 // otherwise, which is logged with its kind and its uuid, and how long it is
 // backed off for. A root of a kind that is not a root here is
@@ -273,14 +275,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, root graph.Ref) error {
 		return err
 	}
 
-	ended, gone, err := r.carry(ctx, root, rooted)
+	read, ended, gone, err := r.carry(ctx, root, rooted)
 	if gone {
 		return r.forget(ctx, root)
 	}
 
-	r.explain(context.WithoutCancel(ctx), root, lease.Reason, ended, err)
+	again := r.explain(context.WithoutCancel(ctx), root, read, lease.Reason, ended, err)
 
 	released, releaseErr := r.leases.Release(context.WithoutCancel(ctx), root.UUID, r.holder, ended)
+
+	// what it was asked after its plan's run read it is carried out by the
+	// next.
+	if again {
+		r.Enqueue(root)
+	}
 
 	switch {
 	case errors.Is(releaseErr, graph.ErrLost):
@@ -322,24 +330,35 @@ func (r *Reconciler) end(root graph.Ref) {
 	delete(r.reconciling, root)
 }
 
-// carry carries out the plan of root, whose lease is taken, and is how it
-// ended, as its lease keeps it, or whether its lease is to be forgotten
-// instead, and what failed.
-func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.RootKind) (graph.Ended, bool, error) {
+// carry carries out the plan of root, whose lease is taken, and is the
+// root's record as the run read it before it carried its plan out, none when
+// it read none, and how it ended, as its lease keeps it, or whether its lease
+// is to be forgotten instead, and what failed.
+func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.RootKind) (resource.Record, graph.Ended, bool, error) {
 	rec, there, err := r.read(ctx, root)
 	switch {
 	case err != nil:
-		return r.failed(err)
+		ended, gone, err := r.failed(err)
+
+		return resource.Record{}, ended, gone, err
 	case !there:
 		r.logger.InfoContext(ctx, "forgetting a root that is gone, its lease and how its plan went", "kind", root.Kind, "uuid", root.UUID)
 
-		return graph.Ended{}, true, nil
+		return resource.Record{}, graph.Ended{}, true, nil
 	case !r.unowned(rec):
 		r.logger.InfoContext(ctx, "forgetting the lease of what something owns now, which is a root no more", "kind", root.Kind, "uuid", root.UUID, "owners", rec.Metadata.Owning(r.parentOf(rec.Kind)))
 
-		return graph.Ended{}, true, nil
+		return rec, graph.Ended{}, true, nil
 	}
 
+	ended, gone, err := r.carried(ctx, root, rooted, rec)
+
+	return rec, ended, gone, err
+}
+
+// carried carries out the plan of root, whose record, rec, a root's that
+// nothing owns, the run read, as carry says.
+func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.RootKind, rec resource.Record) (graph.Ended, bool, error) {
 	requirement, err := rooted.Root(rec.Raw)
 	if err != nil {
 		return r.failed(fmt.Errorf("what the root needs cannot be read off its record: %w", err))
@@ -435,23 +454,33 @@ func (r *Reconciler) wanted(root graph.Ref) func(ctx context.Context) error {
 // is doing, a plan that failed fails it, and one that waits on what it needs
 // has it wait, as its machine takes either from where it is, and says why. A
 // run cut short, its lease lost or its control plane stopping, is no failure
-// of it, and says nothing of it.
-func (r *Reconciler) explain(ctx context.Context, root graph.Ref, last string, ended graph.Ended, failure error) {
+// of it, and says nothing of it; nor does a run of a state that began after
+// the run read it, as read (none when it read none), which something else
+// wrote meanwhile, a person's start say: that is not the run's to say
+// anything of, and is left as it is, and explain reports that the root is
+// to run again, to carry it out.
+func (r *Reconciler) explain(ctx context.Context, root graph.Ref, read resource.Record, last string, ended graph.Ended, failure error) bool {
 	for try := 1; try <= tries; try++ {
 		rec, there, err := r.read(ctx, root)
 		if err != nil || !there || going(rec) {
-			return
+			return false
 		}
 
-		explained, changed, err := r.explained(rec, last, ended, failure)
+		explained, changed, again, err := r.explained(rec, read, last, ended, failure)
 		if err != nil {
 			r.logger.WarnContext(ctx, "could not say on a root why its plan fails or waits", "error", err, "kind", root.Kind, "uuid", root.UUID)
 
-			return
+			return false
+		}
+
+		if again {
+			r.logger.InfoContext(ctx, "a root was asked something after its plan's run read it, which the next run carries out", "kind", root.Kind, "uuid", root.UUID)
+
+			return true
 		}
 
 		if !changed {
-			return
+			return false
 		}
 
 		explained.Metadata.UpdatedAt = time.Now()
@@ -459,26 +488,30 @@ func (r *Reconciler) explain(ctx context.Context, root graph.Ref, last string, e
 		_, err = r.resources.Update(ctx, explained)
 		switch {
 		case err == nil, errors.Is(err, domain.ErrNotExists):
-			return
+			return false
 		case !errors.Is(err, resource.ErrConflict):
 			r.logger.WarnContext(ctx, "could not say on a root why its plan fails or waits", "error", err, "kind", root.Kind, "uuid", root.UUID)
 
-			return
+			return false
 		}
 	}
+
+	return false
 }
 
 // explained is rec, the record of a root, saying why its plan failed or
-// waits, as explain says, and whether that changed it.
-func (r *Reconciler) explained(rec resource.Record, last string, ended graph.Ended, failure error) (resource.Record, bool, error) {
+// waits, as explain says, and whether that changed it, or whether it is left
+// as it is to run again, its state having begun after the run read it, as
+// read.
+func (r *Reconciler) explained(rec resource.Record, read resource.Record, last string, ended graph.Ended, failure error) (resource.Record, bool, bool, error) {
 	common, err := rec.Common()
 	if err != nil {
-		return resource.Record{}, false, err
+		return resource.Record{}, false, false, err
 	}
 
 	said, err := failureOf(rec.Status)
 	if err != nil {
-		return resource.Record{}, false, err
+		return resource.Record{}, false, false, err
 	}
 
 	// what a plan said is what last failed its plan.
@@ -503,15 +536,20 @@ func (r *Reconciler) explained(rec resource.Record, last string, ended graph.End
 		unmade = unmade || common.State == d.Machine.Initial
 
 		// nothing but its plan says what a root the control plane keeps the
-		// state of is doing, and a run cut short says nothing of it.
+		// state of is doing, and a run cut short says nothing of it, nor does
+		// one of a state that began after it read the root.
 		if d.StateBy == kind.OnControlPlane && ended.State != graph.StateDone && !errors.Is(failure, errCutShort) {
+			if began(read, common) {
+				return rec, false, true, nil
+			}
+
 			unmade = true
 
 			if moved := settled(d, &common, ended); moved {
 				changed = true
 
 				if err := rec.SetCommon(common); err != nil {
-					return resource.Record{}, false, err
+					return resource.Record{}, false, false, err
 				}
 			}
 		}
@@ -521,7 +559,7 @@ func (r *Reconciler) explained(rec resource.Record, last string, ended graph.End
 	// said of it is let go of, and nothing more is said.
 	if !unmade || ended.State == graph.StateDone {
 		if !ours {
-			return rec, false, nil
+			return rec, false, false, nil
 		}
 
 		wanted = planFailure{}
@@ -530,21 +568,35 @@ func (r *Reconciler) explained(rec resource.Record, last string, ended graph.End
 		changed = true
 
 		if err := rec.SetCommon(common); err != nil {
-			return resource.Record{}, false, err
+			return resource.Record{}, false, false, err
 		}
 	}
 
 	if wanted != said {
 		status, err := resource.Merge(rec.Status, failureStatus(wanted))
 		if err != nil {
-			return resource.Record{}, false, err
+			return resource.Record{}, false, false, err
 		}
 
 		rec.Status = status
 		changed = true
 	}
 
-	return rec, changed, nil
+	return rec, changed, false, nil
+}
+
+// began reports whether a root's state, now, began after a run read its
+// record, as read: whether it is another state since, or the same one begun
+// again, which something else wrote meanwhile, or the run read no record of
+// it at all.
+func began(read resource.Record, now kind.Status) bool {
+	if len(read.Metadata.UUID) == 0 {
+		return true
+	}
+
+	then, err := read.Common()
+
+	return err != nil || then.State != now.State || !then.Since.Equal(now.Since)
 }
 
 // settled moves common, the status of a root whose state the control plane
