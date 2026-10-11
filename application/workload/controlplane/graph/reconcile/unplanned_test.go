@@ -303,6 +303,50 @@ func TestReconciler_Reconcile_unplanned(t *testing.T) {
 		})
 	}
 
+	t.Run("and one whose delete goes all the same once its lease is lost, a kind's that does not wait on its run, removes nothing after it", func(t *testing.T) {
+		t.Parallel()
+
+		config := reconcile.DefaultConfig()
+		config.Lease = 30 * time.Millisecond
+
+		// web goes once the lease is lost, as what its node was asked
+		// already goes.
+		kinds := unplanned()
+		kinds.On(graphtest.Delete, web, func(ctx context.Context) error {
+			<-ctx.Done()
+
+			return nil
+		})
+
+		f := newFixture(t, kinds, records()...)
+		one := f.reconciler(t, "one", config, stackKind.Name)
+
+		done := make(chan error, 1)
+		go func() { done <- one.Reconcile(ctx, refOf(store)) }()
+
+		require.Eventually(t, func() bool { return slices.Contains(kinds.Asked(graphtest.Delete), web) }, settle, tick)
+
+		f.lapse(t, store, "another")
+
+		var err error
+
+		select {
+		case err = <-done:
+		case <-time.After(settle):
+			require.Fail(t, "the removal never stopped")
+		}
+
+		assert.ErrorContains(t, err, "cut short")
+		assert.Equal(t, []graph.NodeID{store, db, web}, kinds.Asked(graphtest.Delete), "nothing after web is removed")
+
+		_, err = f.records.GetOne(ctx, stackKind.Name, store.Name())
+		require.NoError(t, err, "its record is kept, for the run that holds its lease")
+
+		lease := f.lease(t, store)
+		assert.Equal(t, "another", lease.Holder, "which another holds still")
+		assert.Zero(t, lease.Failures)
+	})
+
 	t.Run("but one not asked to go whose plan cannot be made fails, and nothing of it is removed", func(t *testing.T) {
 		t.Parallel()
 

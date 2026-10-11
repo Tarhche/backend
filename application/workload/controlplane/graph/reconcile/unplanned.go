@@ -31,8 +31,9 @@ import (
 // on, its VM say, and taken up by the next run where it stopped; cut short
 // once ctx is done, its lease lost or its control plane stopping, whatever
 // it was doing then, looking for the records, removing one of them or root's
-// own; or failed with what a delete, or looking for the records, failed
-// with.
+// own, and removing nothing more, though what it was removing went all the
+// same, a kind's delete that does not wait on ctx say; or failed with what a
+// delete, or looking for the records, failed with.
 func (r *Reconciler) removeUnplanned(ctx context.Context, root graph.Ref, rec resource.Record, unplanned error) (graph.Ended, bool, error) {
 	r.logger.WarnContext(ctx, "a root asked to go whose plan cannot be made is removed through what its records say it owns", "error", unplanned, "kind", root.Kind, "uuid", root.UUID)
 
@@ -40,13 +41,19 @@ func (r *Reconciler) removeUnplanned(ctx context.Context, root graph.Ref, rec re
 
 	switch {
 	case err != nil && ctx.Err() != nil:
-		return r.failed(fmt.Errorf("%w: looking for what %s/%s owns: %w", errCutShort, root.Kind, root.UUID, context.Cause(ctx)))
+		return r.cutShort(ctx, "looking for what "+root.Kind+"/"+root.UUID+" owns")
 	case err != nil:
 		return r.failed(fmt.Errorf("%w, and what it owns cannot be looked for: %w", unplanned, err))
 	}
 
 	for _, level := range removing.levels() {
 		for _, ref := range level {
+			// nothing more is removed once the run is cut short, as an
+			// executor's run starts nothing more.
+			if ctx.Err() != nil {
+				return r.cutShort(ctx, "before "+ref.Kind+"/"+ref.UUID)
+			}
+
 			var waiting *graph.Waiting
 
 			switch err := r.kinds[ref.Kind].Delete(ctx, ref); {
@@ -57,17 +64,21 @@ func (r *Reconciler) removeUnplanned(ctx context.Context, root graph.Ref, rec re
 
 				return graph.Ended{State: graph.StateWaiting, Reason: reason}, false, nil
 			case err != nil && ctx.Err() != nil:
-				return r.failed(fmt.Errorf("%w: %s/%s: %w", errCutShort, ref.Kind, ref.UUID, context.Cause(ctx)))
+				return r.cutShort(ctx, ref.Kind+"/"+ref.UUID)
 			case err != nil:
 				return r.failed(fmt.Errorf("%s/%s cannot be removed: %w", ref.Kind, ref.UUID, err))
 			}
 		}
 	}
 
+	if ctx.Err() != nil {
+		return r.cutShort(ctx, "before the record of "+root.Kind+"/"+root.UUID)
+	}
+
 	switch err := r.resources.Delete(ctx, root.Kind, root.UUID); {
 	case err == nil, errors.Is(err, domain.ErrNotExists):
 	case ctx.Err() != nil:
-		return r.failed(fmt.Errorf("%w: the record of %s/%s: %w", errCutShort, root.Kind, root.UUID, context.Cause(ctx)))
+		return r.cutShort(ctx, "the record of "+root.Kind+"/"+root.UUID)
 	default:
 		return r.failed(fmt.Errorf("the record of %s/%s cannot be removed: %w", root.Kind, root.UUID, err))
 	}
@@ -75,6 +86,13 @@ func (r *Reconciler) removeUnplanned(ctx context.Context, root graph.Ref, rec re
 	r.logger.InfoContext(ctx, "removed a root asked to go whose plan could not be made, and what its records said it owned", "kind", root.Kind, "uuid", root.UUID, "removed", len(removing.records)-1)
 
 	return graph.Ended{}, true, nil
+}
+
+// cutShort is a removal cut short once ctx is done, its lease lost or its
+// control plane stopping, as it did what says, or was about to: no failure
+// of it, saying what cut it short (context.Cause).
+func (r *Reconciler) cutShort(ctx context.Context, what string) (graph.Ended, bool, error) {
+	return r.failed(fmt.Errorf("%w: %s: %w", errCutShort, what, context.Cause(ctx)))
 }
 
 // owned is a root and what its records say it owns, which goes with it, each
