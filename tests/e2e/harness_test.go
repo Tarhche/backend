@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -297,7 +298,18 @@ func (a *account) removeListed(ctx context.Context) ([]string, []error) {
 	}
 
 	for _, c := range containers.Items {
-		remove("container "+c.ID+" in vm "+c.VMUUID, dockerPath(c.VMUUID, "/containers/", url.PathEscape(c.ID), "?force=true"), http.StatusNoContent, http.StatusNotFound)
+		// one its VM's dockerd has said nothing of yet, being made or its
+		// making failed, has no id, and is named by its name, as the blog's
+		// routes name a container by either; one with neither goes with its
+		// VM.
+		id := cmp.Or(c.ID, c.Name)
+		if len(id) == 0 {
+			left = append(left, "a container in vm "+c.VMUUID)
+
+			continue
+		}
+
+		remove("container "+id+" in vm "+c.VMUUID, dockerPath(c.VMUUID, "/containers/", url.PathEscape(id), "?force=true"), http.StatusNoContent, http.StatusNotFound)
 	}
 
 	var vms page[vmView]
