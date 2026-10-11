@@ -932,12 +932,12 @@ func vmTools() []tool {
 		}, "Change one of this session owner's own VMs: only what is sent changes, and changing its ports, network or resources restarts it unless it is stopped."),
 		both(tool{
 			name:        "dashboard_vm_delete",
-			description: "Delete a VM and its disk, whoever owns it. Its snapshots stay. A code runner's snippet is taken away at once, running or not. The containers in a Docker VM make it again, under its uuid and as it was, and then themselves in it, unless cascade is asked, which deletes them with it; the answer names the containers that need it, and says whether one of them makes it again.",
+			description: "Delete a VM and its disk, whoever owns it. Its snapshots stay. A code runner's snippet is taken away at once, running or not. The stacks and the containers in a Docker VM make it again, under its uuid and as it was, and then what they need in it, unless cascade is asked, which deletes them with it; the answer names what needs it, and says whether one of them makes it again.",
 			route:       "DELETE /api/dashboard/workload/vms/{uuid}",
-			params:      []Parameter{vmUUID(), boolean("cascade", "delete the containers in it with it, rather than have them make it again")},
+			params:      []Parameter{vmUUID(), boolean("cascade", "delete the stacks and the containers in it with it, rather than have them make it again")},
 			destructive: true,
 			idempotent:  true,
-		}, "Delete one of this session owner's own VMs and its disk. Its snapshots stay. The containers in a Docker VM make it again, under its uuid and as it was, unless cascade is asked, which deletes them with it."),
+		}, "Delete one of this session owner's own VMs and its disk. Its snapshots stay. The stacks and the containers in a Docker VM make it again, under its uuid and as it was, unless cascade is asked, which deletes them with it."),
 		both(tool{
 			name:        "dashboard_vm_start",
 			description: "Start a stopped VM, whoever owns it.",
@@ -1157,12 +1157,12 @@ func dockerObjectTools() []tool {
 		}, "Create a docker network in one of this session owner's own Docker VMs."),
 		both(tool{
 			name:        "dashboard_network_delete",
-			description: "Remove a docker network from a Docker VM, whoever owns it; one a container is attached to is refused, unless cascade is asked, which deletes the containers that need it first. The answer names the containers that need it, and says whether one of them makes it again.",
+			description: "Remove a docker network from a Docker VM, whoever owns it; one a container is attached to is refused, unless cascade is asked, which deletes the stacks and the containers that need it first. The answer names what needs it, and says whether one of them makes it again.",
 			route:       "DELETE /api/dashboard/workload/vms/{uuid}/networks/{id}",
-			params:      []Parameter{vmUUID(), text("id", "the network's id or its name"), boolean("cascade", "delete the containers that need it first")},
+			params:      []Parameter{vmUUID(), text("id", "the network's id or its name"), boolean("cascade", "delete the stacks and the containers that need it first")},
 			destructive: true,
 			idempotent:  true,
-		}, "Remove a docker network from one of this session owner's own Docker VMs; with cascade, the containers that need it go first."),
+		}, "Remove a docker network from one of this session owner's own Docker VMs; with cascade, the stacks and the containers that need it go first."),
 		both(tool{
 			name:        "dashboard_volumes_list",
 			description: "The volumes of a Docker VM, whoever owns it.",
@@ -1179,12 +1179,12 @@ func dockerObjectTools() []tool {
 		}, "Create a volume in one of this session owner's own Docker VMs."),
 		both(tool{
 			name:        "dashboard_volume_delete",
-			description: "Remove a volume, and what was kept in it, from a Docker VM, whoever owns it; one a container mounts only with force, or with cascade, which deletes the containers that need it first. The answer names the containers that need it, and says whether one of them makes it again.",
+			description: "Remove a volume, and what was kept in it, from a Docker VM, whoever owns it; one a container mounts only with force, or with cascade, which deletes the stacks and the containers that need it first. The answer names what needs it, and says whether one of them makes it again.",
 			route:       "DELETE /api/dashboard/workload/vms/{uuid}/volumes/{name}",
-			params:      []Parameter{vmUUID(), text("name", "the volume's name"), boolean("force", "remove it even while a container uses it"), boolean("cascade", "delete the containers that need it first")},
+			params:      []Parameter{vmUUID(), text("name", "the volume's name"), boolean("force", "remove it even while a container uses it"), boolean("cascade", "delete the stacks and the containers that need it first")},
 			destructive: true,
 			idempotent:  true,
-		}, "Remove a volume, and what was kept in it, from one of this session owner's own Docker VMs; with cascade, the containers that need it go first."),
+		}, "Remove a volume, and what was kept in it, from one of this session owner's own Docker VMs; with cascade, the stacks and the containers that need it go first."),
 	)
 }
 

@@ -52,10 +52,10 @@ type Client interface {
 	CreateVM(ctx context.Context, ownerUUID string, request VMRequest) (vm.VM, error)
 	UpdateVM(ctx context.Context, ownerUUID string, uuid string, update VMUpdate) (vm.VM, error)
 
-	// DeleteVM asks for a VM to be removed. Its snapshots stay. The
-	// containers in it make it again, under its uuid and as it was, and then
-	// themselves in it, unless cascade deletes them with it; either way it is
-	// answered with them (Deleted).
+	// DeleteVM asks for a VM to be removed. Its snapshots stay. The stacks
+	// and the containers in it make it again, under its uuid and as it was,
+	// and then what they need in it, unless cascade deletes them with it;
+	// either way it is answered with them (Deleted).
 	DeleteVM(ctx context.Context, ownerUUID string, uuid string, cascade bool) (Deleted, error)
 
 	// VMDependents is what needs a VM, as its delete would be answered with
@@ -106,11 +106,11 @@ type Client interface {
 	Docker(ownerUUID string, vmUUID string) docker.Daemon
 
 	// DeleteNetwork removes a docker network from a Docker VM by its id or
-	// its name, as Docker(...).RemoveNetwork does, and is answered with the
-	// containers that need it (Deleted): one that owns it makes it again, and
-	// one a container is on is refused, unless cascade deletes the
-	// containers that need it first. The refusal is answered with them all
-	// the same.
+	// its name, as Docker(...).RemoveNetwork does, and is answered with what
+	// needs it, the stacks and the containers (Deleted): one that owns it
+	// makes it again, and one a container is on is refused, unless cascade
+	// deletes what needs it first. The refusal is answered with them all the
+	// same.
 	DeleteNetwork(ctx context.Context, ownerUUID string, vmUUID string, id string, cascade bool) (Deleted, error)
 
 	// NetworkDependents is what needs a docker network of a Docker VM, named
@@ -123,9 +123,9 @@ type Client interface {
 	NetworkDependents(ctx context.Context, ownerUUID string, vmUUID string, id string) (Deleted, error)
 
 	// DeleteVolume removes a volume from a Docker VM by its name, as
-	// Docker(...).RemoveVolume does, and is answered with the containers that
-	// need it (Deleted): one a container mounts is refused, unless cascade
-	// deletes the containers that need it first, and is answered with them
+	// Docker(...).RemoveVolume does, and is answered with what needs it, the
+	// stacks and the containers (Deleted): one a container mounts is refused,
+	// unless cascade deletes what needs it first, and is answered with them
 	// all the same.
 	DeleteVolume(ctx context.Context, ownerUUID string, vmUUID string, name string, force bool, cascade bool) (Deleted, error)
 

@@ -10,9 +10,10 @@ import (
 )
 
 // UseCase removes a docker network from a Docker VM. One a container is
-// still attached to is refused, unless the containers that need it are
-// deleted first (Request.Cascade); one a container owns, which it would make
-// again, it is answered with, as with any that needs it.
+// still attached to is refused, unless the stacks and the containers that
+// need it are deleted first (Request.Cascade); one a stack or a container
+// owns, which it would make again, it is answered with, as with anything
+// that needs it.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator

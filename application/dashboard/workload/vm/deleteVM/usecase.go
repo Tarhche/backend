@@ -11,9 +11,9 @@ import (
 
 // UseCase asks for a VM to be removed, with its disk. Its node removes it in
 // its own time, and the record goes once it has; the VM's snapshots stay. The
-// containers in it, nothing owning them, make it again, under its uuid and as
-// it was, and then themselves in it, unless they are deleted with it
-// (Request.Cascade): it is answered with them either way.
+// stacks and the containers in it, nothing owning them, make it again, under
+// its uuid and as it was, and then what they need in it, unless they are
+// deleted with it (Request.Cascade): it is answered with them either way.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator

@@ -452,6 +452,36 @@ func TestReconciler_Reconcile_explainsAStack(t *testing.T) {
 		assert.Contains(t, lease.Reason, "could not be read or written")
 	})
 
+	t.Run("but one whose plan is refused fails as much when how its nodes went could not be kept besides: what it was refused for is what its plan failed with", func(t *testing.T) {
+		t.Parallel()
+
+		gone := errors.New("the database is gone")
+
+		kinds := stacked()
+
+		var f *fixture
+
+		// the database goes as the vm is refused, so that how the vm went is
+		// not kept.
+		kinds.On(graphtest.Create, vm, func(context.Context) error {
+			f.executions.Fail(gone)
+
+			return refused
+		})
+
+		f = newFixture(t, kinds, aStack(stackKind.Running))
+		r := f.reconciler(t, "one", patient(), stackKind.Name)
+
+		err := r.Reconcile(ctx, refOf(store))
+		require.ErrorIs(t, err, refused)
+		assert.NotErrorIs(t, err, gone, "which is logged beside it")
+
+		now := f.saidOfRoot(t, store)
+		assert.Equal(t, stackKind.Failed, now.State)
+		require.NotNil(t, now.Failure)
+		assert.Equal(t, "no_capacity", now.Failure.Code)
+	})
+
 	t.Run("and a run cut short, its control plane stopping, says nothing of it", func(t *testing.T) {
 		t.Parallel()
 

@@ -17,10 +17,10 @@ func NewDeleteHandler(useCase *deleteVM.UseCase, owner workload.Owner) *deleteHa
 }
 
 // @Summary		Delete a VM
-// @Description	ask for a VM and its disk to be removed; it is deleting until its node has removed it, and its snapshots stay. The containers in it make it again, under its uuid and as it was, and then themselves in it, unless cascade deletes them with it; when any container needs it, it is answered with them, and with whether one of them makes it again
+// @Description	ask for a VM and its disk to be removed; it is deleting until its node has removed it, and its snapshots stay. The stacks and the containers in it make it again, under its uuid and as it was, and then what they need in it, unless cascade deletes them with it; when anything needs it, it is answered with what does, and with whether one of them makes it again
 // @Tags			dashboard workload vms
 // @Param			uuid	path		string	true	"VM UUID"
-// @Param			cascade	query		bool	false	"Delete the containers in it with it, rather than have them make it again"
+// @Param			cascade	query		bool	false	"Delete the stacks and the containers in it with it, rather than have them make it again"
 // @Success		202		{object}	workload.Removal
 // @Failure		400		{object}	workload.Refusal
 // @Failure		404		{object}	workload.Failure

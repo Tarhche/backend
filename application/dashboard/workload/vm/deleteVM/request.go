@@ -7,7 +7,8 @@ type Request struct {
 	// for anybody's.
 	OwnerUUID string `json:"-"`
 
-	// Cascade deletes the containers in it with it, which would otherwise
-	// make it again, under its uuid and as it was, and then themselves in it.
+	// Cascade deletes the stacks and the containers in it with it, which
+	// would otherwise make it again, under its uuid and as it was, and then
+	// what they need in it.
 	Cascade bool `json:"-"`
 }

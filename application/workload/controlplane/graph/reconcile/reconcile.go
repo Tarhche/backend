@@ -433,8 +433,16 @@ func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.R
 	}
 
 	// what the executor fails with beside how far the plan went is how its
-	// nodes went not being kept, and no failure of any of them.
+	// nodes went not being kept, and no failure of any of them: a node that
+	// failed, refused say, is what the run failed with all the same, and what
+	// could not be kept is logged beside it.
 	switch {
+	case outcome.State == execute.Failed:
+		if err != nil {
+			r.logger.WarnContext(ctx, "could not keep how the nodes of a root's plan went, which failed", "error", err, "kind", root.Kind, "uuid", root.UUID)
+		}
+
+		return r.failed(outcome.Err)
 	case err != nil:
 		return r.failed(fmt.Errorf("%w: %w", errRecords, err))
 	case outcome.State == execute.Done && deleting:
@@ -447,8 +455,6 @@ func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.R
 		r.logger.DebugContext(ctx, "a root's plan waits on what it needs", "kind", root.Kind, "uuid", root.UUID, "reason", waitedOn(outcome))
 
 		return graph.Ended{State: graph.StateWaiting, Reason: waitedOn(outcome)}, false, nil
-	case outcome.State == execute.Failed:
-		return r.failed(outcome.Err)
 	}
 
 	// cut short, by a lease lost or a control plane stopping, it is not
@@ -633,13 +639,10 @@ func (r *Reconciler) explained(rec resource.Record, read resource.Record, last s
 
 // began reports whether a root's state, now, began after a run read its
 // record, as read: whether it is another state since, or the same one begun
-// again, which something else wrote meanwhile, or the run read no record of
-// it at all.
+// again, which something else wrote meanwhile. A run that read no record is
+// one that could not read what the control plane keeps, which says nothing
+// of its root (explain), and is never asked.
 func began(read resource.Record, now kind.Status) bool {
-	if len(read.Metadata.UUID) == 0 {
-		return true
-	}
-
 	then, err := read.Common()
 
 	return err != nil || then.State != now.State || !then.Since.Equal(now.Since)

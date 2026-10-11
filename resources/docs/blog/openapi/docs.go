@@ -3171,7 +3171,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "ask for a VM and its disk to be removed; it is deleting until its node has removed it, and its snapshots stay. The containers in it make it again, under its uuid and as it was, and then themselves in it, unless cascade deletes them with it; when any container needs it, it is answered with them, and with whether one of them makes it again",
+                "description": "ask for a VM and its disk to be removed; it is deleting until its node has removed it, and its snapshots stay. The stacks and the containers in it make it again, under its uuid and as it was, and then what they need in it, unless cascade deletes them with it; when anything needs it, it is answered with what does, and with whether one of them makes it again",
                 "tags": [
                     "dashboard workload vms"
                 ],
@@ -3186,7 +3186,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Delete the containers in it with it, rather than have them make it again",
+                        "description": "Delete the stacks and the containers in it with it, rather than have them make it again",
                         "name": "cascade",
                         "in": "query"
                     }
@@ -4212,7 +4212,7 @@ const docTemplate = `{
         },
         "/dashboard/my/workload/vms/{uuid}/networks/{id}": {
             "delete": {
-                "description": "remove a docker network from a Docker VM; one a container is attached to is refused, unless cascade deletes the containers that need it first. When any container needs it, it is answered with them, and with whether one of them makes it again, as a container that owns it does",
+                "description": "remove a docker network from a Docker VM; one a container is attached to is refused, unless cascade deletes the stacks and the containers that need it first. When anything needs it, it is answered with what does, and with whether one of them makes it again, as a stack or a container that owns it does",
                 "tags": [
                     "dashboard workload networks"
                 ],
@@ -4234,7 +4234,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Delete the containers that need it first",
+                        "description": "Delete the stacks and the containers that need it first",
                         "name": "cascade",
                         "in": "query"
                     }
@@ -4626,7 +4626,7 @@ const docTemplate = `{
         },
         "/dashboard/my/workload/vms/{uuid}/volumes/{name}": {
             "delete": {
-                "description": "remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force, or once cascade deleted the containers that need it first. When any container needs it, it is answered with them, and with whether one of them makes it again",
+                "description": "remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force, or once cascade deleted the stacks and the containers that need it first. When anything needs it, it is answered with what does, and with whether one of them makes it again",
                 "tags": [
                     "dashboard workload volumes"
                 ],
@@ -4654,7 +4654,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Delete the containers that need it first",
+                        "description": "Delete the stacks and the containers that need it first",
                         "name": "cascade",
                         "in": "query"
                     }
@@ -6217,7 +6217,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "ask for a VM and its disk to be removed; it is deleting until its node has removed it, and its snapshots stay. The containers in it make it again, under its uuid and as it was, and then themselves in it, unless cascade deletes them with it; when any container needs it, it is answered with them, and with whether one of them makes it again",
+                "description": "ask for a VM and its disk to be removed; it is deleting until its node has removed it, and its snapshots stay. The stacks and the containers in it make it again, under its uuid and as it was, and then what they need in it, unless cascade deletes them with it; when anything needs it, it is answered with what does, and with whether one of them makes it again",
                 "tags": [
                     "dashboard workload vms"
                 ],
@@ -6232,7 +6232,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Delete the containers in it with it, rather than have them make it again",
+                        "description": "Delete the stacks and the containers in it with it, rather than have them make it again",
                         "name": "cascade",
                         "in": "query"
                     }
@@ -7258,7 +7258,7 @@ const docTemplate = `{
         },
         "/dashboard/workload/vms/{uuid}/networks/{id}": {
             "delete": {
-                "description": "remove a docker network from a Docker VM; one a container is attached to is refused, unless cascade deletes the containers that need it first. When any container needs it, it is answered with them, and with whether one of them makes it again, as a container that owns it does",
+                "description": "remove a docker network from a Docker VM; one a container is attached to is refused, unless cascade deletes the stacks and the containers that need it first. When anything needs it, it is answered with what does, and with whether one of them makes it again, as a stack or a container that owns it does",
                 "tags": [
                     "dashboard workload networks"
                 ],
@@ -7280,7 +7280,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Delete the containers that need it first",
+                        "description": "Delete the stacks and the containers that need it first",
                         "name": "cascade",
                         "in": "query"
                     }
@@ -7731,7 +7731,7 @@ const docTemplate = `{
         },
         "/dashboard/workload/vms/{uuid}/volumes/{name}": {
             "delete": {
-                "description": "remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force, or once cascade deleted the containers that need it first. When any container needs it, it is answered with them, and with whether one of them makes it again",
+                "description": "remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force, or once cascade deleted the stacks and the containers that need it first. When anything needs it, it is answered with what does, and with whether one of them makes it again",
                 "tags": [
                     "dashboard workload volumes"
                 ],
@@ -7759,7 +7759,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Delete the containers that need it first",
+                        "description": "Delete the stacks and the containers that need it first",
                         "name": "cascade",
                         "in": "query"
                     }

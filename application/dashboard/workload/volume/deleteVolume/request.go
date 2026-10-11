@@ -13,7 +13,7 @@ type Request struct {
 	// for anybody's.
 	OwnerUUID string `json:"-"`
 
-	// Cascade deletes the containers that need it first, nothing owning
-	// them: one that mounts it, which would have it refused.
+	// Cascade deletes what needs it first, the stacks and the containers
+	// nothing owns: a container that mounts it, which would have it refused.
 	Cascade bool `json:"-"`
 }

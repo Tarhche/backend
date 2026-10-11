@@ -89,19 +89,20 @@ func said(err error) string {
 	return ""
 }
 
-// Removal is what a delete of what containers need is answered with: what it
-// was refused for, when it was, the containers that need it, nothing owning
-// them, and whether one of them makes it again.
+// Removal is what a delete of what stacks and containers need is answered
+// with: what it was refused for, when it was, what needs it, the stacks and
+// the containers nothing owns, and whether one of them makes it again.
 type Removal struct {
 	Errors     domain.ValidationErrors `json:"errors,omitempty"`
 	Dependents []presenter.Dependent   `json:"dependents"`
 	Recreated  bool                    `json:"recreated"`
 }
 
-// Removed answers a delete of what containers need, with them, and reports
-// whether anything needed it: 400 with what it was refused for, when it was,
-// and 202 otherwise, whatever a delete nothing needs is answered with, since
-// that may say nothing. Nothing is written when nothing needs it.
+// Removed answers a delete of what stacks and containers need, with what
+// does, and reports whether anything needed it: 400 with what it was refused
+// for, when it was, and 202 otherwise, whatever a delete nothing needs is
+// answered with, since that may say nothing. Nothing is written when nothing
+// needs it.
 func Removed(rw http.ResponseWriter, refused domain.ValidationErrors, dependents []presenter.Dependent, recreated bool) bool {
 	if len(dependents) == 0 {
 		return false

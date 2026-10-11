@@ -17,12 +17,12 @@ func NewDeleteHandler(useCase *deleteVolume.UseCase, owner workload.Owner) *dele
 }
 
 // @Summary		Remove a volume
-// @Description	remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force, or once cascade deleted the containers that need it first. When any container needs it, it is answered with them, and with whether one of them makes it again
+// @Description	remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force, or once cascade deleted the stacks and the containers that need it first. When anything needs it, it is answered with what does, and with whether one of them makes it again
 // @Tags			dashboard workload volumes
 // @Param			uuid	path		string	true	"VM UUID"
 // @Param			name	path		string	true	"Volume name"
 // @Param			force	query		bool	false	"Remove it even while a container uses it"
-// @Param			cascade	query		bool	false	"Delete the containers that need it first"
+// @Param			cascade	query		bool	false	"Delete the stacks and the containers that need it first"
 // @Success		202		{object}	workload.Removal
 // @Success		204		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Removal

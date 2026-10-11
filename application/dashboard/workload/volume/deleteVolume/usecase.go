@@ -10,9 +10,9 @@ import (
 )
 
 // UseCase removes a volume, and what was kept in it, from a Docker VM. One a
-// container mounts is refused unless it is forced, or the containers that
-// need it are deleted first (Request.Cascade); it is answered with those
-// that need it either way.
+// container mounts is refused unless it is forced, or the stacks and the
+// containers that need it are deleted first (Request.Cascade); it is
+// answered with what needs it either way.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator
