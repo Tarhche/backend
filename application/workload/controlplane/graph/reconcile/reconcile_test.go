@@ -721,11 +721,11 @@ func TestReconciler_Reconcile_lease(t *testing.T) {
 
 		require.Eventually(t, func() bool { return slices.Contains(kinds.Asked(graphtest.Create), web) }, settle, tick)
 
-		// lapsed, and taken by another control plane.
-		f.clock.Advance(time.Minute)
+		// lapsed, and taken by another control plane, though its holder
+		// renews it meanwhile.
+		f.lapse(t, web, "another")
 
-		_, err := f.leases.Take(ctx, "web", "another", time.Minute)
-		require.NoError(t, err)
+		var err error
 
 		select {
 		case err = <-done:
