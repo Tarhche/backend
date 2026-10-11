@@ -20,45 +20,6 @@ func TestLabels(t *testing.T) {
 	assert.Empty(t, blocks.Identity("container", map[string]string{"workload.container": "c-uuid"}), "and only when it is labelled managed")
 }
 
-func TestOwnershipOf(t *testing.T) {
-	t.Parallel()
-
-	for name, tt := range map[string]struct {
-		labels map[string]string
-		want   blocks.Ownership
-	}{
-		"what the platform made is managed": {
-			labels: blocks.Labels("container", "c-uuid"),
-			want:   blocks.Managed,
-		},
-		"and so is what a stack's graph made, a record of its own": {
-			labels: map[string]string{"workload.managed": "true", "workload.container": "c-uuid", "workload.stack": "s-uuid", "workload.stack.service": "web"},
-			want:   blocks.Managed,
-		},
-		"but a stack's label alone is no record's": {
-			labels: map[string]string{"workload.stack": "s-uuid"},
-			want:   blocks.Unmanaged,
-		},
-		"what a terminal made is nobody's": {
-			labels: map[string]string{"made.by": "hand"},
-			want:   blocks.Unmanaged,
-		},
-		"and so is what carries no labels at all": {
-			want: blocks.Unmanaged,
-		},
-		"labelled as another kind's, it is not managed as this one": {
-			labels: blocks.Labels("volume", "v-uuid"),
-			want:   blocks.Unmanaged,
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.want, blocks.OwnershipOf("container", tt.labels))
-		})
-	}
-}
-
 func TestOwners(t *testing.T) {
 	t.Parallel()
 

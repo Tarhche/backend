@@ -18,9 +18,9 @@
 //     own kind, which the stack's graph made;
 //   - what a VM's dockerd holds that the platform did not make is reported as
 //     well, and kept by nobody: it was made from the VM's terminal, and is
-//     shown as unmanaged and never reconciled (OwnershipOf). An image, which
-//     nothing can label, is kept by the container records made from it, a
-//     stack's among them;
+//     shown as unmanaged and never reconciled (LabelManagedBy,
+//     ManagedByNobody). An image, which nothing can label, is kept by the
+//     container records made from it, a stack's among them;
 //   - and they are asked under the containers' permissions, which the
 //     dashboard has always asked them under (PermissionsOf).
 package blocks
@@ -95,29 +95,6 @@ func Identity(kindName string, labels map[string]string) string {
 	}
 
 	return labels[Label(kindName)]
-}
-
-// Ownership is who keeps what a Docker VM's dockerd holds.
-type Ownership string
-
-const (
-	// Managed is what the platform made, which a record keeps: a stack's
-	// containers, networks and volumes among it, each a record of its own.
-	Managed Ownership = "managed"
-
-	// Unmanaged is what nobody keeps: what was made from the VM's terminal.
-	Unmanaged Ownership = "unmanaged"
-)
-
-// OwnershipOf is who keeps an object of the named kind, by its labels: the
-// platform when it labelled it as one of its resources, and nobody
-// otherwise, whatever else its labels say.
-func OwnershipOf(kindName string, labels map[string]string) Ownership {
-	if len(Identity(kindName, labels)) > 0 {
-		return Managed
-	}
-
-	return Unmanaged
 }
 
 // Owners are what an object in a Docker VM belongs to, as its node says: the
