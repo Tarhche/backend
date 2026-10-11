@@ -81,7 +81,7 @@ func (n *Node) Execute(ctx context.Context, c containerKind.Container, action st
 		connect, _ := payload.(containerKind.ConnectPayload)
 
 		return n.on(ctx, daemon, c, func(id string) error {
-			return daemon.ConnectNetwork(ctx, connect.Network, id, connect.Aliases)
+			return connected(ctx, daemon, id, connect)
 		})
 	case containerKind.ActionDisconnect:
 		disconnect, _ := payload.(containerKind.DisconnectPayload)
@@ -317,6 +317,30 @@ func (n *Node) on(ctx context.Context, daemon docker.Daemon, c containerKind.Con
 	return n.inspected(ctx, daemon, found.ID)
 }
 
+// connected puts the container id names on a network, by its name or its
+// Docker id, as connect asks. One the network is there for, and that its VM's
+// dockerd has on it once it answered, which docker refuses to put on a
+// network it is on already, is on it, as asked, and no failure: what the
+// control plane puts on a network a disconnect asked a moment before had not
+// taken it off yet, or which its record had not heard it was put on. It is on
+// it under the names it was put on it with, which the refusal leaves as they
+// were. What dockerd answers of a network or a container it does not have,
+// of one not on the network, or when it cannot be asked which, fails the
+// command, as it did.
+func connected(ctx context.Context, daemon docker.Daemon, id string, connect containerKind.ConnectPayload) error {
+	err := daemon.ConnectNetwork(ctx, connect.Network, id, connect.Aliases)
+	if err == nil || errors.Is(err, domain.ErrNotExists) {
+		return err
+	}
+
+	on, read := onNetwork(ctx, daemon, id, connect.Network)
+	if !read || !on {
+		return err
+	}
+
+	return nil
+}
+
 // disconnected takes the container id names off a network, by its name or its
 // Docker id, as disconnect asks. One the network is there for, and that its
 // VM's dockerd does not have on it once it answered, which docker refuses to
@@ -331,22 +355,34 @@ func disconnected(ctx context.Context, daemon docker.Daemon, id string, disconne
 		return err
 	}
 
-	found, inspected := daemon.Container(ctx, id)
-	if inspected != nil {
-		return err
-	}
-
-	networks, listed := daemon.Networks(ctx)
-	if listed != nil {
-		return err
-	}
-
-	at := slices.IndexFunc(networks, func(n docker.Network) bool { return n.Name == disconnect.Network || n.ID == disconnect.Network })
-	if at < 0 || slices.Contains(found.Networks, networks[at].Name) {
+	on, read := onNetwork(ctx, daemon, id, disconnect.Network)
+	if !read || on {
 		return err
 	}
 
 	return nil
+}
+
+// onNetwork reports whether the container id names is on a network, by its
+// name or its Docker id, as its VM's dockerd has the two now, and whether it
+// could be told: dockerd has both, and answered.
+func onNetwork(ctx context.Context, daemon docker.Daemon, id string, network string) (bool, bool) {
+	found, err := daemon.Container(ctx, id)
+	if err != nil {
+		return false, false
+	}
+
+	networks, err := daemon.Networks(ctx)
+	if err != nil {
+		return false, false
+	}
+
+	at := slices.IndexFunc(networks, func(n docker.Network) bool { return n.Name == network || n.ID == network })
+	if at < 0 {
+		return false, false
+	}
+
+	return slices.Contains(found.Networks, networks[at].Name), true
 }
 
 // remove removes a container, running or not: whether one that runs may be

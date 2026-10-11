@@ -282,6 +282,47 @@ func TestNode_Execute(t *testing.T) {
 		assert.ErrorIs(t, err, domain.ErrNotExists, "a network that is not there is not there")
 	})
 
+	t.Run("put on a network it is on already, which docker refuses, it is on it, as asked, by the network's name or its docker id", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd, _ := newNode(t)
+		dockerd.HoldNetwork(docker.Network{ID: "n1", Name: "backend"})
+
+		_, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend"})
+		require.NoError(t, err)
+
+		for _, network := range []string{"backend", "n1"} {
+			outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: network})
+			require.NoError(t, err, network)
+			assert.Contains(t, outcome.Status.Docker.Networks, "backend", network)
+		}
+
+		assert.Equal(t, 3, dockerd.Calls("ConnectNetwork"), "docker was asked, and refused")
+	})
+
+	t.Run("but what dockerd refuses of one it has not on the network, or of a network it has not, fails it", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd, _ := newNode(t)
+		dockerd.HoldNetwork(docker.Network{ID: "n1", Name: "backend"})
+
+		_, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		dockerd.Refuse["ConnectNetwork"] = fmt.Errorf("%w: it would not", docker.ErrInvalid)
+
+		for _, network := range []string{"backend", "n1"} {
+			_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: network})
+			assert.ErrorIs(t, err, docker.ErrInvalid, "off it still: %s", network)
+		}
+
+		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: "nowhere"})
+		assert.Error(t, err, "a network its vm has not is no network it is on")
+	})
+
 	t.Run("taken off a network it is not on, which docker refuses, it is off it, as asked, by the network's name or its docker id", func(t *testing.T) {
 		t.Parallel()
 

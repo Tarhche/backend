@@ -370,7 +370,8 @@ func (d *Dockerd) ConnectNetwork(_ context.Context, network string, id string, _
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	if d.networkAt(network) < 0 {
+	at := d.networkAt(network)
+	if at < 0 {
 		return fmt.Errorf("%w: network %s not found", domain.ErrNotExists, network)
 	}
 
@@ -379,10 +380,13 @@ func (d *Dockerd) ConnectNetwork(_ context.Context, network string, id string, _
 		return fmt.Errorf("%w: no such container: %s", domain.ErrNotExists, id)
 	}
 
-	if !slices.Contains(d.containers[i].Networks, network) {
-		d.containers[i].Networks = append(d.containers[i].Networks, network)
-		slices.Sort(d.containers[i].Networks)
+	name := d.networks[at].Name
+	if slices.Contains(d.containers[i].Networks, name) {
+		return fmt.Errorf("%w: endpoint with name %s already exists in network %s", docker.ErrInvalid, d.containers[i].Name, name)
 	}
+
+	d.containers[i].Networks = append(d.containers[i].Networks, name)
+	slices.Sort(d.containers[i].Networks)
 
 	return nil
 }

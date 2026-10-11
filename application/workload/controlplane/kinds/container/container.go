@@ -470,7 +470,11 @@ func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, act
 // connectable is the name of the network a kept container is put on, by
 // its name or its Docker id, or why it is not put on it, as docker would
 // refuse it, before its spec names it: a network its VM does not have is not
-// found, and one it is on already has it.
+// found, and one it is on already, as both its spec and what its VM's dockerd
+// last said of it name it, has it. One only its spec names, put on it a
+// moment ago or not put back on it yet, or only docker, taken off it a moment
+// ago, before that disconnect's result is on its record, is put on it: its
+// node takes docker's word that it is on it already as done.
 func (s *Containers) connectable(ctx context.Context, c containerKind.Container, network string) (string, error) {
 	name, found, err := s.networkNamed(ctx, containerKind.VMOf(c), network)
 
@@ -481,7 +485,7 @@ func (s *Containers) connectable(ctx context.Context, c containerKind.Container,
 		return "", &noderequest.Error{Code: noderequest.CodeNotFound, Message: fmt.Sprintf("network %s not found", network)}
 	}
 
-	if seen := c.Status.Docker; seen != nil && slices.Contains(seen.Networks, name) {
+	if seen := c.Status.Docker; seen != nil && slices.Contains(seen.Networks, name) && slices.Contains(c.Spec.Networks, name) {
 		return "", blocks.Refused("endpoint with name %s already exists in network %s", seen.Name, name)
 	}
 

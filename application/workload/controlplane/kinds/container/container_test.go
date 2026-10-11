@@ -653,11 +653,48 @@ func TestContainers_Prepare(t *testing.T) {
 		assert.Equal(t, []string{"host"}, prepared.Spec.Networks)
 	})
 
-	t.Run("and one it is on already is refused, as docker would", func(t *testing.T) {
+	t.Run("one is put on a network its spec or its vm's dockerd does not say it is on, and refused as docker would only when both do", func(t *testing.T) {
 		t.Parallel()
 
-		_, _, err := w.Containers.Prepare(ctx, running, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "bridge"})
-		assert.ErrorAs(t, err, new(*noderequest.Error))
+		for name, tt := range map[string]struct {
+			spec    []string
+			seen    []string
+			unseen  bool
+			refused bool
+		}{
+			"its vm's dockerd last said it is on it, taken off it a moment ago, before that is on its record, its spec naming it no more": {seen: []string{"backend", "bridge"}},
+			"its spec names it, put on it a moment ago, or not put back on it, which its vm's dockerd has not said it is on":              {spec: []string{"backend"}, seen: []string{"bridge"}},
+			"its spec names it, and its vm's dockerd has said nothing of it yet":                                                          {spec: []string{"backend"}, unseen: true},
+			"neither": {seen: []string{"bridge"}},
+			"both":    {spec: []string{"backend"}, seen: []string{"backend", "bridge"}, refused: true},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				c := typed(t, blockstest.AContainer("c", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+					c.Spec.Networks = tt.spec
+					c.Status.Docker.Networks = tt.seen
+
+					if tt.unseen {
+						c.Status.Docker = nil
+					}
+				}))
+
+				put, _, err := w.Containers.Prepare(ctx, c, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend"})
+
+				if tt.refused {
+					var refused *noderequest.Error
+					require.ErrorAs(t, err, &refused)
+					assert.Equal(t, noderequest.CodeInvalid, refused.Code)
+					assert.Equal(t, "endpoint with name web already exists in network backend", refused.Message, "in docker's words")
+
+					return
+				}
+
+				require.NoError(t, err)
+				assert.Equal(t, []string{"backend"}, put.Spec.Networks, "its spec names it")
+			})
+		}
 	})
 }
 
