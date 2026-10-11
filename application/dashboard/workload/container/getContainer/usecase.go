@@ -11,7 +11,7 @@ import (
 )
 
 // UseCase reads one container, from its VM's dockerd as it is now, and names
-// the stack that deployed it when one did.
+// the stack whose graph made it when one did, and whoever asks can see it.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator
@@ -33,8 +33,8 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	presented := presenter.NewContainer(container)
-	if len(presented.Stack) > 0 {
-		presented.StackUUID = stackindex.Of(ctx, uc.workload, request.OwnerUUID, request.VMUUID).Of(presented.Stack)
+	if len(container.Stack) > 0 {
+		stackindex.Of(ctx, uc.workload, request.OwnerUUID, request.VMUUID).Name(&presented, container.Stack)
 	}
 
 	return &Response{Container: &presented}, nil

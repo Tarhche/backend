@@ -341,7 +341,7 @@ func TestNode_Query(t *testing.T) {
 func TestNode_State(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the platform's by the resource each is, a stack's and nobody's as they are", func(t *testing.T) {
+	t.Run("the platform's by the resource each is, a stack's among them, and nobody's as it is", func(t *testing.T) {
 		t.Parallel()
 
 		strategy, dockerd, node := newNode(t)
@@ -359,7 +359,12 @@ func TestNode_State(t *testing.T) {
 
 		dockerd.Exit("migrate", 0)
 
-		dockerd.Hold(docker.Container{ID: "s1", Name: "shop-web-1", State: "running", Labels: map[string]string{"workload.stack": "stack-uuid", docker.LabelComposeProject: "shop", docker.LabelComposeService: "web"}})
+		dockerd.Hold(docker.Container{ID: "s1", Name: "shop_web", State: "running", Labels: map[string]string{
+			"workload.managed":     "true",
+			"workload.container":   "shop-web-uuid",
+			stackKind.LabelStack:   "stack-uuid",
+			stackKind.LabelService: "web",
+		}})
 		dockerd.Hold(docker.Container{ID: "u1", Name: "db", State: "exited"})
 
 		node.DockerVM(t, "vm-2").Down = true
@@ -385,8 +390,8 @@ func TestNode_State(t *testing.T) {
 		assert.Equal(t, containerKind.Completed, byName["migrate"].Status.Status.State, "a one-off that ran to its end")
 		assert.Equal(t, containerKind.RestartNo, byName["migrate"].Status.Docker.RestartPolicy, "as its spec says")
 
-		assert.Empty(t, byName["shop-web-1"].UUID, "a stack's is not one of the kind's records")
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}, {Kind: "stack", UUID: "stack-uuid"}}, byName["shop-web-1"].Owners)
+		assert.Equal(t, "shop-web-uuid", byName["shop_web"].UUID, "a stack's is a record of the kind's, made by its graph")
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, byName["shop_web"].Owners, "in its vm, the stack that owns it being its record's to say")
 
 		assert.Empty(t, byName["db"].UUID, "and nor is nobody's")
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, byName["db"].Owners)

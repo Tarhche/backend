@@ -52,7 +52,6 @@ func TestUseCase_Execute(t *testing.T) {
 					"vm_name": "docker-1",
 					"state": "running",
 					"expected_state": "running",
-					"output": "Container shop-abcde-web-1  Started",
 					"created_at": "2026-10-04T12:00:00Z"
 				}],
 				"pagination": {"total_pages": 1, "current_page": 1}

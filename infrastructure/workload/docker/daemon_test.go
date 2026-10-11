@@ -99,7 +99,7 @@ func (f *fakeDocker) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 				Status:  "Up 2 minutes",
 				Command: "nginx -g 'daemon off;'",
 				Created: 1791115749,
-				Labels:  map[string]string{docker.LabelComposeProject: "shop-abcde", docker.LabelComposeService: "web"},
+				Labels:  map[string]string{"workload.stack": "s-uuid", "workload.stack.service": "web"},
 				Ports: []container.Port{
 					{IP: "0.0.0.0", PrivatePort: 80, PublicPort: 8080, Type: "tcp"},
 					{IP: "::", PrivatePort: 80, PublicPort: 8080, Type: "tcp"},
@@ -117,7 +117,7 @@ func (f *fakeDocker) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	case path == "/networks" && r.Method == http.MethodGet:
 		writeJSON(rw, http.StatusOK, []network.Summary{
-			{ID: "n1", Name: "shop_default", Driver: "bridge", Scope: "local", Labels: map[string]string{docker.LabelComposeProject: "shop-abcde"}},
+			{ID: "n1", Name: "shop_default", Driver: "bridge", Scope: "local", Labels: map[string]string{"workload.managed": "true", "workload.network": "n-uuid"}},
 			{ID: "n2", Name: "spare", Driver: "bridge", Scope: "local", Internal: true},
 		})
 
@@ -559,10 +559,10 @@ func TestDaemon_Containers(t *testing.T) {
 		Ports:    []docker.PortBinding{{ContainerPort: port.Port(80), HostPort: port.Port(8080), Protocol: "tcp"}},
 		Networks: []string{"bridge", "shop_default"},
 		Labels: map[string]string{
-			docker.LabelComposeProject: "shop-abcde",
-			docker.LabelComposeService: "web",
+			"workload.stack":         "s-uuid",
+			"workload.stack.service": "web",
 		},
-		Stack:     "shop-abcde",
+		Stack:     "s-uuid",
 		Service:   "web",
 		CreatedAt: time.Unix(1791115749, 0).UTC(),
 	}, containers[0])

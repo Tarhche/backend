@@ -16,8 +16,8 @@
 //
 // An image with no record of its own is shown as kept by what uses it
 // (Keepers): the container's kept in its VM that was asked for it or made
-// from it, or the stack's whose container was made from it. Only one nothing
-// kept uses is unmanaged.
+// from it, a stack's container among them. Only one nothing kept uses is
+// unmanaged.
 package image
 
 import (
@@ -192,24 +192,13 @@ func (s *Images) Named(r kind.Raw, name string) bool {
 	return false
 }
 
-// Keepers are the images on a node that the containers beside them keep, by
-// their uuids: under every reference a container kept in its VM was asked
-// for, or was made from as docker lists it, the container's, which it is
-// implied present for; and under the one a stack's container was made from,
-// the stack's. An image only a container nobody keeps uses is nobody's.
-//
-// The containers are what their own kind's heartbeats last said, which may be
-// a beat behind the images': an image first seen with the stack's container
-// that keeps it is shown as nobody's until the next beat at most, and nothing
-// is done to it for that.
+// Keepers are the images on a node that the containers kept beside them
+// keep, by their uuids: under every reference a container kept in its VM was
+// asked for, or was made from as docker lists it, the container's, which it
+// is implied present for. A stack's containers are among them, each a record
+// its graph made. An image only a container nobody keeps uses is nobody's.
 func (s *Images) Keepers(ctx context.Context, nodeName string) (map[string]string, error) {
 	keepers := make(map[string]string)
-
-	for _, c := range s.Sightings.All(containerKind.Name) {
-		if c.Metadata.Node == nodeName && c.Metadata.Labels[blockKinds.LabelManagedBy] == blockKinds.ManagedByStack {
-			keep(keepers, c, blockKinds.ManagedByStack)
-		}
-	}
 
 	containers, _, err := s.Resources.GetAll(ctx, containerKind.Name, resource.Filter{Node: nodeName}, 0, 0)
 	if err != nil {

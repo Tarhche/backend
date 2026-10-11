@@ -123,7 +123,7 @@ func (n *Node) State(ctx context.Context) (kind.Report[networkKind.Status], erro
 		for _, held := range inventory.Networks {
 			report.Instances = append(report.Instances, kind.Observed[networkKind.Status]{
 				UUID:   blockKinds.Identity(networkKind.Name, held.Labels),
-				Owners: blockKinds.Owners(vmUUID, held.Labels),
+				Owners: blockKinds.Owners(vmUUID),
 				Status: networkKind.Status{Status: kind.Status{State: networkKind.Present}, Docker: networkKind.DockerOf(held)},
 			})
 		}

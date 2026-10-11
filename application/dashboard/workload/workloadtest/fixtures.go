@@ -97,27 +97,29 @@ const SnapshotJSON = `{
 	"completed_at": "2026-10-04T12:01:00Z"
 }`
 
-// Container is a container of VM, deployed by Stack.
+// Container is a container of VM, which Stack's graph made of its web
+// service.
 func Container() docker.Container {
 	return docker.Container{
 		ID:        "c0ffee",
-		Name:      "shop-abcde-web-1",
+		Name:      "shop-abcde_web",
 		Image:     "nginx:1.27",
 		State:     "running",
 		Status:    "Up 3 minutes",
 		Command:   "nginx -g 'daemon off;'",
 		Ports:     []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}},
 		Networks:  []string{"shop-abcde_default"},
-		Stack:     "shop-abcde",
+		Stack:     "stack-uuid",
 		Service:   "web",
 		CreatedAt: At,
 	}
 }
 
-// ContainerJSON is Container as the dashboard shows it.
+// ContainerJSON is Container as the dashboard shows it to whoever can see
+// Stack: with its slug and its uuid.
 const ContainerJSON = `{
 	"id": "c0ffee",
-	"name": "shop-abcde-web-1",
+	"name": "shop-abcde_web",
 	"image": "nginx:1.27",
 	"state": "running",
 	"status": "Up 3 minutes",
@@ -126,6 +128,7 @@ const ContainerJSON = `{
 	"networks": ["shop-abcde_default"],
 	"mounts": [],
 	"stack": "shop-abcde",
+	"stack_uuid": "stack-uuid",
 	"service": "web",
 	"created_at": "2026-10-04T12:00:00Z"
 }`
@@ -142,12 +145,11 @@ func Stack() stack.Stack {
 		Compose:       "services:\n  web:\n    image: nginx:1.27\n",
 		ExpectedState: stack.Running,
 		State:         stack.Running,
-		Output:        "Container shop-abcde-web-1  Started",
 		CreatedAt:     At,
 	}
 }
 
-// StackJSON is Stack as the dashboard shows it, compose file and all.
+// StackJSON is Stack as the dashboard shows it, its file and all.
 const StackJSON = `{
 	"uuid": "stack-uuid",
 	"name": "shop",
@@ -159,6 +161,5 @@ const StackJSON = `{
 	"compose": "services:\n  web:\n    image: nginx:1.27\n",
 	"state": "running",
 	"expected_state": "running",
-	"output": "Container shop-abcde-web-1  Started",
 	"created_at": "2026-10-04T12:00:00Z"
 }`

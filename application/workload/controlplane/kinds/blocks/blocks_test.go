@@ -13,7 +13,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
@@ -55,7 +54,7 @@ func TestBlocks_Witnessed(t *testing.T) {
 	ctx := context.Background()
 	at := time.Now()
 
-	t.Run("what nobody keeps a record of is shown as a stack's or nobody's, its vm's owner's", func(t *testing.T) {
+	t.Run("what nobody keeps a record of is shown as nobody's, its vm's owner's", func(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
@@ -65,7 +64,7 @@ func TestBlocks_Witnessed(t *testing.T) {
 
 		witnessed(t, w, at,
 			seen(t, "", containerKind.Docker{ID: "c-db", Name: "db", State: "running", CreatedAt: at.Add(-time.Hour)}),
-			seen(t, "", containerKind.Docker{ID: "c-shop", Name: "shop-web-1", State: "running", Labels: map[string]string{docker.LabelComposeProject: "shop"}, CreatedAt: at}, kind.Reference{Kind: "stack", UUID: "stack-uuid"}),
+			seen(t, "", containerKind.Docker{ID: "c-shop", Name: "shop_web", State: "running", Labels: map[string]string{"workload.stack": "stack-uuid", "workload.stack.service": "web"}, CreatedAt: at}),
 		)
 
 		extras, err := w.Containers.All(ctx)
@@ -74,9 +73,9 @@ func TestBlocks_Witnessed(t *testing.T) {
 
 		shop, db := extras[0], extras[1]
 
-		assert.Equal(t, "shop-web-1", shop.Metadata.Name, "newest first")
-		assert.Equal(t, blockKinds.ManagedByStack, shop.Metadata.Labels[blockKinds.LabelManagedBy])
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}, {Kind: "stack", UUID: "stack-uuid"}}, shop.Metadata.Owners)
+		assert.Equal(t, "shop_web", shop.Metadata.Name, "newest first")
+		assert.Equal(t, blockKinds.ManagedByNobody, shop.Metadata.Labels[blockKinds.LabelManagedBy], "a stack's label alone keeps nothing: what a stack's graph made is a record")
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, shop.Metadata.Owners)
 
 		assert.Equal(t, blockKinds.ManagedByNobody, db.Metadata.Labels[blockKinds.LabelManagedBy], "made from the vm's terminal: unmanaged")
 		assert.Equal(t, "owner", db.Metadata.OwnerUUID, "its vm's owner's")
@@ -522,7 +521,7 @@ func TestObservedOf(t *testing.T) {
 
 	status, err := json.Marshal(containerKind.Status{
 		Status: kind.Status{State: containerKind.Stopped},
-		Docker: &containerKind.Docker{ID: "c1", Name: "web", State: "exited", Labels: map[string]string{docker.LabelComposeProject: "shop"}},
+		Docker: &containerKind.Docker{ID: "c1", Name: "web", State: "exited", Labels: map[string]string{"workload.stack": "stack-uuid"}},
 	})
 	require.NoError(t, err)
 
@@ -531,7 +530,7 @@ func TestObservedOf(t *testing.T) {
 	assert.Equal(t, "exited", observed.Docker.State, "and in docker's, beside it")
 	assert.Equal(t, "c1", observed.Docker.ID)
 	assert.Equal(t, "web", observed.Docker.Name)
-	assert.Equal(t, "shop", observed.Docker.Labels[docker.LabelComposeProject])
+	assert.Equal(t, "stack-uuid", observed.Docker.Labels["workload.stack"])
 
 	unseen := blocks.ObservedOf(json.RawMessage(`{"state": "pending"}`))
 	assert.Equal(t, containerKind.Pending, unseen.Status.State)

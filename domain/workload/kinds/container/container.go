@@ -431,7 +431,8 @@ func DockerOf(c docker.Container) *Docker {
 	return d
 }
 
-// Container is it as docker has it.
+// Container is it as docker has it: of a stack's, which stack's and which of
+// its services it is, as its labels say.
 func (d *Docker) Container() docker.Container {
 	if d == nil {
 		return docker.Container{}
@@ -446,8 +447,8 @@ func (d *Docker) Container() docker.Container {
 		Command:       d.Command,
 		Networks:      clone(d.Networks),
 		Labels:        d.Labels,
-		Stack:         d.Labels[docker.LabelComposeProject],
-		Service:       d.Labels[docker.LabelComposeService],
+		Stack:         d.Labels[stackKind.LabelStack],
+		Service:       d.Labels[stackKind.LabelService],
 		RestartPolicy: d.RestartPolicy,
 		CreatedAt:     d.CreatedAt,
 	}

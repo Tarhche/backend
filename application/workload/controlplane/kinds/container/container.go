@@ -28,10 +28,11 @@
 // A command docker refuses fails it, in docker's own words, and it is asked
 // again with the loop's backoff. One that runs is not removed but by force.
 //
-// What a Docker VM's dockerd holds that the platform did not make, a stack's
-// containers and those made from the VM's terminal, is shown beside the
-// records, and can be started, stopped, restarted, removed and read, through
-// its node, but is never reconciled (kinds/blocks).
+// What a Docker VM's dockerd holds that the platform did not make, the
+// containers made from the VM's terminal, is shown beside the records, and
+// can be started, stopped, restarted, removed and read, through its node, but
+// is never reconciled (kinds/blocks). A stack's containers are records, which
+// its graph makes.
 package container
 
 import (

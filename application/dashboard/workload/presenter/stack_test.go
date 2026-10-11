@@ -24,7 +24,6 @@ func shop() stack.Stack {
 		Compose:       "services:\n  web:\n    image: nginx\n",
 		ExpectedState: stack.Running,
 		State:         stack.Running,
-		Output:        "Container shop-abcde-web-1  Started",
 		CreatedAt:     at,
 		UpdatedAt:     at.Add(30e9),
 	}
@@ -33,7 +32,7 @@ func shop() stack.Stack {
 func TestNewStack(t *testing.T) {
 	t.Parallel()
 
-	t.Run("one stack, with its compose file", func(t *testing.T) {
+	t.Run("one stack, with its file", func(t *testing.T) {
 		t.Parallel()
 
 		owners := NewOwners([]user.User{{UUID: "owner-uuid", Name: "Mahdi"}})
@@ -52,13 +51,12 @@ func TestNewStack(t *testing.T) {
 			"compose": "services:\n  web:\n    image: nginx\n",
 			"state": "running",
 			"expected_state": "running",
-			"output": "Container shop-abcde-web-1  Started",
 			"created_at": "2026-10-04T12:00:00Z",
 			"updated_at": "2026-10-04T12:00:30Z"
 		}`, string(presented))
 	})
 
-	t.Run("a listing leaves the compose files out", func(t *testing.T) {
+	t.Run("a listing leaves the files out", func(t *testing.T) {
 		t.Parallel()
 
 		presented := NewStacks([]stack.Stack{shop()}, NewOwners(nil))
@@ -72,17 +70,18 @@ func TestNewStack(t *testing.T) {
 func TestNewStackDetail(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a stack with the containers compose made for it", func(t *testing.T) {
+	t.Run("a stack with the containers its graph made of its services", func(t *testing.T) {
 		t.Parallel()
 
 		presented := NewStackDetail(workloadControlPlane.StackDetail{
 			Stack:      shop(),
-			Containers: []docker.Container{{ID: "c0ffee", Stack: "shop-abcde", Service: "web"}},
+			Containers: []docker.Container{{ID: "c0ffee", Stack: "stack-uuid", Service: "web"}},
 		}, NewOwners(nil))
 
 		require.Len(t, presented.Containers, 1)
 		assert.Equal(t, "web", presented.Containers[0].Service)
-		assert.Equal(t, "stack-uuid", presented.Containers[0].StackUUID, "a stack's containers are its own")
+		assert.Equal(t, "shop-abcde", presented.Containers[0].Stack, "a stack's containers are its own, shown with its slug")
+		assert.Equal(t, "stack-uuid", presented.Containers[0].StackUUID, "and its uuid")
 		assert.Empty(t, presented.Note)
 		assert.Equal(t, shop().Compose, presented.Compose)
 	})

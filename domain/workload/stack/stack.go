@@ -37,11 +37,9 @@ type Stack struct {
 	ExpectedState State
 	State         State
 
+	// Reason is why it is in its state, when its state says nothing alone:
+	// what it waits on, or what its plan failed with.
 	Reason string
-
-	// Output is the tail of what the last command run on it printed, which
-	// is how somebody finds out why a service did not come up.
-	Output string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -69,8 +67,7 @@ const (
 	// once that is done.
 	Removing State = 7
 
-	// Failed is a stack whose last command failed. Its Reason and Output say
-	// why.
+	// Failed is a stack whose plan failed. Its Reason says why.
 	Failed State = 8
 
 	// Degraded is a stack some of whose services are not running. It is

@@ -13,7 +13,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
@@ -173,14 +172,20 @@ func TestImages_Witnessed(t *testing.T) {
 		c.Status.Docker.Image = "sha256:redis-before"
 	}))
 
+	// a stack's, its web service, which its graph made: a record of its own.
+	w.Keep(blockstest.AContainer("shop-web", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+		c.Metadata.Name = "shop_web"
+		c.Metadata.Owners = []kind.Reference{{Kind: "stack", UUID: "stack-uuid"}}
+		c.Metadata.Labels = map[string]string{"workload.stack": "stack-uuid", "workload.stack.service": "web"}
+		c.Spec.Name = "shop_web"
+		c.Spec.Image = "nginx:alpine"
+		c.Status.Docker.Name = "shop_web"
+		c.Status.Docker.Image = "nginx:alpine"
+	}))
+
 	w.Keep(blockstest.A[imageKind.Spec, imageKind.Status](imageKind.Name, imageKind.UUIDOf("vm-1", "alpine:3"), "vm-1", imageKind.Spec{Reference: "alpine:3"}, imageKind.Status{Status: kind.Status{State: imageKind.Present}}))
 
-	for _, container := range []kind.Observation{
-		observed(t, "", containerKind.Status{Docker: &containerKind.Docker{ID: "c-shop", Name: "shop-web-1", Image: "nginx:alpine", State: "running", Labels: map[string]string{docker.LabelComposeProject: "shop"}}}, kind.Reference{Kind: "stack", UUID: "stack-uuid"}),
-		observed(t, "", containerKind.Status{Docker: &containerKind.Docker{ID: "c-db", Name: "db", Image: "postgres:17", State: "running"}}),
-	} {
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, container, false, at))
-	}
+	require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, observed(t, "", containerKind.Status{Docker: &containerKind.Docker{ID: "c-db", Name: "db", Image: "postgres:17", State: "running"}}), false, at))
 
 	for _, image := range []kind.Observation{
 		held(t, "sha256:redis", "redis:7"),
@@ -205,10 +210,10 @@ func TestImages_Witnessed(t *testing.T) {
 	assert.Equal(t, map[string]string{
 		"sha256:redis":        blockKinds.ManagedByContainer,
 		"sha256:redis-before": blockKinds.ManagedByContainer,
-		"sha256:nginx":        blockKinds.ManagedByStack,
+		"sha256:nginx":        blockKinds.ManagedByContainer,
 		"sha256:postgres":     blockKinds.ManagedByNobody,
 		"sha256:busybox":      blockKinds.ManagedByNobody,
-	}, keepers, "a kept container's images are the container's, both the one it was asked for and the one it was made from; a stack's container's, the stack's; and one only a container nobody keeps uses, or nothing does, nobody's. One kept itself is a record, not an extra")
+	}, keepers, "a kept container's images are the container's, both the one it was asked for and the one it was made from, a stack's container as much as any other; and one only a container nobody keeps uses, or nothing does, nobody's. One kept itself is a record, not an extra")
 }
 
 // observed is something as vm-1's node reports it, under uuid.

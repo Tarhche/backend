@@ -1,9 +1,10 @@
-// Package stackindex says which stack deployed a container.
+// Package stackindex says which stack made a container.
 //
-// A container knows only the compose project docker labelled it with, which
-// is a stack's slug; the dashboard links a container to its stack by the
-// stack's uuid. This looks the stacks up once per request and matches the two
-// up, so a listing of containers costs one more question, not one per row.
+// A container knows the uuid of the stack whose graph made it, which its
+// labels carry (docker.Container.Stack); the dashboard shows a container with
+// its stack's slug and its uuid, and only when whoever asked can see that
+// stack. This looks the stacks up once per request and matches the two up, so
+// a listing of containers costs one more question, not one per row.
 package stackindex
 
 import (
@@ -11,14 +12,15 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 )
 
 // maxPages bounds how much of a listing of stacks is read for one request.
-// A container whose stack is past it is shown without its stack's uuid,
-// which a client does without.
+// A container whose stack is past it is shown without its stack, which a
+// client does without.
 const maxPages = 10
 
-// Index is the stacks a request may see, by slug.
+// Index is the stacks a request may see: each one's slug, by its uuid.
 type Index map[string]string
 
 // Of indexes the stacks ownerUUID has (anybody's when it is empty), in one VM
@@ -26,8 +28,8 @@ type Index map[string]string
 // beside them were listed with, so a container is only ever linked to a stack
 // whoever asked can see.
 //
-// A listing that cannot be read is an index of nothing. Which stack deployed
-// a container is worth saying, not worth failing over.
+// A listing that cannot be read is an index of nothing. Which stack made a
+// container is worth saying, not worth failing over.
 func Of(ctx context.Context, workload workloadControlPlane.Client, ownerUUID string, vmUUID string) Index {
 	index := make(Index)
 
@@ -38,7 +40,7 @@ func Of(ctx context.Context, workload workloadControlPlane.Client, ownerUUID str
 		}
 
 		for _, s := range stacks.Items {
-			index[s.Slug] = s.UUID
+			index[s.UUID] = s.Slug
 		}
 
 		if page >= stacks.TotalPages {
@@ -49,19 +51,27 @@ func Of(ctx context.Context, workload workloadControlPlane.Client, ownerUUID str
 	return index
 }
 
-// Link names the stack of every container that has one in the index.
-func (i Index) Link(containers []presenter.Container) {
-	for c := range containers {
-		containers[c].StackUUID = i.Of(containers[c].Stack)
+// Link names the stack of every presented container that has one in the
+// index: presented are containers, as the dashboard shows them, in the same
+// order.
+func (i Index) Link(presented []presenter.Container, containers []docker.Container) {
+	for c := range presented {
+		i.Name(&presented[c], containers[c].Stack)
 	}
 }
 
-// Of is the uuid of the stack with that slug, and nothing for a container no
-// stack deployed or one somebody ran compose for by hand.
-func (i Index) Of(slug string) string {
-	if len(slug) == 0 {
-		return ""
+// Name names the stack whose uuid a container says made it, its slug and its
+// uuid, when the index has it; a container no stack made, or one of a stack
+// whoever asked cannot see, is left as it was.
+func (i Index) Name(container *presenter.Container, stackUUID string) {
+	if len(stackUUID) == 0 {
+		return
 	}
 
-	return i[slug]
+	slug, seen := i[stackUUID]
+	if !seen {
+		return
+	}
+
+	container.Stack, container.StackUUID = slug, stackUUID
 }

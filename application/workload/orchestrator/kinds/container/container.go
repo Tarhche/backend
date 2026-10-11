@@ -164,7 +164,7 @@ func Observed(vmUUID string, c docker.Container) kind.Observed[containerKind.Sta
 
 	return kind.Observed[containerKind.Status]{
 		UUID:   blockKinds.Identity(containerKind.Name, c.Labels),
-		Owners: blockKinds.Owners(vmUUID, c.Labels),
+		Owners: blockKinds.Owners(vmUUID),
 		Status: containerKind.Status{
 			Status: kind.Status{State: containerKind.StateOf(c.State, c.RestartPolicy)},
 			Docker: containerKind.DockerOf(c),

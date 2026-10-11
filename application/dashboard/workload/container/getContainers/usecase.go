@@ -11,9 +11,9 @@ import (
 )
 
 // UseCase lists the containers across every running Docker VM, each with the
-// VM it was found in and the stack that deployed it, when one did. They are
-// read from each VM's dockerd as they are now: nothing keeps a list of them
-// anywhere else.
+// VM it was found in and the stack whose graph made it, when one did and
+// whoever asks can see it. They are read from each VM's dockerd as they are
+// now: nothing keeps a list of them anywhere else.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator
@@ -38,7 +38,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	index := stackindex.Of(ctx, uc.workload, request.OwnerUUID, request.VMUUID)
 	for i := range items {
-		items[i].StackUUID = index.Of(items[i].Stack)
+		index.Name(&items[i].Container, containers[i].Stack)
 	}
 
 	return &Response{Items: items}, nil

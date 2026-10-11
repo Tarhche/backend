@@ -17,6 +17,7 @@ import (
 	"github.com/docker/go-connections/nat"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
@@ -51,8 +52,8 @@ func fromSummary(summary container.Summary) docker.Container {
 		Status:    summary.Status,
 		Command:   summary.Command,
 		Labels:    maps.Clone(summary.Labels),
-		Stack:     summary.Labels[docker.LabelComposeProject],
-		Service:   summary.Labels[docker.LabelComposeService],
+		Stack:     summary.Labels[stackKind.LabelStack],
+		Service:   summary.Labels[stackKind.LabelService],
 		CreatedAt: time.Unix(summary.Created, 0).UTC(),
 	}
 
@@ -110,8 +111,8 @@ func fromInspect(inspected container.InspectResponse) docker.Container {
 	if inspected.Config != nil {
 		c.Image = inspected.Config.Image
 		c.Labels = maps.Clone(inspected.Config.Labels)
-		c.Stack = inspected.Config.Labels[docker.LabelComposeProject]
-		c.Service = inspected.Config.Labels[docker.LabelComposeService]
+		c.Stack = inspected.Config.Labels[stackKind.LabelStack]
+		c.Service = inspected.Config.Labels[stackKind.LabelService]
 	}
 
 	if settings := inspected.NetworkSettings; settings != nil {

@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
 )
@@ -32,13 +31,13 @@ func TestOwnershipOf(t *testing.T) {
 			labels: blocks.Labels("container", "c-uuid"),
 			want:   blocks.Managed,
 		},
-		"what a stack made is the stack's": {
-			labels: map[string]string{"workload.stack": "s-uuid", docker.LabelComposeProject: "shop-abcde"},
-			want:   blocks.Stacked,
+		"and so is what a stack's graph made, a record of its own": {
+			labels: map[string]string{"workload.managed": "true", "workload.container": "c-uuid", "workload.stack": "s-uuid", "workload.stack.service": "web"},
+			want:   blocks.Managed,
 		},
-		"and so is what compose made, by its project alone": {
-			labels: map[string]string{docker.LabelComposeProject: "shop-abcde"},
-			want:   blocks.Stacked,
+		"but a stack's label alone is no record's": {
+			labels: map[string]string{"workload.stack": "s-uuid"},
+			want:   blocks.Unmanaged,
 		},
 		"what a terminal made is nobody's": {
 			labels: map[string]string{"made.by": "hand"},
@@ -63,8 +62,7 @@ func TestOwnershipOf(t *testing.T) {
 func TestOwners(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}}, blocks.Owners("vm-uuid", nil))
-	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}, {Kind: "stack", UUID: "s-uuid"}}, blocks.Owners("vm-uuid", map[string]string{"workload.stack": "s-uuid"}))
+	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}}, blocks.Owners("vm-uuid"), "what lives in a vm belongs to it, as its node says, whatever else its record says owns it")
 }
 
 func TestDerived(t *testing.T) {

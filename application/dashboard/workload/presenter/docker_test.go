@@ -22,8 +22,8 @@ func web() docker.Container {
 		Ports:         []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}},
 		Networks:      []string{"bridge", "backend"},
 		Mounts:        []docker.Mount{{Type: "volume", Source: "data", Target: "/data", ReadOnly: true}},
-		Labels:        map[string]string{"com.docker.compose.project": "shop-abcde"},
-		Stack:         "shop-abcde",
+		Labels:        map[string]string{"workload.stack": "stack-uuid", "workload.stack.service": "web"},
+		Stack:         "stack-uuid",
 		Service:       "web",
 		RestartPolicy: "unless-stopped",
 		CreatedAt:     at,
@@ -33,7 +33,7 @@ func web() docker.Container {
 func TestNewContainer(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a container as dockerd reported it", func(t *testing.T) {
+	t.Run("a container as dockerd reported it, its stack left to whoever knows which stacks the request may see", func(t *testing.T) {
 		t.Parallel()
 
 		presented, err := json.Marshal(NewContainer(web()))
@@ -49,8 +49,7 @@ func TestNewContainer(t *testing.T) {
 			"ports": [{"container_port": 80, "host_port": 8080, "protocol": "tcp"}],
 			"networks": ["bridge", "backend"],
 			"mounts": [{"type": "volume", "source": "data", "target": "/data", "read_only": true}],
-			"labels": {"com.docker.compose.project": "shop-abcde"},
-			"stack": "shop-abcde",
+			"labels": {"workload.stack": "stack-uuid", "workload.stack.service": "web"},
 			"service": "web",
 			"restart_policy": "unless-stopped",
 			"created_at": "2026-10-04T12:00:00Z"

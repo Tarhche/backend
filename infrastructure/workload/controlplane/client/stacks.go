@@ -81,8 +81,9 @@ func (c *Client) Stacks(ctx context.Context, ownerUUID string, vmUUID string, nu
 
 // Stack is one stack and the containers its graph made of its services, read
 // from its VM's dockerd as they are now, by the stack's label, each saying
-// the stack's slug and its service. The stack is the answer even when its VM
-// cannot be asked: its containers are then none, and VMNotRunning says why.
+// the stack's uuid and its service, as its labels do. The stack is the answer
+// even when its VM cannot be asked: its containers are then none, and
+// VMNotRunning says why.
 func (c *Client) Stack(ctx context.Context, ownerUUID string, uuid string) (workloadControlPlane.StackDetail, error) {
 	manifest, err := c.stack(ctx, ownerUUID, uuid)
 	if err != nil {
@@ -116,16 +117,6 @@ func (c *Client) Stack(ctx context.Context, ownerUUID string, uuid string) (work
 		detail.VMNotRunning = errors.Is(err, vm.ErrNotRunning) || errors.Is(err, docker.ErrUnavailable)
 
 		return detail, nil
-	}
-
-	for i := range containers {
-		if len(containers[i].Stack) == 0 {
-			containers[i].Stack = detail.Slug
-		}
-
-		if len(containers[i].Service) == 0 {
-			containers[i].Service = containers[i].Labels[stackKind.LabelService]
-		}
 	}
 
 	if containers != nil {
@@ -356,7 +347,6 @@ func stackOf(m stackManifest) stack.Stack {
 		ExpectedState: stack.StateOf(string(m.Status.Expected)),
 		State:         stack.StateOf(string(m.Status.State)),
 		Reason:        m.Status.Reason,
-		Output:        m.Status.Output,
 		CreatedAt:     m.Metadata.CreatedAt,
 		UpdatedAt:     m.Metadata.UpdatedAt,
 	}

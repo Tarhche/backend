@@ -12,8 +12,8 @@ import (
 )
 
 // UseCase lists one Docker VM's containers, stopped ones too: a container that
-// exited is one somebody may want to start again, or remove. One a stack
-// deployed names the stack.
+// exited is one somebody may want to start again, or remove. One a stack's
+// graph made names the stack, when whoever asks can see it.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator
@@ -35,7 +35,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	items := presenter.NewContainers(containers)
-	stackindex.Of(ctx, uc.workload, request.OwnerUUID, request.VMUUID).Link(items)
+	stackindex.Of(ctx, uc.workload, request.OwnerUUID, request.VMUUID).Link(items, containers)
 
 	return &Response{Items: items}, nil
 }

@@ -11,7 +11,7 @@ import (
 )
 
 // Sightings are what the nodes last said of the building blocks nobody keeps
-// a record of, by kind and by uuid: what a stack or a VM's terminal made.
+// a record of, by kind and by uuid: what a VM's terminal made.
 //
 // They are what heartbeats said, not records: each control plane keeps what
 // the heartbeats it hears say, one thing in each, and every beat says it all

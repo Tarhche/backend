@@ -24,9 +24,11 @@ type Container struct {
 	Mounts   []Mount           `json:"mounts"`
 	Labels   map[string]string `json:"labels,omitempty"`
 
-	// Stack and Service are the compose project and service it belongs to,
-	// when a stack deployed it. The project is the stack's slug, and
-	// StackUUID is the stack's uuid when the request could see that stack.
+	// Stack and StackUUID are the slug and the uuid of the stack whose graph
+	// made it, when the request could see that stack: whoever knows which
+	// stacks it could see says them (stackindex), and a stack's detail says
+	// its own. Service is the service of the stack's file it is, as its
+	// labels say.
 	Stack     string `json:"stack,omitempty"`
 	StackUUID string `json:"stack_uuid,omitempty"`
 	Service   string `json:"service,omitempty"`
@@ -99,7 +101,7 @@ type Image struct {
 	InUse bool `json:"in_use"`
 
 	// Unmanaged says nobody keeps it: it was pulled from its VM's terminal,
-	// and no container the platform keeps, nor any of a stack's, uses it.
+	// and no container the platform keeps, a stack's among them, uses it.
 	Unmanaged bool `json:"unmanaged,omitempty"`
 }
 
@@ -169,7 +171,6 @@ func NewContainer(c docker.Container) Container {
 		Networks:      list(c.Networks),
 		Mounts:        mounts,
 		Labels:        c.Labels,
-		Stack:         c.Stack,
 		Service:       c.Service,
 		RestartPolicy: c.RestartPolicy,
 		CreatedAt:     c.CreatedAt,

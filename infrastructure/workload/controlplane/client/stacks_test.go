@@ -237,7 +237,7 @@ func shopIn(vmUUID string, state kind.State) stackManifest {
 			UpdatedAt: made.Add(time.Minute),
 		},
 		Spec:   stackKind.Spec{VM: stackKind.VMChoice{UUID: vmUUID}, Compose: "services: {web: {image: nginx}}"},
-		Status: stackKind.Status{Status: kind.Status{State: state, Expected: stackKind.Running, Reason: "a reason"}, Output: "compose said"},
+		Status: stackKind.Status{Status: kind.Status{State: state, Expected: stackKind.Running, Reason: "a reason"}},
 	}
 }
 
@@ -289,7 +289,6 @@ func TestClient_Stacks(t *testing.T) {
 			ExpectedState: stack.Running,
 			State:         stack.Running,
 			Reason:        "a reason",
-			Output:        "compose said",
 			CreatedAt:     made,
 			UpdatedAt:     made.Add(time.Minute),
 		}, byUUID["stack-uuid"])
@@ -352,7 +351,7 @@ func TestClient_Stack(t *testing.T) {
 		assert.False(t, detail.VMNotRunning)
 		require.Len(t, detail.Containers, 1, "those labelled as its own")
 		assert.Equal(t, "c1", detail.Containers[0].ID)
-		assert.Equal(t, "shop-abcde", detail.Containers[0].Stack, "each saying its stack's slug")
+		assert.Equal(t, "stack-uuid", detail.Containers[0].Stack, "each saying its stack's uuid, as its labels do")
 		assert.Equal(t, "web", detail.Containers[0].Service, "and its service")
 	})
 

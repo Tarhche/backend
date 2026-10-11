@@ -13,13 +13,14 @@
 //     restore took away;
 //   - what the platform makes in a VM's dockerd carries its labels, managed
 //     and the uuid of the resource it is (Labels), so that what a node sees
-//     is matched to its record exactly rather than guessed by name;
+//     is matched to its record exactly rather than guessed by name. A stack's
+//     containers, networks and volumes are among it: each is a record of its
+//     own kind, which the stack's graph made;
 //   - what a VM's dockerd holds that the platform did not make is reported as
-//     well, and kept by whoever made it: a stack, whose compose project it is
-//     part of and which keeps it as one with the rest, or nobody, when it was
-//     made from the VM's terminal, in which case it is shown as unmanaged and
-//     never reconciled (OwnershipOf). An image, which nothing can label, is
-//     kept by what uses it: a container the platform keeps, or a stack's;
+//     well, and kept by nobody: it was made from the VM's terminal, and is
+//     shown as unmanaged and never reconciled (OwnershipOf). An image, which
+//     nothing can label, is kept by the container records made from it, a
+//     stack's among them;
 //   - and they are asked under the containers' permissions, which the
 //     dashboard has always asked them under (PermissionsOf).
 package blocks
@@ -27,9 +28,7 @@ package blocks
 import (
 	"github.com/gofrs/uuid/v5"
 
-	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
-	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 )
 
 const (
@@ -66,12 +65,9 @@ const (
 	// LabelManagedBy says what keeps what has no record of its own.
 	LabelManagedBy = "workload.managed-by"
 
-	// ManagedByStack is what a stack made, as part of its compose project,
-	// and an image one of a stack's containers was made from.
-	ManagedByStack = "stack"
-
 	// ManagedByContainer is an image a container the platform keeps was
-	// asked for as, or made from, which it is implied present for.
+	// asked for as, or made from, which it is implied present for: a
+	// stack's container as much as any other, each being a record.
 	ManagedByContainer = "container"
 
 	// ManagedByNobody is what nobody keeps: what was made from the VM's
@@ -105,42 +101,30 @@ func Identity(kindName string, labels map[string]string) string {
 type Ownership string
 
 const (
-	// Managed is what the platform made, which a record keeps.
+	// Managed is what the platform made, which a record keeps: a stack's
+	// containers, networks and volumes among it, each a record of its own.
 	Managed Ownership = "managed"
-
-	// Stacked is what a stack made, which the stack keeps as one with the
-	// rest of its compose project: it is part of the stack, and is not
-	// stored one by one.
-	Stacked Ownership = "stack"
 
 	// Unmanaged is what nobody keeps: what was made from the VM's terminal.
 	Unmanaged Ownership = "unmanaged"
 )
 
 // OwnershipOf is who keeps an object of the named kind, by its labels: the
-// platform when it labelled it as one of its resources, a stack when it
-// carries the stack's label or a compose project's, and nobody otherwise.
+// platform when it labelled it as one of its resources, and nobody
+// otherwise, whatever else its labels say.
 func OwnershipOf(kindName string, labels map[string]string) Ownership {
-	switch {
-	case len(Identity(kindName, labels)) > 0:
+	if len(Identity(kindName, labels)) > 0 {
 		return Managed
-	case len(labels[stackKind.LabelStack]) > 0, len(labels[docker.LabelComposeProject]) > 0:
-		return Stacked
 	}
 
 	return Unmanaged
 }
 
-// Owners are what an object of the named kind in a Docker VM belongs to: the
-// VM, and the stack its labels name, when they name one.
-func Owners(vmUUID string, labels map[string]string) []kind.Reference {
-	owners := []kind.Reference{{Kind: Parent, UUID: vmUUID}}
-
-	if stack := labels[stackKind.LabelStack]; len(stack) > 0 {
-		owners = append(owners, kind.Reference{Kind: stackKind.Name, UUID: stack})
-	}
-
-	return owners
+// Owners are what an object in a Docker VM belongs to, as its node says: the
+// VM it lives in. What else owns one the platform made, the stack whose graph
+// made it say, its record says.
+func Owners(vmUUID string) []kind.Reference {
+	return []kind.Reference{{Kind: Parent, UUID: vmUUID}}
 }
 
 // namespace is what Derived works its uuids out in.
@@ -149,8 +133,8 @@ var namespace = uuid.Must(uuid.FromString("4f7f0c5e-1c63-5b5e-9a57-0d3a7c1b2e64"
 // Derived is the uuid a building block of the named kind in the Docker VM
 // parent is known by when nothing labelled it with one, worked out the same
 // wherever it is: an image, which nothing can label once it is pulled, by
-// the reference it is pulled as; and what a stack or a VM's terminal made, by
-// its Docker id.
+// the reference it is pulled as; and what a VM's terminal made, by its Docker
+// id.
 func Derived(kindName string, parent string, key string) string {
 	return uuid.NewV5(namespace, kindName+"\x00"+parent+"\x00"+key).String()
 }

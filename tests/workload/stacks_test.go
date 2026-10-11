@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/deleteContainer"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/getVMContainers"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/image/getImages"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/createStack"
@@ -73,7 +74,6 @@ func TestAStack(t *testing.T) {
 		assert.Equal(t, vmUUID, running.VMUUID)
 		assert.Equal(t, "docker", running.VMName)
 		assert.Empty(t, running.Note)
-		assert.Empty(t, running.Output, "nothing runs compose, which nothing hears from")
 		require.Len(t, running.Containers, 2)
 
 		for _, c := range running.Containers {
@@ -93,6 +93,29 @@ func TestAStack(t *testing.T) {
 			require.True(t, there)
 			require.Contains(t, c.NetworkSettings.Networks, slug+"_default")
 			assert.Equal(t, []string{service}, c.NetworkSettings.Networks[slug+"_default"].Aliases, "%s is reached by its service's name there", service)
+		}
+	})
+
+	t.Run("its vm's containers are listed as its own, by its slug, its uuid and their services, to whoever can see it", func(t *testing.T) {
+		for _, owner := range []string{ownerUUID, ""} {
+			listed, err := getVMContainers.NewUseCase(w.client, w.translator).Execute(ctx, &getVMContainers.Request{VMUUID: vmUUID, OwnerUUID: owner})
+			require.NoError(t, err)
+			require.Empty(t, listed.ValidationErrors)
+
+			services := map[string]presenter.Container{}
+			for _, c := range listed.Items {
+				if len(c.Service) > 0 {
+					services[c.Service] = c
+				}
+			}
+
+			require.Len(t, services, 2, "its web server and its cache")
+
+			for service, c := range services {
+				assert.Equal(t, slug, c.Stack, "%s is the stack's", service)
+				assert.Equal(t, stackUUID, c.StackUUID)
+				assert.Equal(t, slug+"_"+service, c.Name)
+			}
 		}
 	})
 

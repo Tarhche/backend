@@ -1,5 +1,5 @@
 // Package docker is what runs inside one Docker VM: its containers, images,
-// networks and volumes, and the compose projects deployed into it.
+// networks and volumes.
 //
 // They are the building blocks of a Docker VM. The workload keeps the ones it
 // was asked for as resources of their own kinds (domain/workload/kinds), and
@@ -14,13 +14,6 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-)
-
-// The labels compose writes on what it creates, which are how a stack's
-// containers are told from the rest: a stack's slug is its compose project.
-const (
-	LabelComposeProject = "com.docker.compose.project"
-	LabelComposeService = "com.docker.compose.service"
 )
 
 var (
@@ -51,8 +44,10 @@ type Container struct {
 	Mounts   []Mount
 	Labels   map[string]string
 
-	// Stack and Service are the compose project and service the container
-	// belongs to, when it belongs to one.
+	// Stack and Service are the uuid of the stack whose graph made it and
+	// the service of the stack's file it is, as its labels say
+	// (workload.stack and workload.stack.service): nothing for a container
+	// no stack's graph made.
 	Stack   string
 	Service string
 
@@ -156,7 +151,7 @@ type Image struct {
 	InUse bool
 
 	// Unmanaged says nobody keeps it: it was pulled from its VM's terminal,
-	// and no container the platform keeps, nor any of a stack's, uses it, so
+	// and no container the platform keeps, a stack's among them, uses it, so
 	// nothing would pull it again.
 	Unmanaged bool
 }

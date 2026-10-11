@@ -33,7 +33,6 @@ func TestUseCase_Execute(t *testing.T) {
 
 		deploying := workloadtest.Stack()
 		deploying.State = stack.Deploying
-		deploying.Output = ""
 
 		var workload controlplane.MockClient
 		workload.On("CreateStack", mock.Anything, workloadtest.OwnerUUID, workloadControlPlane.StackRequest{

@@ -47,14 +47,7 @@ func TestUseCase_Execute(t *testing.T) {
 			presented, err := json.Marshal(response.Container)
 			require.NoError(t, err)
 
-			var shown map[string]any
-			require.NoError(t, json.Unmarshal([]byte(workloadtest.ContainerJSON), &shown))
-			shown["stack_uuid"] = "stack-uuid"
-
-			expected, err := json.Marshal(shown)
-			require.NoError(t, err)
-
-			assert.JSONEq(t, string(expected), string(presented))
+			assert.JSONEq(t, workloadtest.ContainerJSON, string(presented), "named by its stack's slug and uuid, which whoever asks can see")
 		})
 	}
 

@@ -9148,7 +9148,7 @@
             "type": "object",
             "properties": {
                 "compose": {
-                    "description": "Compose is the YAML as it was given. A listing leaves it out: it is\nas long as somebody wrote it, and a listing is read to choose one.",
+                    "description": "Compose is its file, the YAML as it was given. A listing leaves it out:\nit is as long as somebody wrote it, and a listing is read to choose\none.",
                     "type": "string"
                 },
                 "containers": {
@@ -9170,10 +9170,6 @@
                     "description": "Note says why there are no containers when it is not that the stack has\nnone: NoteVMNotRunning.",
                     "type": "string"
                 },
-                "output": {
-                    "description": "Output is the tail of what the last compose command printed.",
-                    "type": "string"
-                },
                 "owner": {
                     "$ref": "#/definitions/presenter.Owner"
                 },
@@ -9181,14 +9177,15 @@
                     "type": "string"
                 },
                 "reason": {
+                    "description": "Reason is why it is in its state: what it waits on, or what its plan\nfailed with.",
                     "type": "string"
                 },
                 "slug": {
-                    "description": "Slug is the compose project's name inside the VM, which its containers\ncarry as their stack.",
+                    "description": "Slug is what it is known by inside its VM: what its graph makes is\nnamed under it, \u003cslug\u003e_\u003cname\u003e, and its containers are shown with it as\ntheir stack.",
                     "type": "string"
                 },
                 "state": {
-                    "description": "State is what the last compose command left it as; ExpectedState is\nwhat it was asked to be, running or stopped.",
+                    "description": "State is what its graph last said it is, what its containers make it\nonce it is made; ExpectedState is what it was asked to be, running or\nstopped.",
                     "type": "string"
                 },
                 "updated_at": {
@@ -10881,7 +10878,7 @@
                     "type": "string"
                 },
                 "stack": {
-                    "description": "Stack and Service are the compose project and service it belongs to,\nwhen a stack deployed it. The project is the stack's slug, and\nStackUUID is the stack's uuid when the request could see that stack.",
+                    "description": "Stack and StackUUID are the slug and the uuid of the stack whose graph\nmade it, when the request could see that stack: whoever knows which\nstacks it could see says them (stackindex), and a stack's detail says\nits own. Service is the service of the stack's file it is, as its\nlabels say.",
                     "type": "string"
                 },
                 "stack_uuid": {
@@ -11013,7 +11010,7 @@
                     }
                 },
                 "unmanaged": {
-                    "description": "Unmanaged says nobody keeps it: it was pulled from its VM's terminal,\nand no container the platform keeps, nor any of a stack's, uses it.",
+                    "description": "Unmanaged says nobody keeps it: it was pulled from its VM's terminal,\nand no container the platform keeps, a stack's among them, uses it.",
                     "type": "boolean"
                 }
             }
@@ -11174,7 +11171,7 @@
             "type": "object",
             "properties": {
                 "compose": {
-                    "description": "Compose is the YAML as it was given. A listing leaves it out: it is\nas long as somebody wrote it, and a listing is read to choose one.",
+                    "description": "Compose is its file, the YAML as it was given. A listing leaves it out:\nit is as long as somebody wrote it, and a listing is read to choose\none.",
                     "type": "string"
                 },
                 "created_at": {
@@ -11186,10 +11183,6 @@
                 "name": {
                     "type": "string"
                 },
-                "output": {
-                    "description": "Output is the tail of what the last compose command printed.",
-                    "type": "string"
-                },
                 "owner": {
                     "$ref": "#/definitions/presenter.Owner"
                 },
@@ -11197,14 +11190,15 @@
                     "type": "string"
                 },
                 "reason": {
+                    "description": "Reason is why it is in its state: what it waits on, or what its plan\nfailed with.",
                     "type": "string"
                 },
                 "slug": {
-                    "description": "Slug is the compose project's name inside the VM, which its containers\ncarry as their stack.",
+                    "description": "Slug is what it is known by inside its VM: what its graph makes is\nnamed under it, \u003cslug\u003e_\u003cname\u003e, and its containers are shown with it as\ntheir stack.",
                     "type": "string"
                 },
                 "state": {
-                    "description": "State is what the last compose command left it as; ExpectedState is\nwhat it was asked to be, running or stopped.",
+                    "description": "State is what its graph last said it is, what its containers make it\nonce it is made; ExpectedState is what it was asked to be, running or\nstopped.",
                     "type": "string"
                 },
                 "updated_at": {
@@ -11407,7 +11401,7 @@
                     "type": "string"
                 },
                 "stack": {
-                    "description": "Stack and Service are the compose project and service it belongs to,\nwhen a stack deployed it. The project is the stack's slug, and\nStackUUID is the stack's uuid when the request could see that stack.",
+                    "description": "Stack and StackUUID are the slug and the uuid of the stack whose graph\nmade it, when the request could see that stack: whoever knows which\nstacks it could see says them (stackindex), and a stack's detail says\nits own. Service is the service of the stack's file it is, as its\nlabels say.",
                     "type": "string"
                 },
                 "stack_uuid": {

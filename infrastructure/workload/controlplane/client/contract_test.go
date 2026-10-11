@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -306,9 +307,6 @@ func witnessed(t *testing.T, w *blockstest.Workload, vmUUID string, containers .
 
 	for _, c := range containers {
 		owners := []kind.Reference{{Kind: "vm", UUID: vmUUID}}
-		if stack := c.Labels[stackKind.LabelStack]; len(stack) > 0 {
-			owners = append(owners, kind.Reference{Kind: stackKind.Name, UUID: stack})
-		}
 
 		status, err := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.StateOf(c.State, "")}, Docker: &c})
 		require.NoError(t, err)
@@ -616,7 +614,8 @@ func TestContract_Snapshots(t *testing.T) {
 
 // TestContract_BuildingBlocks holds the blog's client to the containers of
 // Docker VMs as the control plane keeps them, as the container kind: those
-// kept, and what a VM's dockerd holds that a stack or its terminal made.
+// kept, a stack's among them, and what a VM's dockerd holds that its terminal
+// made.
 func TestContract_BuildingBlocks(t *testing.T) {
 	t.Parallel()
 
@@ -624,8 +623,18 @@ func TestContract_BuildingBlocks(t *testing.T) {
 	w := blockstest.New(vmtest.WithVMs(vmtest.Docker("d1", "owner"), vmtest.Running("m1", "owner")))
 	c := controlPlane(t, w)
 
+	// a stack's web service, which its graph made: a record of its own.
+	stacked := map[string]string{stackKind.LabelStack: "stack-uuid", stackKind.LabelService: "web"}
+	w.Keep(blockstest.AContainer("s-uuid", "d1", containerKind.Running, containerKind.Running, func(made *containerKind.Container) {
+		made.Metadata.Name = "web-abcde_web"
+		made.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}
+		made.Metadata.Labels = stacked
+		made.Spec.Name = "web-abcde_web"
+		made.Status.Docker.Name = "web-abcde_web"
+		made.Status.Docker.Labels = stacked
+	}))
+
 	witnessed(t, w, "d1",
-		containerKind.Docker{ID: "s1", Name: "web-abcde-web-1", Image: "nginx:1.27", State: "running", Labels: map[string]string{docker.LabelComposeProject: "web-abcde", docker.LabelComposeService: "web"}},
 		containerKind.Docker{ID: "u1", Name: "db", Image: "postgres:17", State: "exited", Status: "Exited (0) 2 minutes ago"},
 	)
 
@@ -638,8 +647,9 @@ func TestContract_BuildingBlocks(t *testing.T) {
 		byName[container.Name] = container
 	}
 
-	assert.Equal(t, "web-abcde", byName["web-abcde-web-1"].Stack, "a stack's, as it is")
-	assert.False(t, byName["web-abcde-web-1"].Unmanaged)
+	assert.Equal(t, "stack-uuid", byName["web-abcde_web"].Stack, "a stack's, saying which stack's, as its labels do")
+	assert.Equal(t, "web", byName["web-abcde_web"].Service, "and which of its services")
+	assert.False(t, byName["web-abcde_web"].Unmanaged)
 	assert.True(t, byName["db"].Unmanaged, "and one made from its vm's terminal, marked so")
 
 	running, err := c.Docker("owner", "d1").Containers(ctx, docker.ContainerFilter{})
@@ -665,9 +675,12 @@ func TestContract_BuildingBlocks(t *testing.T) {
 
 	kept, _, err := w.Memory.GetAll(ctx, containerKind.Name, resource.Filter{OwnerUUID: "owner"}, 0, 0)
 	require.NoError(t, err)
-	require.Len(t, kept, 1)
+	require.Len(t, kept, 2, "kept beside the stack's")
 
-	api, err := kind.Decode[containerKind.Spec, containerKind.Status](kept[0].Raw)
+	asked := slices.IndexFunc(kept, func(r resource.Record) bool { return r.Metadata.Name == "api" })
+	require.GreaterOrEqual(t, asked, 0)
+
+	api, err := kind.Decode[containerKind.Spec, containerKind.Status](kept[asked].Raw)
 	require.NoError(t, err)
 	assert.Equal(t, []containerKind.PortBinding{{ContainerPort: 80, HostPort: 8080, HostIP: "127.0.0.1", Protocol: "tcp"}}, api.Spec.Ports, "kept as it was asked for")
 	assert.Equal(t, int64(64), api.Spec.PidsLimit)
@@ -776,7 +789,7 @@ func TestContract_Stacks(t *testing.T) {
 	assert.Equal(t, "box", detail.VMName)
 	require.Len(t, detail.Containers, 1, "the container its graph made of its one service")
 	assert.Equal(t, created.Stack.Slug+"_web", detail.Containers[0].Name)
-	assert.Equal(t, created.Stack.Slug, detail.Containers[0].Stack)
+	assert.Equal(t, created.Stack.UUID, detail.Containers[0].Stack, "saying its stack's uuid, as its labels do")
 	assert.Equal(t, "web", detail.Containers[0].Service)
 
 	page, err := c.Stacks(ctx, "owner", "d1", 1)

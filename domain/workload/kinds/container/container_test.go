@@ -239,8 +239,8 @@ func TestDocker(t *testing.T) {
 		Command:   "nginx",
 		Ports:     []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}, {ContainerPort: 9090, HostPort: 9090, HostIP: "127.0.0.1", Protocol: "tcp"}},
 		Networks:  []string{"bridge"},
-		Labels:    map[string]string{docker.LabelComposeProject: "shop-abcde", docker.LabelComposeService: "web"},
-		Stack:     "shop-abcde",
+		Labels:    map[string]string{"workload.stack": "stack-uuid", "workload.stack.service": "web"},
+		Stack:     "stack-uuid",
 		Service:   "web",
 		CreatedAt: at,
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/workloadtest"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
 )
@@ -36,7 +37,7 @@ func TestOf(t *testing.T) {
 
 		index := Of(context.Background(), &workload, workloadtest.OwnerUUID, "vm-uuid")
 
-		assert.Equal(t, Index{"shop": "shop-uuid", "blog": "blog-uuid"}, index)
+		assert.Equal(t, Index{"shop-uuid": "shop", "blog-uuid": "blog"}, index)
 	})
 
 	t.Run("no more than so many pages for one request", func(t *testing.T) {
@@ -46,7 +47,7 @@ func TestOf(t *testing.T) {
 		workload.On("Stacks", mock.Anything, "", "", mock.Anything).Times(maxPages).Return(page(1, 1000, "shop"), nil)
 		defer workload.AssertExpectations(t)
 
-		assert.Equal(t, Index{"shop": "shop-uuid"}, Of(context.Background(), &workload, "", ""))
+		assert.Equal(t, Index{"shop-uuid": "shop"}, Of(context.Background(), &workload, "", ""))
 	})
 
 	t.Run("a listing that cannot be read is an index of nothing, not a failure", func(t *testing.T) {
@@ -63,15 +64,38 @@ func TestOf(t *testing.T) {
 func TestIndex_Link(t *testing.T) {
 	t.Parallel()
 
-	containers := []presenter.Container{
-		{ID: "a", Stack: "shop"},
+	containers := []docker.Container{
+		{ID: "a", Stack: "shop-uuid", Service: "web"},
 		{ID: "b"},
-		{ID: "c", Stack: "by-hand"},
+		{ID: "c", Stack: "unseen-uuid", Service: "web"},
 	}
 
-	Index{"shop": "shop-uuid"}.Link(containers)
+	presented := presenter.NewContainers(containers)
 
-	assert.Equal(t, "shop-uuid", containers[0].StackUUID)
-	assert.Empty(t, containers[1].StackUUID, "no stack deployed it")
-	assert.Empty(t, containers[2].StackUUID, "somebody ran compose for it by hand")
+	Index{"shop-uuid": "shop"}.Link(presented, containers)
+
+	assert.Equal(t, "shop", presented[0].Stack, "named by its slug")
+	assert.Equal(t, "shop-uuid", presented[0].StackUUID, "and its uuid")
+
+	assert.Empty(t, presented[1].Stack, "no stack made it")
+	assert.Empty(t, presented[1].StackUUID)
+
+	assert.Empty(t, presented[2].Stack, "whoever asked cannot see its stack, which is neither named nor linked")
+	assert.Empty(t, presented[2].StackUUID)
+	assert.Equal(t, "web", presented[2].Service, "though it says which service it is, as its labels do")
+}
+
+func TestIndex_Name(t *testing.T) {
+	t.Parallel()
+
+	index := Index{"shop-uuid": "shop"}
+
+	var one presenter.Container
+	index.Name(&one, "shop-uuid")
+	assert.Equal(t, presenter.Container{Stack: "shop", StackUUID: "shop-uuid"}, one)
+
+	var none presenter.Container
+	index.Name(&none, "")
+	index.Name(&none, "unseen-uuid")
+	assert.Equal(t, presenter.Container{}, none, "what no stack it can see made is left as it was")
 }

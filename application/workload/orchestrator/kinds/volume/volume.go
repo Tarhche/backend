@@ -147,7 +147,7 @@ func (n *Node) State(ctx context.Context) (kind.Report[volumeKind.Status], error
 		for _, held := range inventory.Volumes {
 			report.Instances = append(report.Instances, kind.Observed[volumeKind.Status]{
 				UUID:   blockKinds.Identity(volumeKind.Name, held.Labels),
-				Owners: blockKinds.Owners(vmUUID, held.Labels),
+				Owners: blockKinds.Owners(vmUUID),
 				Status: volumeKind.Status{
 					Status: kind.Status{State: volumeKind.Present, Reason: volumeKind.ReasonOf(held.Labels)},
 					Docker: volumeKind.DockerOf(held),

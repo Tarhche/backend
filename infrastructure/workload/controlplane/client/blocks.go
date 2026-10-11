@@ -30,10 +30,10 @@ import (
 // volumes, are kinds the control plane runs: each is reached through the
 // control plane's resource API, under its kind's plural, inside the VM it
 // lives in (?parent=), where it is named as the dashboard has always named it,
-// by its Docker id or its name; and read back here as docker has it. What the
-// VM's dockerd holds that nobody keeps a record of, a stack's or what was made
-// from the VM's terminal, is among what is listed and acted on, as the control
-// plane's extras.
+// by its Docker id or its name; and read back here as docker has it, a stack's
+// among them. What the VM's dockerd holds that nobody keeps a record of, what
+// was made from the VM's terminal, is among what is listed and acted on, as
+// the control plane's extras.
 const (
 	// commandWait is how long the control plane is asked to wait for what
 	// came of a command, which a node gives up on after its own request

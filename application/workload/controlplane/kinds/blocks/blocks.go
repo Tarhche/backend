@@ -3,17 +3,17 @@
 // beside it in kinds/container, kinds/image, kinds/network and kinds/volume.
 //
 // What the platform made in a Docker VM is a record of its kind, stored and
-// reconciled as any resource is. What a VM's dockerd holds besides, made by a
-// stack or from the VM's terminal, is reported every beat as well, each in a
-// heartbeat of its own, and each building block's strategy takes what its
-// kind's heartbeats say of it (Blocks.Witnessed) and shows it beside its
-// records as its extras: a stack's, as part of the stack, and nobody's, as
-// unmanaged. A kind whose objects what lives beside them can keep says what
-// keeps them (Keeper): an image is the container's that uses it, or the
-// stack's. None of it is stored, and none of it is ever reconciled: each
-// control plane keeps what the heartbeats it hears say (Sightings), until they
-// stop saying it for long enough, and it can be acted on and read, through the
-// node holding it, as a record can.
+// reconciled as any resource is: a stack's containers, networks and volumes
+// among it, each made by the stack's graph. What a VM's dockerd holds
+// besides, made from the VM's terminal, is reported every beat as well, each
+// in a heartbeat of its own, and each building block's strategy takes what
+// its kind's heartbeats say of it (Blocks.Witnessed) and shows it beside its
+// records as its extras: nobody's, as unmanaged. A kind whose objects what
+// lives beside them can keep says what keeps them (Keeper): an image is kept
+// by the container records made from it. None of it is stored, and none of it
+// is ever reconciled: each control plane keeps what the heartbeats it hears
+// say (Sightings), until they stop saying it for long enough, and it can be
+// acted on and read, through the node holding it, as a record can.
 //
 // What is found in a Docker VM labelled as the platform's with no record of
 // its own, in the first look into a VM whose disk was just restored from a
@@ -43,10 +43,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
-	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -497,8 +495,8 @@ func (b *Blocks) keepers(ctx context.Context, nodeName string, at time.Time) (ma
 }
 
 // sighted is the manifest of what nobody keeps a record of, as a node saw
-// it in v: a stack's, what keepers say keeps it, or nobody's, its VM's owner's,
-// under a uuid its Docker id gives it when no label does.
+// it in v: what keepers say keeps it, or nobody's, its VM's owner's, under a
+// uuid its Docker id gives it when no label does.
 func (b *Blocks) sighted(nodeName string, v vmKind.VM, instance kind.Observation, keepers map[string]string) kind.Raw {
 	observed := ObservedOf(instance.Status)
 
@@ -508,13 +506,7 @@ func (b *Blocks) sighted(nodeName string, v vmKind.VM, instance kind.Observation
 	}
 
 	managedBy := blockKinds.ManagedByNobody
-
-	_, stacked := ownerOf(instance.Owners, stackKind.Name)
-
-	switch keeper := keepers[uuid]; {
-	case stacked, len(observed.Docker.Labels[docker.LabelComposeProject]) > 0:
-		managedBy = blockKinds.ManagedByStack
-	case len(keeper) > 0:
+	if keeper := keepers[uuid]; len(keeper) > 0 {
 		managedBy = keeper
 	}
 

@@ -181,10 +181,6 @@ type Status struct {
 	// to its containers.
 	Services []ServiceStatus `json:"services,omitempty"`
 
-	// Output is what compose printed, when compose ran a stack, which
-	// nothing says any more.
-	Output string `json:"output,omitempty"`
-
 	// Failure is what its plan failed with, when what it needs was refused,
 	// in the codes every side knows: no node had room for its VM, say. One
 	// that is empty, or none, is none.

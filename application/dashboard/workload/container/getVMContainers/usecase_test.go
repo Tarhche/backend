@@ -55,11 +55,12 @@ func TestUseCase_Execute(t *testing.T) {
 
 			require.Len(t, listing.Items, 1)
 			assert.Equal(t, "c0ffee", listing.Items[0]["id"])
+			assert.Equal(t, "shop-abcde", listing.Items[0]["stack"])
 			assert.Equal(t, "stack-uuid", listing.Items[0]["stack_uuid"])
 		})
 	}
 
-	t.Run("the stacks failing to be read leaves the containers unlinked, not unlisted", func(t *testing.T) {
+	t.Run("the stacks failing to be read leaves the containers unnamed and unlinked, not unlisted", func(t *testing.T) {
 		t.Parallel()
 
 		var daemon dockerMock.MockDaemon
@@ -76,7 +77,8 @@ func TestUseCase_Execute(t *testing.T) {
 
 		require.Len(t, response.Items, 1)
 		assert.Empty(t, response.Items[0].StackUUID)
-		assert.Equal(t, "shop-abcde", response.Items[0].Stack)
+		assert.Empty(t, response.Items[0].Stack, "a stack is named only to whoever is known to see it")
+		assert.Equal(t, "web", response.Items[0].Service)
 	})
 
 	for _, answer := range workloadtest.Answers() {
