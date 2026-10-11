@@ -414,7 +414,34 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.Equal(t, before.Version, after.Version)
 	})
 
-	t.Run("nor long after the restore", func(t *testing.T) {
+	t.Run("while its vm's record is yet to take its first restore, nothing is looked into nor taken in, and once it has, the next beat is the first look, which takes in what it finds", func(t *testing.T) {
+		t.Parallel()
+
+		restoring := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Restoring })
+		w := blockstest.New(vmtest.WithVMs(restoring))
+
+		web := seen(t, "from-the-new-disk", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-new-disk")})
+
+		witnessed(t, w, at, web)
+
+		_, kept := w.Kept(containerKind.Name, "from-the-new-disk")
+		assert.False(t, kept)
+
+		v, _ := w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAt.IsZero())
+
+		w.Change("vm-1", func(v *vmKind.VM) {
+			v.Status.State = vmKind.Running
+			v.Status.RestoredAt = at.Add(-time.Second)
+		})
+
+		witnessed(t, w, at.Add(time.Second), web)
+
+		_, kept = w.Kept(containerKind.Name, "from-the-new-disk")
+		assert.True(t, kept, "taken in at the first look once the record says the restore")
+	})
+
+	t.Run("what the first look into a restored vm finds is taken in however long after the restore its dockerd came up", func(t *testing.T) {
 		t.Parallel()
 
 		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Hour) })
@@ -423,7 +450,29 @@ func TestBlocks_Witnessed(t *testing.T) {
 		witnessed(t, w, at, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-snapshot")}))
 
 		_, kept := w.Kept(containerKind.Name, "from-the-snapshot")
-		assert.False(t, kept)
+		assert.True(t, kept)
+	})
+
+	t.Run("and so does a heartbeat of that look another control plane kept, heard here first, while one of a beat after it takes nothing in, whatever was heard here before", func(t *testing.T) {
+		t.Parallel()
+
+		// another control plane heard the first look, at, and kept it on the
+		// vm's record; this one heard nothing of the vm yet.
+		looked := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+			v.Status.RestoredAt = at.Add(-time.Minute)
+			v.Status.LookedAt = at
+		})
+		w := blockstest.New(vmtest.WithVMs(looked))
+
+		witnessed(t, w, at.Add(15*time.Second), seen(t, "deleted-since", containerKind.Docker{ID: "c2", Name: "api", State: "running", Labels: labelled(t, "deleted-since")}))
+
+		_, kept := w.Kept(containerKind.Name, "deleted-since")
+		assert.False(t, kept, "a later beat is no first look, here or anywhere")
+
+		witnessed(t, w, at, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-snapshot")}))
+
+		_, kept = w.Kept(containerKind.Name, "from-the-snapshot")
+		assert.True(t, kept, "the first look's heartbeats are, whichever control plane hears them")
 	})
 
 	t.Run("what a vm nobody keeps a record of holds is not shown, nor what one holds that its record says is on another node", func(t *testing.T) {

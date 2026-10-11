@@ -55,11 +55,6 @@ import (
 )
 
 const (
-	// adoptWithin is how long after a Docker VM's disk was restored what is
-	// first found in it labelled as the platform's is taken in again: the
-	// restored VM's dockerd has to come up first, which nested takes minutes.
-	adoptWithin = 15 * time.Minute
-
 	// prefixAtLeast is how much of a Docker id names one, as docker reads a
 	// short id: at least this much, and the only id beginning so.
 	prefixAtLeast = 4
@@ -150,22 +145,10 @@ type Blocks struct {
 
 	lock sync.Mutex
 
-	// adopted is the first look into each Docker VM since its disk was last
-	// restored, by the VM: what was found in it labelled as the platform's
-	// was taken in again then.
-	adopted map[string]look
-
 	// keeping is what keeps what each node holds of the kind that has no
 	// record of its own, by the node, as the last beat it was worked out for
 	// found.
 	keeping map[string]keepersAt
-}
-
-// look is the first look into a Docker VM since its disk was restored: the
-// beat whose heartbeats said what it held then.
-type look struct {
-	restoredAt time.Time
-	at         time.Time
 }
 
 // keepersAt are what keeps what of a kind a node holds that has no record of
@@ -192,7 +175,7 @@ func New(d kind.Descriptor, k Kind, dependencies Dependencies) *Blocks {
 		dependencies.Logger = slog.New(slog.DiscardHandler)
 	}
 
-	return &Blocks{Dependencies: dependencies, descriptor: d, kind: k, adopted: make(map[string]look), keeping: make(map[string]keepersAt)}
+	return &Blocks{Dependencies: dependencies, descriptor: d, kind: k, keeping: make(map[string]keepersAt)}
 }
 
 // Descriptor is the kind's.
@@ -384,9 +367,9 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 		return nil
 	}
 
-	failed := b.looked(ctx, v, at)
+	v, failed := b.looked(ctx, v, at)
 
-	if len(instance.UUID) > 0 && b.adoptable(v, at) {
+	if len(instance.UUID) > 0 && adoptable(v, at) {
 		adopted, err := b.adopt(ctx, nodeName, v, instance, at)
 		if adopted {
 			b.Sightings.Forget(b.descriptor.Name, instance.UUID)
@@ -421,40 +404,46 @@ func (b *Blocks) labelled(instance kind.Observation) bool {
 // said it holds as of a beat at or after its restore. What lived in it before
 // is not found missing from the restored disk until it was looked into, a
 // stack's containers among it, however long its dockerd takes to come up
-// (kinds/stack's Restored). Every look into a Docker VM says something of it
-// that nobody keeps a record of, the networks every dockerd has of its own
-// among it, so that every first look is heard of here. One written in the
-// meantime is read again, and one that is gone is let be.
-func (b *Blocks) looked(ctx context.Context, v vmKind.VM, at time.Time) error {
+// (kinds/stack's Restored); and what that look found labelled as the
+// platform's with no record is taken in again (adoptable). Every look into a
+// Docker VM says something of it that nobody keeps a record of, the networks
+// every dockerd has of its own among it, so that every first look is heard
+// of here. It is v as its record is once that is kept, the look another
+// control plane kept first among it. One written in the meantime is read
+// again, and one that is gone is let be.
+func (b *Blocks) looked(ctx context.Context, v vmKind.VM, at time.Time) (vmKind.VM, error) {
 	if !unlooked(v, at) {
-		return nil
+		return v, nil
 	}
 
 	look, err := json.Marshal(struct {
 		LookedAt time.Time `json:"looked_at"`
 	}{LookedAt: at})
 	if err != nil {
-		return err
+		return v, err
 	}
 
 	for try := 1; ; try++ {
 		r, err := b.Resources.GetOne(ctx, vmKind.Name, v.Metadata.UUID)
 		if errors.Is(err, domain.ErrNotExists) {
-			return nil
+			return v, nil
 		} else if err != nil {
-			return err
+			return v, err
 		}
 
-		if v, err = records.Decode(r); err != nil {
-			return err
+		read, err := records.Decode(r)
+		if err != nil {
+			return v, err
 		}
+
+		v = read
 
 		if !unlooked(v, at) {
-			return nil
+			return v, nil
 		}
 
 		if r.Status, err = resource.Merge(r.Status, look); err != nil {
-			return err
+			return v, err
 		}
 
 		_, err = b.Resources.Update(ctx, r)
@@ -463,11 +452,13 @@ func (b *Blocks) looked(ctx context.Context, v vmKind.VM, at time.Time) error {
 		case err == nil:
 			b.Logger.InfoContext(ctx, "looked into a vm whose disk was restored, since its restore", "vm", v.Metadata.UUID, "restored_at", v.Status.RestoredAt, "looked_at", at)
 
-			return nil
+			v.Status.LookedAt = at
+
+			return v, nil
 		case errors.Is(err, domain.ErrNotExists):
-			return nil
+			return v, nil
 		case !errors.Is(err, resource.ErrConflict) || try >= tries:
-			return err
+			return v, err
 		}
 	}
 }
@@ -483,25 +474,14 @@ func unlooked(v vmKind.VM, at time.Time) bool {
 
 // adoptable reports whether what is found in v labelled as the platform's,
 // with no record, is taken in again at a moment: in the first look into it
-// since its disk was restored, not long ago, which is every heartbeat of the
-// beat that first said what it held.
-func (b *Blocks) adoptable(v vmKind.VM, at time.Time) bool {
+// since its disk was restored, as its record keeps it (looked), which is every
+// heartbeat of the beat that first said what it held, whichever control plane
+// hears it, and however long after the restore its dockerd took to come up.
+// No later beat takes anything in, by any control plane.
+func adoptable(v vmKind.VM, at time.Time) bool {
 	restoredAt := v.Status.RestoredAt
-	if restoredAt.IsZero() || at.Before(restoredAt) || at.Sub(restoredAt) > adoptWithin {
-		return false
-	}
 
-	b.lock.Lock()
-	defer b.lock.Unlock()
-
-	first, looked := b.adopted[v.Metadata.UUID]
-	if !looked || !first.restoredAt.Equal(restoredAt) {
-		b.adopted[v.Metadata.UUID] = look{restoredAt: restoredAt, at: at}
-
-		return true
-	}
-
-	return first.at.Equal(at)
+	return !restoredAt.IsZero() && !v.Status.LookedAt.Before(restoredAt) && v.Status.LookedAt.Equal(at)
 }
 
 // adopt takes in what was found labelled as the platform's in a restored VM,
