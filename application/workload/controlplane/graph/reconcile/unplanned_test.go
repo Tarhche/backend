@@ -235,6 +235,70 @@ func TestReconciler_Reconcile_unplanned(t *testing.T) {
 		require.NoError(t, err, "its record is kept, for the run that holds its lease")
 	})
 
+	// stalledOn is a listing's or a delete's stall that says it was come to,
+	// once, and waits until its run is cancelled, which it fails with.
+	stalledOn := func(come chan<- struct{}) func(ctx context.Context) error {
+		return func(ctx context.Context) error {
+			select {
+			case come <- struct{}{}:
+			default:
+			}
+
+			<-ctx.Done()
+
+			return ctx.Err()
+		}
+	}
+
+	for name, tt := range map[string]struct {
+		op      string
+		deleted []graph.NodeID
+	}{
+		"and so is it while what it owns is looked for, before anything of it is removed": {op: "list"},
+		"and while its record is removed, last of all":                                    {op: "delete", deleted: []graph.NodeID{store, db, web, network}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			config := reconcile.DefaultConfig()
+			config.Lease = 30 * time.Millisecond
+
+			kinds := unplanned()
+
+			f := newFixture(t, kinds, records()...)
+			one := f.reconciler(t, "one", config, stackKind.Name)
+
+			come := make(chan struct{}, 1)
+			f.resources.Stall(tt.op, stalledOn(come))
+
+			done := make(chan error, 1)
+			go func() { done <- one.Reconcile(ctx, refOf(store)) }()
+
+			select {
+			case <-come:
+			case <-time.After(settle):
+				require.Fail(t, "the removal never came to it")
+			}
+
+			f.lapse(t, store, "another")
+
+			var err error
+
+			select {
+			case err = <-done:
+			case <-time.After(settle):
+				require.Fail(t, "the removal never stopped")
+			}
+
+			require.ErrorIs(t, err, graph.ErrLost, "how it ended is not kept on what it does not hold")
+			assert.ErrorContains(t, err, "cut short", "a lease lost is no failure of its removal")
+			assert.Equal(t, tt.deleted, kinds.Asked(graphtest.Delete))
+
+			_, err = f.records.GetOne(ctx, stackKind.Name, store.Name())
+			require.NoError(t, err, "its record is kept, for the run that holds its lease")
+		})
+	}
+
 	t.Run("but one not asked to go whose plan cannot be made fails, and nothing of it is removed", func(t *testing.T) {
 		t.Parallel()
 

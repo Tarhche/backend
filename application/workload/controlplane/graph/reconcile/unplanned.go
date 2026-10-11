@@ -29,13 +29,19 @@ import (
 // It runs under root's lease (held), and is how the run ended, as carry
 // says: gone once root's record is; waiting on what a kind's delete waits
 // on, its VM say, and taken up by the next run where it stopped; cut short
-// once ctx is done, its lease lost or its control plane stopping; or failed
-// with what a delete, or looking for the records, failed with.
+// once ctx is done, its lease lost or its control plane stopping, whatever
+// it was doing then, looking for the records, removing one of them or root's
+// own; or failed with what a delete, or looking for the records, failed
+// with.
 func (r *Reconciler) removeUnplanned(ctx context.Context, root graph.Ref, rec resource.Record, unplanned error) (graph.Ended, bool, error) {
 	r.logger.WarnContext(ctx, "a root asked to go whose plan cannot be made is removed through what its records say it owns", "error", unplanned, "kind", root.Kind, "uuid", root.UUID)
 
 	removing, err := r.owning(ctx, root, rec)
-	if err != nil {
+
+	switch {
+	case err != nil && ctx.Err() != nil:
+		return r.failed(fmt.Errorf("%w: looking for what %s/%s owns: %w", errCutShort, root.Kind, root.UUID, context.Cause(ctx)))
+	case err != nil:
 		return r.failed(fmt.Errorf("%w, and what it owns cannot be looked for: %w", unplanned, err))
 	}
 
@@ -58,7 +64,11 @@ func (r *Reconciler) removeUnplanned(ctx context.Context, root graph.Ref, rec re
 		}
 	}
 
-	if err := r.resources.Delete(ctx, root.Kind, root.UUID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+	switch err := r.resources.Delete(ctx, root.Kind, root.UUID); {
+	case err == nil, errors.Is(err, domain.ErrNotExists):
+	case ctx.Err() != nil:
+		return r.failed(fmt.Errorf("%w: the record of %s/%s: %w", errCutShort, root.Kind, root.UUID, context.Cause(ctx)))
+	default:
 		return r.failed(fmt.Errorf("the record of %s/%s cannot be removed: %w", root.Kind, root.UUID, err))
 	}
 

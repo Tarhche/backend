@@ -263,13 +263,46 @@ func deleting(m *kind.Metadata) {
 }
 
 // counting keeps records as the repository it wraps does, counting every
-// read, and recording every write, in order.
+// read, and recording every write, in order; a listing or a delete waiting
+// on what a test stalls it on first.
 type counting struct {
 	resource.Repository
 
 	lock   sync.Mutex
 	reads  int
 	writes []string
+
+	// stalls are what each listing ("list") and each delete ("delete")
+	// waits on before it is done, failing with what that fails with: none
+	// until a test says.
+	stalls map[string]func(ctx context.Context) error
+}
+
+// Stall has every listing ("list"), or every delete ("delete"), from now on
+// wait on until before it is done, and fail with what until fails with.
+func (c *counting) Stall(op string, until func(ctx context.Context) error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.stalls == nil {
+		c.stalls = make(map[string]func(ctx context.Context) error)
+	}
+
+	c.stalls[op] = until
+}
+
+// stalled is what the listing or the delete op names waits on, and fails
+// with: nothing when a test stalls it on nothing.
+func (c *counting) stalled(ctx context.Context, op string) error {
+	c.lock.Lock()
+	until := c.stalls[op]
+	c.lock.Unlock()
+
+	if until == nil {
+		return nil
+	}
+
+	return until(ctx)
 }
 
 func (c *counting) read() {
@@ -315,6 +348,10 @@ func (c *counting) Update(ctx context.Context, r resource.Record) (resource.Reco
 }
 
 func (c *counting) Delete(ctx context.Context, kindName string, uuid string) error {
+	if err := c.stalled(ctx, "delete"); err != nil {
+		return err
+	}
+
 	c.wrote("delete", kindName, uuid)
 
 	return c.Repository.Delete(ctx, kindName, uuid)
@@ -339,6 +376,10 @@ func (c *counting) GetOneBySlug(ctx context.Context, kindName string, slug strin
 }
 
 func (c *counting) GetAll(ctx context.Context, kindName string, filter resource.Filter, offset uint, limit uint) ([]resource.Record, uint, error) {
+	if err := c.stalled(ctx, "list"); err != nil {
+		return nil, 0, err
+	}
+
 	c.read()
 
 	return c.Repository.GetAll(ctx, kindName, filter, offset, limit)
