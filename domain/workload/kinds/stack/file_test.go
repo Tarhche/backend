@@ -97,7 +97,7 @@ func TestParse(t *testing.T) {
 	t.Run("a file that says every key it takes, in each of its forms", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse(everything)
+		file, invalid := stack.Parsed(t, everything)
 		require.Empty(t, invalid)
 
 		assert.Equal(t, stack.File{
@@ -165,7 +165,7 @@ func TestParse(t *testing.T) {
 	t.Run("a value is what it says, a dollar among it: nothing is interpolated", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse(`
+		file, invalid := stack.Parsed(t, `
 services:
   web:
     image: nginx:${TAG}
@@ -185,11 +185,11 @@ services:
 	t.Run("a service that names no network joins the default one, which is made only then", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse("services:\n  web:\n    image: nginx\n    networks: [front]\nnetworks:\n  front:\n  back:\n")
+		file, invalid := stack.Parsed(t, "services:\n  web:\n    image: nginx\n    networks: [front]\nnetworks:\n  front:\n  back:\n")
 		require.Empty(t, invalid)
 		assert.Equal(t, []string{"back", "front"}, file.NetworksMade(), "every one it declares, and no default one nothing joins")
 
-		file, invalid = stack.Parse("services:\n  web:\n    image: nginx\n  db:\n    image: postgres\n    networks: {default: }\n")
+		file, invalid = stack.Parsed(t, "services:\n  web:\n    image: nginx\n  db:\n    image: postgres\n    networks: {default: }\n")
 		require.Empty(t, invalid)
 		assert.Equal(t, []string{"default"}, file.Services["web"].Networks)
 		assert.Equal(t, []string{"default"}, file.Services["db"].Networks, "which it may name without declaring it")
@@ -316,7 +316,7 @@ services:
 		t.Run("refuses "+name, func(t *testing.T) {
 			t.Parallel()
 
-			file, invalid := stack.Parse(tt.file)
+			file, invalid := stack.Parsed(t, tt.file)
 
 			assert.Equal(t, tt.invalid, invalid)
 			assert.Empty(t, file.Services, "and is no file")
@@ -326,7 +326,7 @@ services:
 	t.Run("refuses a file larger than a stack may be given", func(t *testing.T) {
 		t.Parallel()
 
-		_, invalid := stack.Parse("services:\n  web:\n    image: nginx\n" + strings.Repeat("#", stack.MaxFile))
+		_, invalid := stack.Parsed(t, "services:\n  web:\n    image: nginx\n"+strings.Repeat("#", stack.MaxFile))
 
 		assert.Equal(t, domain.ValidationErrors{"compose": "too_large"}, invalid)
 	})
@@ -373,7 +373,7 @@ func TestParse_unsupportedKeys(t *testing.T) {
 		t.Run("refuses "+name+", saying where it is", func(t *testing.T) {
 			t.Parallel()
 
-			_, invalid := stack.Parse(tt.file)
+			_, invalid := stack.Parsed(t, tt.file)
 
 			require.Contains(t, invalid, tt.path, "%v", invalid)
 
@@ -410,26 +410,26 @@ func TestParse_keys(t *testing.T) {
 		"a variable that is a mapping":                                {file: "services:\n  web: {image: a, environment: {A: {b: 1}}}\n", invalid: domain.ValidationErrors{"compose.services.web.environment.A": "invalid_value"}},
 		"a word of a command that is a mapping":                       {file: "services:\n  web: {image: a, command: [{b: 1}]}\n", invalid: domain.ValidationErrors{"compose.services.web.command[0]": "invalid_value"}},
 		"a merge of a mapping":                                        {file: "services:\n  web: {image: a, <<: {user: root}}\n", invalid: domain.ValidationErrors{"compose.services.web.<<": stack.CodeUnsupportedKey}},
-		"one tagged a merge":                                          {file: "services:\n  web: {image: a, !!merge <<: {user: root}}\n", invalid: domain.ValidationErrors{"compose.services.web.<<": stack.CodeUnsupportedKey}},
+		"one tagged a merge":                                          {file: "services:\n  web: {image: a, !!merge <<: {user: root}}\n", invalid: domain.ValidationErrors{"compose.services.web.<<": stack.CodeUnsupportedTag}},
 		"and << tagged a string, which is a key it does not take":     {file: "services:\n  web: {image: a, !!str <<: {user: root}}\n", invalid: domain.ValidationErrors{"compose.services.web.<<": stack.CodeUnsupportedKey}},
 		"a key anchored":                                              {file: "services:\n  &k web: {image: a}\n", invalid: domain.ValidationErrors{"compose.services.web": stack.CodeUnsupportedAlias}},
 		"a value anchored in a flow mapping":                          {file: "services: {web: {image: &i a}}\n", invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeUnsupportedAlias}},
 		"a merge of an alias, said as an alias before as a merge":     {file: "x: &b {image: a}\nservices:\n  web: {<<: *b}\n", invalid: domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, "compose.services.web.<<": stack.CodeUnsupportedAlias}},
 		"a second document, with an alias in it":                      {file: "services:\n  web: {image: a}\n---\nx: &a 1\ny: *a\n", invalid: domain.ValidationErrors{"compose": "invalid_value"}},
 		"a second document that is empty":                             {file: "services:\n  web: {image: a}\n---\n", invalid: domain.ValidationErrors{"compose": "invalid_value"}},
-		"a key a tag of its own says is anything":                     {file: "services:\n  web: {!custom image: a}\n", invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeUnsupportedKey}},
-		"a key binary, whose text is a key it takes":                  {file: "services:\n  web: {image: a, !!binary user: root}\n", invalid: domain.ValidationErrors{"compose.services.web.user": stack.CodeUnsupportedKey}},
-		"and so of its limits":                                        {file: "services:\n  web: {image: a, resources: {limits: {!!binary cpus: 2}}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources.limits.cpus": stack.CodeUnsupportedKey}},
-		"the networks a service joins":                                {file: "networks: {n: ~}\nservices:\n  web: {image: a, !!binary networks: [n]}\n", invalid: domain.ValidationErrors{"compose.services.web.networks": stack.CodeUnsupportedKey}},
-		"the networks the file declares":                              {file: "services:\n  web: {image: a}\n!!binary networks: {front: ~}\n", invalid: domain.ValidationErrors{"compose.networks": stack.CodeUnsupportedKey}},
-		"and its services":                                            {file: "!!binary services:\n  web: {image: a}\n", invalid: domain.ValidationErrors{"compose.services": stack.CodeUnsupportedKey}},
-		"a volume's name binary, whose text is read as ../":           {file: "services:\n  web: {image: a}\nvolumes:\n  !!binary Li4v: ~\n", invalid: domain.ValidationErrors{"compose.volumes.Li4v": stack.CodeUnsupportedKey}},
-		"and a network's":                                             {file: "services:\n  web: {image: a}\nnetworks:\n  !!binary Li4v: ~\n", invalid: domain.ValidationErrors{"compose.networks.Li4v": stack.CodeUnsupportedKey}},
-		"and a service's, whose text is read as another's name":       {file: "services:\n  web: {image: a, privileged: false}\n  !!binary d2Vi: {image: a, privileged: true}\n", invalid: domain.ValidationErrors{"compose.services.d2Vi": stack.CodeUnsupportedKey}},
+		"a key a tag of its own says is anything":                     {file: "services:\n  web: {!custom image: a}\n", invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeUnsupportedTag}},
+		"a key binary, whose text is a key it takes":                  {file: "services:\n  web: {image: a, !!binary user: root}\n", invalid: domain.ValidationErrors{"compose.services.web.user": stack.CodeUnsupportedTag}},
+		"and so of its limits":                                        {file: "services:\n  web: {image: a, resources: {limits: {!!binary cpus: 2}}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources.limits.cpus": stack.CodeUnsupportedTag}},
+		"the networks a service joins":                                {file: "networks: {n: ~}\nservices:\n  web: {image: a, !!binary networks: [n]}\n", invalid: domain.ValidationErrors{"compose.services.web.networks": stack.CodeUnsupportedTag}},
+		"the networks the file declares":                              {file: "services:\n  web: {image: a}\n!!binary networks: {front: ~}\n", invalid: domain.ValidationErrors{"compose.networks": stack.CodeUnsupportedTag}},
+		"and its services":                                            {file: "!!binary services:\n  web: {image: a}\n", invalid: domain.ValidationErrors{"compose.services": stack.CodeUnsupportedTag}},
+		"a volume's name binary, whose text is read as ../":           {file: "services:\n  web: {image: a}\nvolumes:\n  !!binary Li4v: ~\n", invalid: domain.ValidationErrors{"compose.volumes.Li4v": stack.CodeUnsupportedTag}},
+		"and a network's":                                             {file: "services:\n  web: {image: a}\nnetworks:\n  !!binary Li4v: ~\n", invalid: domain.ValidationErrors{"compose.networks.Li4v": stack.CodeUnsupportedTag}},
+		"and a service's, whose text is read as another's name":       {file: "services:\n  web: {image: a, privileged: false}\n  !!binary d2Vi: {image: a, privileged: true}\n", invalid: domain.ValidationErrors{"compose.services.d2Vi": stack.CodeUnsupportedTag}},
 		"a volume's name that is nothing":                             {file: "services:\n  web: {image: a}\nvolumes:\n  null: ~\n", invalid: domain.ValidationErrors{"compose.volumes.null": stack.CodeUnsupportedKey}},
 		"a key that is a list, under the path of its mapping's entry": {file: "services:\n  web: {image: a, ? [x, y] : 1}\n", invalid: domain.ValidationErrors{"compose.services.web.": stack.CodeUnsupportedKey}},
 		"a key given twice":                                           {file: "services:\n  web: {image: a, image: b}\n", invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeDuplicateKey}},
-		"one of limits beneath resources tagged as nothing":           {file: "services:\n  web: {image: a, resources: !!null {limits: {bogus: 1}}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources.limits.bogus": stack.CodeUnsupportedKey}},
+		"resources tagged as nothing, before a key of its limits":     {file: "services:\n  web: {image: a, resources: !!null {limits: {bogus: 1}}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources": stack.CodeUnsupportedTag}},
 		"a volume's name that is a number":                            {file: "services:\n  web: {image: a}\nvolumes:\n  1: ~\n", invalid: domain.ValidationErrors{"compose.volumes.1": stack.CodeUnsupportedKey}},
 		"a network's that is a boolean":                               {file: "services:\n  web: {image: a}\nnetworks:\n  true: ~\n", invalid: domain.ValidationErrors{"compose.networks.true": stack.CodeUnsupportedKey}},
 		"a service's that is a date":                                  {file: "services:\n  2026-10-11: {image: a}\n", invalid: domain.ValidationErrors{"compose.services.2026-10-11": stack.CodeUnsupportedKey}},
@@ -439,7 +439,7 @@ func TestParse_keys(t *testing.T) {
 		t.Run("refuses "+name+", saying where", func(t *testing.T) {
 			t.Parallel()
 
-			file, invalid := stack.Parse(tt.file)
+			file, invalid := stack.Parsed(t, tt.file)
 
 			assert.Equal(t, tt.invalid, invalid)
 			assert.Empty(t, file.Services, "and is no file")
@@ -449,7 +449,7 @@ func TestParse_keys(t *testing.T) {
 	t.Run("takes a name YAML would read as anything but a string quoted, and reads it, and what names it, as it is written", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse("services:\n  '1':\n    image: a\n    volumes: ['2026-10-11:/data']\n    networks: ['true']\n  web:\n    image: a\n    depends_on: [1]\n    environment: {'2': b}\nvolumes:\n  '2026-10-11':\nnetworks:\n  \"true\":\n")
+		file, invalid := stack.Parsed(t, "services:\n  '1':\n    image: a\n    volumes: ['2026-10-11:/data']\n    networks: ['true']\n  web:\n    image: a\n    depends_on: [1]\n    environment: {'2': b}\nvolumes:\n  '2026-10-11':\nnetworks:\n  \"true\":\n")
 		require.Empty(t, invalid)
 
 		assert.Equal(t, []string{"1", "web"}, file.ServiceNames())
@@ -460,21 +460,103 @@ func TestParse_keys(t *testing.T) {
 		assert.Equal(t, []string{"2=b"}, file.Services["web"].Environment)
 	})
 
-	for name, file := range map[string]string{
-		"a file that says where its document ends":  "services:\n  web: {image: a}\n...\n",
-		"a value a tag of its own says is anything": "services:\n  web: {image: !custom a}\n",
-		"a service's mapping tagged as nothing":     "services:\n  web: !!null {image: a}\n",
-		"and values tagged as what they are":        "services:\n  web: !!map {image: !!str a}\n",
+	t.Run("takes a file that says where its document ends", func(t *testing.T) {
+		t.Parallel()
+
+		parsed, invalid := stack.Parsed(t, "services:\n  web: {image: a}\n...\n")
+		require.Empty(t, invalid)
+
+		assert.Equal(t, "a", parsed.Services["web"].Image)
+	})
+}
+
+func TestParse_tags(t *testing.T) {
+	t.Parallel()
+
+	// service is a file of the one service web, which says what more says
+	// beside its image, a.
+	service := func(more string) string {
+		return "services:\n  web: {image: a" + more + "}\n"
+	}
+
+	for name, tt := range map[string]struct {
+		file    string
+		invalid domain.ValidationErrors
+	}{
+		"a value a tag of its own says is anything": {
+			file:    "services:\n  web: {image: !custom a}\n",
+			invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeUnsupportedTag},
+		},
+		"a value binary, whose text is not what it says": {
+			file:    "services:\n  web: {image: !!binary bmdpbng=}\n",
+			invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeUnsupportedTag},
+		},
+		"a value tagged as nothing": {
+			file:    service(", user: !!null ~"),
+			invalid: domain.ValidationErrors{"compose.services.web.user": stack.CodeUnsupportedTag},
+		},
+		"a service's mapping tagged as nothing": {
+			file:    "services:\n  web: !!null {image: a}\n",
+			invalid: domain.ValidationErrors{"compose.services.web": stack.CodeUnsupportedTag},
+		},
+		"a mapping tagged as what it is": {
+			file:    "services:\n  web: !!map {image: a}\n",
+			invalid: domain.ValidationErrors{"compose.services.web": stack.CodeUnsupportedTag},
+		},
+		"a list tagged as what it is": {
+			file:    service(", command: !!seq [run]"),
+			invalid: domain.ValidationErrors{"compose.services.web.command": stack.CodeUnsupportedTag},
+		},
+		"an item of a list tagged as a number": {
+			file:    service(", command: [run, !!int 1]"),
+			invalid: domain.ValidationErrors{"compose.services.web.command[1]": stack.CodeUnsupportedTag},
+		},
+		"the file itself tagged": {
+			file:    "--- !!map\nservices:\n  web: {image: a}\n",
+			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedTag},
+		},
+		"resources tagged as nothing, with limits beneath them": {
+			file:    service(", resources: !!null {limits: {cpus: 1}}"),
+			invalid: domain.ValidationErrors{"compose.services.web.resources": stack.CodeUnsupportedTag},
+		},
+		"and with nothing beneath them": {
+			file:    service(", resources: !!null {}"),
+			invalid: domain.ValidationErrors{"compose.services.web.resources": stack.CodeUnsupportedTag},
+		},
+		"and over text": {
+			file:    service(", resources: !!null abc"),
+			invalid: domain.ValidationErrors{"compose.services.web.resources": stack.CodeUnsupportedTag},
+		},
+		"limits tagged as nothing, with a limit beneath them": {
+			file:    service(", resources: {limits: !!null {cpus: 1}}"),
+			invalid: domain.ValidationErrors{"compose.services.web.resources.limits": stack.CodeUnsupportedTag},
+		},
+		"and over text, as limits": {
+			file:    service(", resources: {limits: !!null abc}"),
+			invalid: domain.ValidationErrors{"compose.services.web.resources.limits": stack.CodeUnsupportedTag},
+		},
 	} {
-		t.Run("takes "+name+", as what is written, a tag on a value saying nothing of it", func(t *testing.T) {
+		t.Run("refuses "+name+", saying where", func(t *testing.T) {
 			t.Parallel()
 
-			parsed, invalid := stack.Parse(file)
-			require.Empty(t, invalid)
+			file, invalid := stack.Parsed(t, tt.file)
 
-			assert.Equal(t, "a", parsed.Services["web"].Image)
+			assert.Equal(t, tt.invalid, invalid)
+			assert.Empty(t, file.Services, "and is no file")
 		})
 	}
+
+	t.Run("takes a key and a value tagged as strings, which they are, as what is written, and a tag that says nothing", func(t *testing.T) {
+		t.Parallel()
+
+		file, invalid := stack.Parsed(t, "services:\n  web: {image: !!str a, user: ! root, environment: {!!str 1: !!str 2}}\n")
+		require.Empty(t, invalid)
+
+		web := file.Services["web"]
+		assert.Equal(t, "a", web.Image)
+		assert.Equal(t, "root", web.User)
+		assert.Equal(t, []string{"1=2"}, web.Environment)
+	})
 }
 
 func TestParse_aliases(t *testing.T) {
@@ -520,7 +602,7 @@ func TestParse_aliases(t *testing.T) {
 		t.Run("refuses "+name+", saying where", func(t *testing.T) {
 			t.Parallel()
 
-			file, invalid := stack.Parse(tt.file)
+			file, invalid := stack.Parsed(t, tt.file)
 
 			assert.Equal(t, tt.invalid, invalid)
 			assert.Empty(t, file.Services, "and is no file")
@@ -586,7 +668,7 @@ func TestParse_depth(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			file, invalid := stack.Parse(tt.file)
+			file, invalid := stack.Parsed(t, tt.file)
 
 			assert.Equal(t, tt.invalid, invalid)
 			assert.Empty(t, file.Services, "and is no file")
@@ -640,7 +722,7 @@ func TestParse_caps(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			file, invalid := stack.Parse(tt.file)
+			file, invalid := stack.Parsed(t, tt.file)
 
 			assert.Equal(t, tt.invalid, invalid)
 
@@ -663,14 +745,14 @@ func TestParse_caps(t *testing.T) {
 	t.Run("a range is counted by its size before any port of it is, all of a file's ports at most", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse("services:\n  web:\n    image: nginx\n    ports: [\"1-1000:1-1000\"]\n")
+		file, invalid := stack.Parsed(t, "services:\n  web:\n    image: nginx\n    ports: [\"1-1000:1-1000\"]\n")
 		require.Empty(t, invalid)
 
 		ports := file.Services["web"].Ports
 		require.Len(t, ports, stack.MaxPorts)
 		assert.Equal(t, stack.Port{Container: 1000, Host: 1000, Protocol: "tcp"}, ports[stack.MaxPorts-1])
 
-		_, invalid = stack.Parse("services:\n  web:\n    image: nginx\n    ports: [\"1-65535\"]\n")
+		_, invalid = stack.Parsed(t, "services:\n  web:\n    image: nginx\n    ports: [\"1-65535\"]\n")
 		assert.Equal(t, domain.ValidationErrors{"compose.services.web.ports[0]": "too_large"}, invalid)
 	})
 
@@ -697,7 +779,7 @@ func TestParse_caps(t *testing.T) {
 
 		// web's network and its mounts, db's dependency on it and the default
 		// network db joins.
-		file, invalid := stack.Parse(strings.Replace(mounting(stack.MaxReferences-3, "    networks: [n]\n"), "depends_on: [nope]", "depends_on: [web]", 1))
+		file, invalid := stack.Parsed(t, strings.Replace(mounting(stack.MaxReferences-3, "    networks: [n]\n"), "depends_on: [nope]", "depends_on: [web]", 1))
 		require.Empty(t, invalid)
 
 		assert.Len(t, file.Services["web"].Volumes, stack.MaxReferences-3)
@@ -771,7 +853,7 @@ func TestParse_caps(t *testing.T) {
 		t.Run("of references, "+name, func(t *testing.T) {
 			t.Parallel()
 
-			file, invalid := stack.Parse(tt.file)
+			file, invalid := stack.Parsed(t, tt.file)
 
 			assert.Equal(t, tt.invalid, invalid)
 			assert.Empty(t, file.Services, "and is no file")
@@ -792,7 +874,7 @@ func TestParse_mostInvalid(t *testing.T) {
 			fmt.Fprintf(&b, "    k%03d: 1\n", i)
 		}
 
-		_, invalid := stack.Parse(b.String())
+		_, invalid := stack.Parsed(t, b.String())
 		require.Len(t, invalid, stack.MaxInvalid)
 
 		var want []string
@@ -813,7 +895,7 @@ func TestParse_mostInvalid(t *testing.T) {
 			fmt.Fprintf(&b, "  s%02d: {image: nginx latest, restart: always}\n", i)
 		}
 
-		_, invalid := stack.Parse(b.String())
+		_, invalid := stack.Parsed(t, b.String())
 		require.Len(t, invalid, stack.MaxInvalid)
 
 		for i := range stack.MaxServices {
@@ -842,7 +924,7 @@ func TestParse_mostInvalid(t *testing.T) {
 		}
 		b.WriteString("    image: nginx latest\n")
 
-		_, invalid := stack.Parse(b.String())
+		_, invalid := stack.Parsed(t, b.String())
 		require.Len(t, invalid, stack.MaxInvalid)
 
 		assert.Equal(t, stack.CodeInvalidRestart, invalid["compose.services.web.restart"])
@@ -1071,6 +1153,10 @@ func TestParse_bounded(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			require.LessOrEqual(t, len(tt.file), stack.MaxFile)
 
+			// the reading of it held to the strict decode, before what reading
+			// it takes is counted.
+			stack.Parsed(t, tt.file)
+
 			var before, after runtime.MemStats
 
 			runtime.GC()
@@ -1190,7 +1276,7 @@ func TestParse_ports(t *testing.T) {
 		t.Run("refuses "+name, func(t *testing.T) {
 			t.Parallel()
 
-			_, invalid := stack.Parse("services:\n  web:\n    image: nginx\n    ports:\n      - " + tt.port + "\n")
+			_, invalid := stack.Parsed(t, "services:\n  web:\n    image: nginx\n    ports:\n      - "+tt.port+"\n")
 
 			require.Len(t, invalid, 1, "%v", invalid)
 
@@ -1228,7 +1314,7 @@ func TestParse_limits(t *testing.T) {
 		t.Run("refuses "+name, func(t *testing.T) {
 			t.Parallel()
 
-			_, invalid := stack.Parse(limited(tt.key, tt.value))
+			_, invalid := stack.Parsed(t, limited(tt.key, tt.value))
 
 			assert.Equal(t, domain.ValidationErrors{"compose.services.web.resources.limits." + tt.key: tt.code}, invalid)
 		})
@@ -1247,7 +1333,7 @@ func TestParse_limits(t *testing.T) {
 		t.Run("reads memory of "+written, func(t *testing.T) {
 			t.Parallel()
 
-			file, invalid := stack.Parse(limited("memory", written))
+			file, invalid := stack.Parsed(t, limited("memory", written))
 			require.Empty(t, invalid)
 
 			assert.Equal(t, bytes, file.Services["web"].Memory)
@@ -1290,7 +1376,7 @@ func TestParse_mounts(t *testing.T) {
 		t.Run("refuses "+name, func(t *testing.T) {
 			t.Parallel()
 
-			_, invalid := stack.Parse(mounted(tt.volume))
+			_, invalid := stack.Parsed(t, mounted(tt.volume))
 
 			assert.Equal(t, domain.ValidationErrors{"compose.services.web.volumes[0]": tt.code}, invalid)
 		})
@@ -1299,7 +1385,7 @@ func TestParse_mounts(t *testing.T) {
 	t.Run("takes a bind of an absolute path and a declared volume, read only or not", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse("services:\n  web:\n    image: nginx\n    volumes:\n      - /srv:/srv\n      - data:/data:ro\n      - {type: bind, source: /etc/site, target: /etc/site, read_only: false}\nvolumes:\n  data:\n")
+		file, invalid := stack.Parsed(t, "services:\n  web:\n    image: nginx\n    volumes:\n      - /srv:/srv\n      - data:/data:ro\n      - {type: bind, source: /etc/site, target: /etc/site, read_only: false}\nvolumes:\n  data:\n")
 		require.Empty(t, invalid)
 
 		assert.Equal(t, []stack.Mount{
@@ -1326,7 +1412,7 @@ func TestParse_names(t *testing.T) {
 		t.Run("refuses "+name+" docker would not name", func(t *testing.T) {
 			t.Parallel()
 
-			_, invalid := stack.Parse(tt.file)
+			_, invalid := stack.Parsed(t, tt.file)
 
 			assert.Equal(t, domain.ValidationErrors{tt.path: "invalid_name"}, invalid)
 		})
@@ -1335,7 +1421,7 @@ func TestParse_names(t *testing.T) {
 	t.Run("takes names of letters, digits, dots, dashes and underscores, from a letter or a digit", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse("services:\n  a:\n    image: nginx\n    networks: [front.end_1]\n  2-web_v1.0:\n    image: nginx\nnetworks:\n  front.end_1:\n")
+		file, invalid := stack.Parsed(t, "services:\n  a:\n    image: nginx\n    networks: [front.end_1]\n  2-web_v1.0:\n    image: nginx\nnetworks:\n  front.end_1:\n")
 		require.Empty(t, invalid)
 
 		assert.Equal(t, []string{"2-web_v1.0", "a"}, file.ServiceNames())
@@ -1347,9 +1433,9 @@ func TestParse_names(t *testing.T) {
 	t.Run("takes names as long as a name may be, and what names them", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse(strings.NewReplacer("NAME", longest).Replace(
-			"services:\n  NAME:\n    image: nginx\n    networks: [NAME]\n    volumes: [NAME:/data, {type: volume, source: NAME, target: /backup}]\n" +
-				"  web:\n    image: nginx\n    depends_on: [NAME]\n    networks: {NAME: }\n  api:\n    image: api\n    depends_on: {NAME: {condition: service_started}}\n" +
+		file, invalid := stack.Parsed(t, strings.NewReplacer("NAME", longest).Replace(
+			"services:\n  NAME:\n    image: nginx\n    networks: [NAME]\n    volumes: [NAME:/data, {type: volume, source: NAME, target: /backup}]\n"+
+				"  web:\n    image: nginx\n    depends_on: [NAME]\n    networks: {NAME: }\n  api:\n    image: api\n    depends_on: {NAME: {condition: service_started}}\n"+
 				"networks:\n  NAME:\nvolumes:\n  NAME:\n",
 		))
 		require.Empty(t, invalid)
@@ -1377,7 +1463,7 @@ func TestParse_names(t *testing.T) {
 		t.Run("refuses "+name+" named longer than a name may be, once, and reads nothing beneath it", func(t *testing.T) {
 			t.Parallel()
 
-			_, invalid := stack.Parse(tt.file)
+			_, invalid := stack.Parsed(t, tt.file)
 
 			assert.Equal(t, domain.ValidationErrors{tt.path: "too_large"}, invalid)
 		})
@@ -1390,7 +1476,7 @@ func TestFile_Levels(t *testing.T) {
 	t.Run("a chain is a level a service", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse("services:\n  web:\n    image: nginx\n    depends_on: [api]\n  api:\n    image: api\n    depends_on: [db]\n  db:\n    image: postgres\n")
+		file, invalid := stack.Parsed(t, "services:\n  web:\n    image: nginx\n    depends_on: [api]\n  api:\n    image: api\n    depends_on: [db]\n  db:\n    image: postgres\n")
 		require.Empty(t, invalid)
 
 		assert.Equal(t, [][]string{{"db"}, {"api"}, {"web"}}, file.Levels())
@@ -1399,7 +1485,7 @@ func TestFile_Levels(t *testing.T) {
 	t.Run("what depends on nothing shares the first level, in the order of its names", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse("services:\n  web:\n    image: nginx\n    depends_on: [db, cache]\n  db:\n    image: postgres\n  cache:\n    image: redis\n  worker:\n    image: worker\n")
+		file, invalid := stack.Parsed(t, "services:\n  web:\n    image: nginx\n    depends_on: [db, cache]\n  db:\n    image: postgres\n  cache:\n    image: redis\n  worker:\n    image: worker\n")
 		require.Empty(t, invalid)
 
 		assert.Equal(t, [][]string{{"cache", "db", "worker"}, {"web"}}, file.Levels())
@@ -1408,7 +1494,7 @@ func TestFile_Levels(t *testing.T) {
 	t.Run("services in a ring are in none, which a stack's plan refuses", func(t *testing.T) {
 		t.Parallel()
 
-		file, invalid := stack.Parse("services:\n  web:\n    image: nginx\n    depends_on: [api]\n  api:\n    image: api\n    depends_on: [web]\n  db:\n    image: postgres\n")
+		file, invalid := stack.Parsed(t, "services:\n  web:\n    image: nginx\n    depends_on: [api]\n  api:\n    image: api\n    depends_on: [web]\n  db:\n    image: postgres\n")
 		require.Empty(t, invalid, "reading a file says nothing of rings")
 
 		assert.Equal(t, [][]string{{"db"}}, file.Levels())

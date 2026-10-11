@@ -83,6 +83,7 @@ var english = map[string]string{
 	"unsupported_key":      "a stack's file does not take this key",
 	"duplicate_key":        "this key is given more than once",
 	"unsupported_alias":    "a stack's file takes no anchor (&name) or alias (*name): say each thing where it is used",
+	"unsupported_tag":      "a stack's file takes no tag (!name, !!type) but !!str: write each value as it is to be read",
 	"too_deep":             "a stack's file nests nothing deeper than 16 levels beneath its top",
 	"undefined_service":    "the file has no service called this",
 	"undefined_volume":     "the file declares no volume called this under its volumes",

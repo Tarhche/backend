@@ -45,11 +45,11 @@ func TestShapes(t *testing.T) {
 			assert.ElementsMatch(t, tagsOf(shape), keys, "shaped holds a %s to the keys its fields are", shape)
 			assert.LessOrEqual(t, len(keys), 64, "and tells each of them given twice of 64 at most")
 
-			_, invalid := Parse(within(steps, "{bogus: 1}"))
+			_, invalid := Parsed(t, within(steps, "{bogus: 1}"))
 			assert.Equal(t, CodeUnsupportedKey, invalid[Field(pathOf(steps, "bogus"))], "a key none of them is refused under its own path: %v", invalid)
 
 			for _, key := range keys {
-				_, invalid := Parse(within(steps, "{"+key+": ~}"))
+				_, invalid := Parsed(t, within(steps, "{"+key+": ~}"))
 				assert.NotEqual(t, CodeUnsupportedKey, invalid[Field(pathOf(steps, key))], "and %s is taken: %v", key, invalid)
 			}
 		})

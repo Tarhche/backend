@@ -56,7 +56,7 @@ func TestTheWorkloadsCodesAreSaid(t *testing.T) {
 		"not_found", "not_running", "not_docker", "docker_unavailable", "invalid", "timeout", "internal",
 
 		// a stack's file
-		"unsupported_key", "duplicate_key", "unsupported_alias", "too_deep", "undefined_service", "undefined_volume", "undefined_network",
+		"unsupported_key", "duplicate_key", "unsupported_alias", "unsupported_tag", "too_deep", "undefined_service", "undefined_volume", "undefined_network",
 		"invalid_restart", "invalid_port_mapping", "invalid_cpus", "invalid_memory", "relative_bind",
 		"anonymous_volume", "invalid_volume_type", "invalid_condition", "depends_on_cycle",
 		"invalid_image", "invalid_ip", "invalid_protocol", "invalid_mount", "invalid_name", "too_large",

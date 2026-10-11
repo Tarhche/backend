@@ -109,8 +109,7 @@ const (
 	// CodeUnsupportedKey is a key the file does not take: one compose takes
 	// that the platform does not carry out, such as build or healthcheck, and
 	// any other; and one that is not a string as YAML reads it, a number, a
-	// boolean, nothing, a merge or what a tag says is anything else, which
-	// is quoted to be taken as a string.
+	// boolean, nothing or a merge, which is quoted to be taken as a string.
 	CodeUnsupportedKey = "unsupported_key"
 
 	// CodeDuplicateKey is a key a mapping of the file says twice.
@@ -120,6 +119,13 @@ const (
 	// the file does not take: what it says, it says once, so that reading it
 	// is never more than what it is.
 	CodeUnsupportedAlias = "unsupported_alias"
+
+	// CodeUnsupportedTag is a tag on anything in the file but a string's
+	// (!!str), which the file does not take: one of its own (!name), or one
+	// of YAML's, which would have what is written read as something else,
+	// binary or nothing say. The platform reads what is written, and nothing
+	// else.
+	CodeUnsupportedTag = "unsupported_tag"
 
 	// CodeTooDeep is what is nested in the file deeper than MaxDepth.
 	CodeTooDeep = "too_deep"
@@ -331,12 +337,13 @@ func Field(path string) string {
 // does not carry out, build, healthcheck, configs, secrets, profiles, extends,
 // deploy, a top-level version or name or an x- key among them, or any other;
 // and so is a key, anywhere in it, that is not a string as YAML reads it, a
-// number, a boolean, nothing, a merge or anything a tag says it is but a
-// string, which is quoted to be taken as one. Once nothing is wrong with it,
-// it is decoded strictly into that shape too (yaml.Decoder.KnownFields),
-// which refuses nothing it was not refused for already: what that refuses all
-// the same is a mistake of the reading's, which refuses the file under its
-// own path, compose, and is logged. What it takes:
+// number, a boolean, nothing or a merge, which is quoted to be taken as one,
+// and a tag on anything in it but a string's (CodeUnsupportedTag): what it
+// says is read as it is written. Once nothing is wrong with it, it is decoded
+// strictly into that shape too (yaml.Decoder.KnownFields), which refuses
+// nothing it was not refused for already: what that refuses all the same is a
+// mistake of the reading's, which refuses the file under its own path,
+// compose, and is logged. What it takes:
 //
 //   - at the top, services, at least one, and the volumes and the networks it
 //     declares, each by its name and with nothing beneath it;
@@ -364,18 +371,18 @@ func Field(path string) string {
 // What reading it takes is bounded by what it is: an anchor or an alias,
 // anywhere in it, is refused under its path (CodeUnsupportedAlias) before
 // anything else of it is read, so that nothing in it is read twice, and so is
-// a key that is not a string, and what is nested in it deeper than MaxDepth
-// (CodeTooDeep); it declares MaxServices services, MaxNetworks networks and
-// MaxVolumes volumes at most, and its services publish MaxPorts ports at
-// most, a range counted by its size before any port of it is, and name
-// MaxReferences of what it declares at most, which planning its graph takes
-// as long as, each counted as it is read; a name refused is said once, and
-// nothing beneath it is read; where anything is in it is
-// written out as a path only once it is refused; and MaxInvalid of what is
-// wrong with it is said at most, the first of it, as it is read, in the order
-// it says things, and nothing more of it is read once that much is. A file
-// that is taken is read twice, into nodes and decoded strictly, and one that
-// is refused once, into nodes.
+// a tag but a string's, a key that is not a string, and what is nested in it
+// deeper than MaxDepth (CodeTooDeep); it declares MaxServices services,
+// MaxNetworks networks and MaxVolumes volumes at most, and its services
+// publish MaxPorts ports at most, a range counted by its size before any port
+// of it is, and name MaxReferences of what it declares at most, which
+// planning its graph takes as long as, each counted as it is read; a name
+// refused is said once, and nothing beneath it is read; where anything is in
+// it is written out as a path only once it is refused; and MaxInvalid of what
+// is wrong with it is said at most, the first of it, as it is read, in the
+// order it says things, and nothing more of it is read once that much is. A
+// file that is taken is read twice, into nodes and decoded strictly, and one
+// that is refused once, into nodes.
 func Parse(compose string) (File, domain.ValidationErrors) {
 	return parse(compose, strictly)
 }
@@ -633,13 +640,14 @@ func (r *reading) full() bool {
 
 // sound reports whether a stack's file, root, is sound to be read: nothing
 // of it an anchor or an alias, which would have what it stands for read
-// again wherever it is, every key of it a string (stringKey), and nothing of
-// it deeper than MaxDepth. One that is not is walked as it is written
-// (walker), which says of each node that is not, under its path, what it is
-// refused for: an anchor or an alias (CodeUnsupportedAlias), a key that is no
-// string (CodeUnsupportedKey), and the first of what is too deep in what
-// holds it (CodeTooDeep). What an alias stands for is never followed, and a
-// file that is sound is looked over once, allocating nothing.
+// again wherever it is, nothing of it tagged but as a string (tagged), every
+// key of it a string (stringKey), and nothing of it deeper than MaxDepth. One
+// that is not is walked as it is written (walker), which says of each node
+// that is not, under its path, what it is refused for: an anchor or an alias
+// (CodeUnsupportedAlias), a tag (CodeUnsupportedTag), a key that is no string
+// (CodeUnsupportedKey), and the first of what is too deep in what holds it
+// (CodeTooDeep). What an alias stands for is never followed, and a file that
+// is sound is looked over once, allocating nothing.
 func (r *reading) sound(root *yaml.Node) bool {
 	if isSound(root, 0) {
 		return true
@@ -656,7 +664,7 @@ func (r *reading) sound(root *yaml.Node) bool {
 // nothing, and looking at nothing deeper than MaxDepth.
 func isSound(n *yaml.Node, depth int) bool {
 	switch {
-	case aliasing(n):
+	case aliasing(n), tagged(n):
 		return false
 	case len(n.Content) > 0 && depth >= MaxDepth:
 		return false
@@ -678,6 +686,14 @@ func isSound(n *yaml.Node, depth int) bool {
 // aliasing reports whether n is an anchor or an alias.
 func aliasing(n *yaml.Node) bool {
 	return n.Kind == yaml.AliasNode || len(n.Anchor) > 0
+}
+
+// tagged reports whether n is tagged as anything but a string (!!str): with
+// a tag of its own, or one of YAML's that would have what is written read as
+// something else, binary, nothing or a mapping say. What says no tag, or the
+// one that says nothing (!), is read as it is written.
+func tagged(n *yaml.Node) bool {
+	return n.Style&yaml.TaggedStyle != 0 && n.ShortTag() != "!!str"
 }
 
 // stringKey reports whether key, a key of a mapping, is a string as YAML
@@ -710,11 +726,14 @@ type step struct {
 }
 
 // walk says what of n, depth levels beneath the top of the file and at the
-// walker's path, is not sound to be read: n being an anchor or an alias, and
-// then what is beneath it.
+// walker's path, is not sound to be read: n being an anchor or an alias, or
+// tagged, and then what is beneath it.
 func (w *walker) walk(n *yaml.Node, depth int) {
-	if aliasing(n) {
+	switch {
+	case aliasing(n):
 		w.refuse(w.path(), CodeUnsupportedAlias)
+	case tagged(n):
+		w.refuse(w.path(), CodeUnsupportedTag)
 	}
 
 	w.beneath(n, depth)
@@ -724,9 +743,9 @@ func (w *walker) walk(n *yaml.Node, depth int) {
 // the file and at the walker's path, is not sound to be read, in the order it
 // is written: the first of it, when that is deeper than MaxDepth, and nothing
 // else; and otherwise of each entry of a mapping, an anchor or an alias of
-// its key or of its value, and then its key not being a string, under the
-// entry's path, and of each item of a sequence its being an anchor or an
-// alias, and what is beneath each of them.
+// its key or of its value, or else either of them tagged, or else its key not
+// being a string, under the entry's path, and of each item of a sequence its
+// being an anchor or an alias, or tagged, and what is beneath each of them.
 func (w *walker) beneath(n *yaml.Node, depth int) {
 	switch {
 	case w.full() || len(n.Content) == 0:
@@ -751,11 +770,12 @@ func (w *walker) beneath(n *yaml.Node, depth int) {
 
 			w.steps = append(w.steps, step{key: keyOf(key)})
 
-			if aliasing(key) || aliasing(value) {
+			switch {
+			case aliasing(key) || aliasing(value):
 				w.refuse(w.path(), CodeUnsupportedAlias)
-			}
-
-			if !stringKey(key) {
+			case tagged(key) || tagged(value):
+				w.refuse(w.path(), CodeUnsupportedTag)
+			case !stringKey(key):
 				w.refuse(w.path(), CodeUnsupportedKey)
 			}
 
