@@ -21,9 +21,10 @@ import (
 //
 // It refuses what docker refuses that the strategies are held to: a name
 // taken, an image nobody has, a network or a volume of a name there already,
-// one in use, and a running container removed without force. Down has every
-// request fail as a dockerd that does not answer, and Refuse fails the
-// requests it names, by method, with what it says.
+// one in use, and a running container removed without force. It keeps the
+// aliases each container is on each of its networks under (Aliases). Down
+// has every request fail as a dockerd that does not answer, and Refuse fails
+// the requests it names, by method, with what it says.
 type Dockerd struct {
 	lock sync.Mutex
 
@@ -31,6 +32,10 @@ type Dockerd struct {
 	images     []docker.Image
 	networks   []docker.Network
 	volumes    []docker.Volume
+
+	// aliases are the names each container is reached by on each of its
+	// networks, by its Docker id and the network's name.
+	aliases map[string]map[string][]string
 
 	// Registry are the images there are to pull, by reference.
 	Registry map[string]bool
@@ -56,7 +61,7 @@ var _ docker.Daemon = &Dockerd{}
 // NewDockerd is a dockerd holding nothing, but the networks every dockerd
 // has of its own, that can pull any image.
 func NewDockerd() *Dockerd {
-	d := &Dockerd{Refuse: make(map[string]error), calls: make(map[string]int)}
+	d := &Dockerd{Refuse: make(map[string]error), calls: make(map[string]int), aliases: make(map[string]map[string][]string)}
 
 	for _, name := range []string{"bridge", "host", "none"} {
 		d.networks = append(d.networks, docker.Network{ID: "net-" + name, Name: name, Driver: name, Scope: "local", Containers: []string{}})
@@ -125,6 +130,20 @@ func (d *Dockerd) Forget(name string) {
 	d.images = slices.DeleteFunc(d.images, func(i docker.Image) bool { return i.ID == name || slices.Contains(i.Tags, name) })
 	d.networks = slices.DeleteFunc(d.networks, func(n docker.Network) bool { return n.ID == name || n.Name == name })
 	d.volumes = slices.DeleteFunc(d.volumes, func(v docker.Volume) bool { return v.Name == name })
+}
+
+// Aliases are the names the container id names, by its Docker id or its
+// name, is reached by on the network named network, as it was put on it.
+func (d *Dockerd) Aliases(id string, network string) []string {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	i := d.containerAt(id)
+	if i < 0 {
+		return nil
+	}
+
+	return slices.Clone(d.aliases[d.containers[i].ID][network])
 }
 
 // Containers it holds, as they are now.
@@ -274,6 +293,13 @@ func (d *Dockerd) CreateContainer(_ context.Context, spec docker.ContainerSpec) 
 
 	d.containers = append(d.containers, c)
 
+	d.aliases[c.ID] = make(map[string][]string, len(networks))
+	for _, network := range networks {
+		if names := spec.Aliases[network]; len(names) > 0 {
+			d.aliases[c.ID][network] = slices.Clone(names)
+		}
+	}
+
 	return c, nil
 }
 
@@ -362,7 +388,7 @@ func (d *Dockerd) ContainerStats(_ context.Context, id string) (docker.Stats, er
 	return docker.Stats{CPUPercent: 12.5, MemoryUsed: 64 << 20, MemoryLimit: 1 << 30, PIDs: 3, SampledAt: time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)}, nil
 }
 
-func (d *Dockerd) ConnectNetwork(_ context.Context, network string, id string, _ []string) error {
+func (d *Dockerd) ConnectNetwork(_ context.Context, network string, id string, aliases []string) error {
 	if err := d.ask("ConnectNetwork"); err != nil {
 		return err
 	}
@@ -388,6 +414,12 @@ func (d *Dockerd) ConnectNetwork(_ context.Context, network string, id string, _
 	d.containers[i].Networks = append(d.containers[i].Networks, name)
 	slices.Sort(d.containers[i].Networks)
 
+	if d.aliases[d.containers[i].ID] == nil {
+		d.aliases[d.containers[i].ID] = make(map[string][]string)
+	}
+
+	d.aliases[d.containers[i].ID][name] = slices.Clone(aliases)
+
 	return nil
 }
 
@@ -409,6 +441,7 @@ func (d *Dockerd) DisconnectNetwork(_ context.Context, network string, id string
 	}
 
 	d.containers[i].Networks = slices.DeleteFunc(d.containers[i].Networks, func(n string) bool { return n == network })
+	delete(d.aliases[d.containers[i].ID], network)
 
 	return nil
 }

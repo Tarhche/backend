@@ -370,9 +370,11 @@ func (s *Containers) Apply(_ context.Context, _ containerKind.Container, action 
 // force, which is refused as docker would refuse it; and putting it on a
 // network, or taking it off one, changes the networks its spec names, which
 // are what it is put back on. A network it is put on is there already, and is
-// not its own (Spec.External) unless its graph made it for it; one it is
-// taken off it names no more, and is one its spec names, or that its VM's
-// dockerd last said it is on.
+// not its own (Spec.External) unless its graph made it for it, nor named as
+// one when every dockerd has it (networkKind.Default), which takes no
+// aliases, as docker refuses them there; one it is taken off it names no
+// more, and is one its spec names, or that its VM's dockerd last said it is
+// on.
 func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, action string, payload any) (containerKind.Container, domain.ValidationErrors, error) {
 	switch action {
 	case containerKind.ActionDelete:
@@ -394,6 +396,13 @@ func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, act
 		}
 
 		connect.Network = network
+
+		// a network every dockerd has takes no aliases, which docker refuses
+		// there, and which its spec would otherwise name, to make it again
+		// with.
+		if networkKind.Default(connect.Network) && len(connect.Aliases) > 0 {
+			return containerKind.Container{}, nil, blocks.Refused("network-scoped alias is supported only for containers in user defined networks")
+		}
 
 		own, err := s.owns(ctx, c, networkKind.Name, connect.Network)
 		if err != nil {

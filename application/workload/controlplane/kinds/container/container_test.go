@@ -598,6 +598,38 @@ func TestContainers_Prepare(t *testing.T) {
 		assert.Nil(t, taken.Spec.External)
 	})
 
+	t.Run("put on bridge, which its vm's dockerd has it on and its spec does not name, its spec names it, as no network there before it, and nothing more is asked of its node once it is on it", func(t *testing.T) {
+		t.Parallel()
+
+		require.Equal(t, []string{"bridge"}, running.Status.Docker.Networks)
+		require.Empty(t, running.Spec.Networks)
+
+		prepared, _, err := w.Containers.Prepare(ctx, running, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "bridge"})
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"bridge"}, prepared.Spec.Networks)
+		assert.Empty(t, prepared.Spec.External, "every dockerd has it, which its graph never makes or waits on")
+		assert.Empty(t, prepared.Spec.Aliases)
+
+		intents, err := w.Containers.Reconcile(ctx, prepared)
+		require.NoError(t, err)
+		assert.Empty(t, intents, "it is on it")
+
+		_, _, err = w.Containers.Prepare(ctx, prepared, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "bridge"})
+		assert.Error(t, err, "and put on it again is refused, as both its spec and docker say it is on it")
+	})
+
+	t.Run("but put on a network every dockerd has under aliases, which docker refuses there, it is refused, its spec as it was", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := w.Containers.Prepare(ctx, running, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "bridge", Aliases: []string{"api"}})
+
+		var refused *noderequest.Error
+		require.ErrorAs(t, err, &refused)
+		assert.Equal(t, noderequest.CodeInvalid, refused.Code)
+		assert.Equal(t, "network-scoped alias is supported only for containers in user defined networks", refused.Message)
+	})
+
 	t.Run("a kept spec naming its vm and what to make it with again is no request, and is not refused for asking for two vms", func(t *testing.T) {
 		t.Parallel()
 

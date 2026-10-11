@@ -29,6 +29,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
@@ -318,16 +319,36 @@ func (n *Node) on(ctx context.Context, daemon docker.Daemon, c containerKind.Con
 }
 
 // connected puts the container id names on a network, by its name or its
-// Docker id, as connect asks. One the network is there for, and that its VM's
-// dockerd has on it once it answered, which docker refuses to put on a
-// network it is on already, is on it, as asked, and no failure: what the
-// control plane puts on a network a disconnect asked a moment before had not
-// taken it off yet, or which its record had not heard it was put on. It is on
-// it under the names it was put on it with, which the refusal leaves as they
-// were. What dockerd answers of a network or a container it does not have,
-// of one not on the network, or when it cannot be asked which, fails the
-// command, as it did.
+// Docker id, as connect asks, under the aliases it asks for. One its VM's
+// dockerd has on a network of somebody's making already is taken off it, and
+// put back on it under those aliases: docker keeps the aliases a container
+// was put on a network with, refusing to put a running one on it again, and
+// doing nothing for one that is not running, while its spec names the
+// network under the aliases asked from then on. What the control plane puts
+// on a network docker has it on, but its record does not say so, put on it
+// from its VM's terminal say, or by a try of the same connect whose result
+// was not heard, is on it as asked so, at the cost of a moment off it. One
+// put back on that dockerd then refuses is off it, and the command fails:
+// the network its spec names, it is put on it again later, as any container
+// off a network its spec names is.
+//
+// A network every dockerd has (networkKind.Default) takes no aliases, and a
+// container on it is on it as it was. Of that, and of a network a container
+// was taken off, or not found on, before the connect: one the network is
+// there for, and that its VM's dockerd has on it once it answered, which
+// docker refuses to put on a network it is on already, is on it, as asked,
+// and no failure: what the control plane puts on a network a disconnect
+// asked a moment before had not taken it off yet, or which its record had
+// not heard it was put on. What dockerd answers of a network or a container
+// it does not have, of one not on the network, or when it cannot be asked
+// which, fails the command, as it did.
 func connected(ctx context.Context, daemon docker.Daemon, id string, connect containerKind.ConnectPayload) error {
+	if name, on, read := attachment(ctx, daemon, id, connect.Network); read && on && !networkKind.Default(name) {
+		if err := disconnected(ctx, daemon, id, containerKind.DisconnectPayload{Network: name}); err != nil {
+			return err
+		}
+	}
+
 	err := daemon.ConnectNetwork(ctx, connect.Network, id, connect.Aliases)
 	if err == nil || errors.Is(err, domain.ErrNotExists) {
 		return err
@@ -367,22 +388,33 @@ func disconnected(ctx context.Context, daemon docker.Daemon, id string, disconne
 // name or its Docker id, as its VM's dockerd has the two now, and whether it
 // could be told: dockerd has both, and answered.
 func onNetwork(ctx context.Context, daemon docker.Daemon, id string, network string) (bool, bool) {
+	_, on, read := attachment(ctx, daemon, id, network)
+
+	return on, read
+}
+
+// attachment is the name of a network, by its name or its Docker id, as its
+// VM's dockerd has it, and whether the container id names is on it, as
+// onNetwork reports it.
+func attachment(ctx context.Context, daemon docker.Daemon, id string, network string) (string, bool, bool) {
 	found, err := daemon.Container(ctx, id)
 	if err != nil {
-		return false, false
+		return "", false, false
 	}
 
 	networks, err := daemon.Networks(ctx)
 	if err != nil {
-		return false, false
+		return "", false, false
 	}
 
 	at := slices.IndexFunc(networks, func(n docker.Network) bool { return n.Name == network || n.ID == network })
 	if at < 0 {
-		return false, false
+		return "", false, false
 	}
 
-	return slices.Contains(found.Networks, networks[at].Name), true
+	name := networks[at].Name
+
+	return name, slices.Contains(found.Networks, name), true
 }
 
 // remove removes a container, running or not: whether one that runs may be

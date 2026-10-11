@@ -282,7 +282,7 @@ func TestNode_Execute(t *testing.T) {
 		assert.ErrorIs(t, err, domain.ErrNotExists, "a network that is not there is not there")
 	})
 
-	t.Run("put on a network it is on already, which docker refuses, it is on it, as asked, by the network's name or its docker id", func(t *testing.T) {
+	t.Run("put on a network of somebody's making it is on already, it is taken off it and put back on it under the aliases asked, by the network's name or its docker id", func(t *testing.T) {
 		t.Parallel()
 
 		strategy, dockerd, _ := newNode(t)
@@ -291,16 +291,62 @@ func TestNode_Execute(t *testing.T) {
 		_, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
 		require.NoError(t, err)
 
-		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend"})
+		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend", Aliases: []string{"api"}})
 		require.NoError(t, err)
+		require.Equal(t, []string{"api"}, dockerd.Aliases("web", "backend"))
 
-		for _, network := range []string{"backend", "n1"} {
-			outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: network})
+		for network, aliases := range map[string][]string{"backend": {"web"}, "n1": {"db", "store"}} {
+			outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: network, Aliases: aliases})
 			require.NoError(t, err, network)
 			assert.Contains(t, outcome.Status.Docker.Networks, "backend", network)
+			assert.Equal(t, aliases, dockerd.Aliases("web", "backend"), "under the aliases asked: %s", network)
 		}
 
-		assert.Equal(t, 3, dockerd.Calls("ConnectNetwork"), "docker was asked, and refused")
+		outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend"})
+		require.NoError(t, err)
+		assert.Contains(t, outcome.Status.Docker.Networks, "backend")
+		assert.Empty(t, dockerd.Aliases("web", "backend"), "and under none, when none are asked")
+
+		assert.Equal(t, 3, dockerd.Calls("DisconnectNetwork"), "taken off it each time it was on it")
+	})
+
+	t.Run("and so is a stopped one", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd, _ := newNode(t)
+		dockerd.HoldNetwork(docker.Network{ID: "n1", Name: "backend"})
+
+		_, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend", Aliases: []string{"api"}})
+		require.NoError(t, err)
+
+		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionStop, nil)
+		require.NoError(t, err)
+
+		outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend", Aliases: []string{"web"}})
+		require.NoError(t, err)
+		assert.Contains(t, outcome.Status.Docker.Networks, "backend")
+		assert.Equal(t, []string{"web"}, dockerd.Aliases("web", "backend"))
+	})
+
+	t.Run("but put on a network every dockerd has, which takes no aliases, that it is on already, which docker refuses, it is on it as it was, as asked", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd, _ := newNode(t)
+
+		_, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		for _, network := range []string{"bridge", "net-bridge"} {
+			outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionConnect, containerKind.ConnectPayload{Network: network})
+			require.NoError(t, err, network)
+			assert.Contains(t, outcome.Status.Docker.Networks, "bridge", network)
+		}
+
+		assert.Equal(t, 2, dockerd.Calls("ConnectNetwork"), "docker was asked, and refused")
+		assert.Zero(t, dockerd.Calls("DisconnectNetwork"), "and it was never taken off it")
 	})
 
 	t.Run("but what dockerd refuses of one it has not on the network, or of a network it has not, fails it", func(t *testing.T) {
