@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
@@ -79,7 +80,22 @@ type run struct {
 	// the first save that failed failed with.
 	failures map[graph.NodeID]error
 	unsaved  error
+
+	// quiet says the run saves nothing yet: every node of its plan was kept,
+	// as a run before left it (kept), and none was found otherwise since.
+	// What it saves meanwhile is held, in order (held), and saved once one is
+	// found otherwise, or is to be made, before anything else is (speak);
+	// and let go of when the run ends quiet. saving keeps saves out of the
+	// way of that.
+	quiet  atomic.Bool
+	kept   map[graph.NodeID]graph.Execution
+	held   []graph.Execution
+	saving sync.RWMutex
 }
+
+// errUnsaid is what a quiet run that could not save what it held before it
+// made a node fails that node with: one not saved running is not made.
+var errUnsaid = errors.New("what the run held could not be saved before it made the node")
 
 // newRun is a run of plan, which does nothing to a node until it is told
 // what to (carry).
@@ -178,11 +194,15 @@ func (r *run) take(ctx context.Context, slots chan struct{}) bool {
 }
 
 // node carries the node id out: it is saved running, has what the run does
-// to a node done to it, and is saved as it ends.
+// to a node done to it, and is saved as it ends. A quiet run says what it held
+// once the node ends otherwise than the run before left it, but for its run
+// being cut short, which says nothing of the node.
 func (r *run) node(ctx context.Context, id graph.NodeID) {
 	node, _ := r.plan.Node(id)
 
-	running := r.execution(id)
+	before := r.execution(id)
+
+	running := before
 	running.State = graph.StateRunning
 	running.StartedAt = r.executor.now()
 	running.UpdatedAt = running.StartedAt
@@ -202,6 +222,11 @@ func (r *run) node(ctx context.Context, id graph.NodeID) {
 	var waiting *graph.Waiting
 
 	switch {
+	case errors.Is(err, errUnsaid):
+		// not made, as one not saved running is not.
+		r.set(before)
+
+		return
 	case err == nil:
 		ended.State = graph.StateDone
 		ended.Reason = reason
@@ -227,14 +252,90 @@ func (r *run) node(ctx context.Context, id graph.NodeID) {
 
 	r.set(ended)
 
+	if r.quiet.Load() && ended.State != graph.StatePending && r.otherwise(ended) {
+		_ = r.speak(ctx)
+	}
+
 	// what fails to be saved is the run's error, which save keeps.
 	_ = r.save(ctx, ended)
 }
 
+// otherwise reports whether a node ended otherwise than the run before left
+// it: in another state, for another reason, or as another record.
+func (r *run) otherwise(e graph.Execution) bool {
+	kept, there := r.kept[e.Node]
+
+	return !there || kept.State != e.State || kept.Reason != e.Reason || kept.Ref != e.Ref
+}
+
+// began has a run that was quiet save what it held before it makes a node,
+// which is made only once it is saved running, as any run's is: one that
+// cannot be, or whose run failed to save what it held as another node had it
+// speak, is errUnsaid, and is not made.
+func (r *run) began(ctx context.Context) error {
+	if r.kept == nil {
+		return nil
+	}
+
+	if err := r.speak(ctx); err != nil {
+		return fmt.Errorf("%w: %w", errUnsaid, err)
+	}
+
+	if err := r.err(); err != nil {
+		return fmt.Errorf("%w: %w", errUnsaid, err)
+	}
+
+	return nil
+}
+
+// speak has a quiet run save what it held, in the order it would have saved
+// it, and everything after as any run does. What cannot be saved is the
+// run's error, as any save's.
+func (r *run) speak(ctx context.Context) error {
+	r.saving.Lock()
+	defer r.saving.Unlock()
+
+	if !r.quiet.Load() {
+		return nil
+	}
+
+	r.quiet.Store(false)
+
+	r.lock.Lock()
+	held := r.held
+	r.held = nil
+	r.lock.Unlock()
+
+	for _, e := range held {
+		if err := r.write(ctx, e); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // save saves e, whatever becomes of the run's context: what it says of its
 // node is so, whether or not anybody still waits for it. The first save that
-// fails is the run's error, and nothing more is started after it.
+// fails is the run's error, and nothing more is started after it. A quiet
+// run holds it instead, to save it once it speaks.
 func (r *run) save(ctx context.Context, e graph.Execution) error {
+	r.saving.RLock()
+	defer r.saving.RUnlock()
+
+	if r.quiet.Load() {
+		r.lock.Lock()
+		r.held = append(r.held, e)
+		r.lock.Unlock()
+
+		return nil
+	}
+
+	return r.write(ctx, e)
+}
+
+// write is a save, once a run saves what it does.
+func (r *run) write(ctx context.Context, e graph.Execution) error {
 	err := r.executor.executions.Save(context.WithoutCancel(ctx), e)
 	if err == nil {
 		return nil

@@ -1,8 +1,9 @@
 // Package getPlan says how the plan of a root of a graph went, the last time
-// it was carried out: how each of its nodes went (graph.Executions), and what
-// its lease keeps of its failures (graph.Leases). What is no root, of a kind
-// whose resources are not roots or owned by something, is not there, as what
-// is not the owner's is not.
+// it was carried out and found anything to say: how each of its nodes went
+// (graph.Executions), which a run that finds each as it was says nothing of,
+// and what its lease keeps of its failures (graph.Leases). What is no root,
+// of a kind whose resources are not roots or owned by something, is not
+// there, as what is not the owner's is not.
 package getPlan
 
 import (

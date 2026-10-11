@@ -24,7 +24,9 @@
 // looked for and made or removed, and then done, waiting, or failed. A level
 // with a node that waits or failed is the last one started: what is done
 // stays done, nothing is undone, and the rest stay pending, for the next
-// time.
+// time. A plan applied again that finds every node as the run before left it
+// keeps nothing of it, so that what is kept is how the last run that found
+// anything went (Apply).
 package execute
 
 import (

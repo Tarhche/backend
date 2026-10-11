@@ -32,6 +32,15 @@ import (
 // interrupted: it is not done, nor did it fail. Whatever becomes of the
 // context, how each node went is saved.
 //
+// But a run of a plan carried out before at this generation, every node of
+// which is kept, saves nothing while it finds each node as the run before
+// left it: a root that is as it was is looked at again by every resync, and
+// its plan says how the run that last found anything went, not that it is
+// being looked at. Once it finds a node otherwise, ended in another state,
+// for another reason or as another record, or is to make one, it saves all
+// it would have saved so far, in order, and goes on as any run does; one cut
+// short meanwhile changes nothing, and saves nothing.
+//
 // A plan with a node of a kind the executor is not given is carried out not
 // at all, and is kind.ErrUnknownKind. What fails to be saved is an error,
 // returned beside how far the plan went once every node started has ended:
@@ -51,6 +60,8 @@ func (e *Executor) Apply(ctx context.Context, root graph.Ref, generation int64, 
 	for _, option := range options {
 		option(r)
 	}
+
+	r.quietly(ctx, root, generation, levels)
 
 	now := e.now()
 
@@ -110,12 +121,43 @@ func (r *run) create(ctx context.Context, node graph.Node) (graph.Ref, string, e
 			}
 		}
 
+		if err := r.began(ctx); err != nil {
+			return graph.Ref{}, "", err
+		}
+
 		if ref, err = k.Create(ctx, node.Spec, r.deps(node.ID())); err != nil {
 			return graph.Ref{}, "", err
 		}
 	}
 
 	return ref, "", r.link(ctx, node, ref)
+}
+
+// quietly has a run of root's plan at generation save nothing (quiet) while
+// it finds each node as a run before left it, when every node of the plan's
+// levels is kept, at this generation, as a create at its level. A run that
+// cannot tell saves everything, as any run does.
+func (r *run) quietly(ctx context.Context, root graph.Ref, generation int64, levels [][]graph.NodeID) {
+	kept, err := r.executor.executions.GetByRoot(ctx, root.UUID)
+	if err != nil {
+		return
+	}
+
+	byNode := make(map[graph.NodeID]graph.Execution, len(kept))
+	for _, e := range kept {
+		byNode[e.Node] = e
+	}
+
+	for level, ids := range levels {
+		for _, id := range ids {
+			if e, there := byNode[id]; !there || e.Generation != generation || e.Action != graph.ActionCreate || e.Level != level {
+				return
+			}
+		}
+	}
+
+	r.kept = byNode
+	r.quiet.Store(true)
 }
 
 // link links the node, the record ref, to each node it needs, in the order of

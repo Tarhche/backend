@@ -402,6 +402,171 @@ func TestExecutor_Apply(t *testing.T) {
 	})
 }
 
+// TestExecutor_Apply_again holds a run of a plan carried out before, every
+// node of which is kept at its generation, to saving nothing while it finds
+// each node as the run before left it, and to saving all a run saves, from
+// its start, once it finds one otherwise or is to make one.
+func TestExecutor_Apply_again(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gone := errors.New("the database is gone")
+
+	// applied is a fixture whose plan of web was carried out once, a minute
+	// before its clock says now, and what that run saved.
+	applied := func(t *testing.T, kinds *graphtest.Kind, options ...execute.Option) (*fixture, *graph.Plan, []graph.Execution) {
+		t.Helper()
+
+		f := newFixture(t, kinds, options...)
+		plan := f.plan(t, web)
+
+		_, err := f.executor.Apply(ctx, graphtest.Ref(web), 1, plan)
+		require.NoError(t, err)
+
+		f.clock.Advance(time.Minute)
+
+		return f, plan, f.executions.Saved()
+	}
+
+	t.Run("one that finds every node as the run before left it saves nothing, and what is kept is how that run went", func(t *testing.T) {
+		t.Parallel()
+
+		f, plan, saved := applied(t, container(false))
+		before := f.kept(t, plan)
+
+		again := f.apply(t, plan)
+		assert.Equal(t, execute.Done, again.State)
+
+		assert.Equal(t, saved, f.executions.Saved(), "nothing is saved")
+		assert.Equal(t, before, f.kept(t, plan), "its times among it")
+		assert.Len(t, f.kinds.Asked(graphtest.Exists), 8, "though each node is looked for again")
+	})
+
+	t.Run("and so does one that waits where the run before waited, on what is not its own and missing", func(t *testing.T) {
+		t.Parallel()
+
+		f, plan, saved := applied(t, container(true))
+		before := f.kept(t, plan)
+
+		again := f.apply(t, plan)
+		assert.Equal(t, execute.Waiting, again.State)
+
+		assert.Equal(t, saved, f.executions.Saved())
+		assert.Equal(t, before, f.kept(t, plan))
+	})
+
+	t.Run("one cut short saves nothing", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container(false)
+		f, plan, saved := applied(t, kinds)
+		before := f.kept(t, plan)
+
+		cutShort, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		kinds.On(graphtest.Exists, network, func(ctx context.Context) error {
+			cancel()
+
+			return ctx.Err()
+		})
+
+		outcome, err := f.executor.Apply(cutShort, graphtest.Ref(web), 1, plan)
+		require.NoError(t, err)
+		assert.Equal(t, execute.Interrupted, outcome.State)
+
+		assert.Equal(t, saved, f.executions.Saved())
+		assert.Equal(t, before, f.kept(t, plan))
+	})
+
+	t.Run("one that finds a node to make saves all a run saves from its start, and makes it once that is saved", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container(false)
+		f, plan, saved := applied(t, kinds, execute.Concurrency(1))
+
+		// its record is there, and it is not made.
+		kinds.Record(network)
+
+		again := f.apply(t, plan)
+		assert.Equal(t, execute.Done, again.State)
+
+		type went struct {
+			Node  graph.NodeID
+			State graph.State
+		}
+
+		var said []went
+		for _, e := range f.executions.Saved()[len(saved):] {
+			said = append(said, went{Node: e.Node, State: e.State})
+		}
+
+		assert.Equal(t, []went{
+			{vm, graph.StatePending}, {network, graph.StatePending}, {volume, graph.StatePending}, {web, graph.StatePending},
+			{vm, graph.StateRunning}, {vm, graph.StateDone},
+			{network, graph.StateRunning}, {network, graph.StateDone},
+			{volume, graph.StateRunning}, {volume, graph.StateDone},
+			{web, graph.StateRunning}, {web, graph.StateDone},
+		}, said, "every node pending first, and then each as it went, as a run saves them")
+
+		assert.Equal(t, again.Nodes, f.kept(t, plan), "kept as this run went")
+	})
+
+	t.Run("and one that finds a node ended otherwise does too", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container(false)
+		f, plan, saved := applied(t, kinds)
+
+		kinds.On(graphtest.Exists, volume, func(context.Context) error { return gone })
+
+		again := f.apply(t, plan)
+		assert.Equal(t, execute.Failed, again.State)
+
+		assert.Greater(t, len(f.executions.Saved()), len(saved))
+		assert.Equal(t, again.Nodes, f.kept(t, plan))
+	})
+
+	t.Run("and so does one at another generation", func(t *testing.T) {
+		t.Parallel()
+
+		f, plan, saved := applied(t, container(false))
+
+		_, err := f.executor.Apply(ctx, graphtest.Ref(web), 2, plan)
+		require.NoError(t, err)
+
+		assert.Len(t, f.executions.Saved(), 2*len(saved), "what the first run saved, again")
+
+		for _, e := range f.kept(t, plan) {
+			assert.Equal(t, int64(2), e.Generation, "%s", e.Node)
+		}
+	})
+
+	t.Run("one that cannot save what it held before it makes a node makes nothing, and is what saving failed with", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container(false)
+		f, plan, _ := applied(t, kinds)
+		made := len(kinds.Asked(graphtest.Create))
+
+		kinds.Record(network)
+		f.executions.failWith(func(e graph.Execution) error {
+			if e.Node == network && e.State == graph.StateRunning {
+				return gone
+			}
+
+			return nil
+		})
+
+		outcome, err := f.executor.Apply(ctx, graphtest.Ref(web), 1, plan)
+		require.ErrorIs(t, err, gone)
+
+		assert.Len(t, kinds.Asked(graphtest.Create), made, "the network is not made")
+		assert.Equal(t, execute.Interrupted, outcome.State)
+		assert.Equal(t, graph.StatePending, byNode(outcome.Nodes)[network].State)
+	})
+}
+
 func TestExecutor_Apply_concurrency(t *testing.T) {
 	t.Parallel()
 

@@ -707,7 +707,41 @@ func TestDryRunsAndPlans(t *testing.T) {
 		w.containerIn(t, vmUUID, "app", "running")
 	})
 
-	t.Run("a root's plan says how each of its nodes went; a vm has none", func(t *testing.T) {
+	t.Run("a root's plan says how each of its nodes went, as the run that made it left them, which no run since that found them as they were changes; a vm has none", func(t *testing.T) {
+		// what its plan says of its nodes, as a wait's goroutine reads it.
+		said := func() (string, bool) {
+			request, err := http.NewRequestWithContext(ctx, http.MethodGet, w.api+"/api/containers/"+root.UUID+"/plan?"+url.Values{"owner": {ownerUUID}}.Encode(), nil)
+			if err != nil {
+				return "", false
+			}
+
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				return "", false
+			}
+			defer response.Body.Close()
+
+			var plan struct {
+				Nodes json.RawMessage `json:"nodes"`
+			}
+
+			if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&plan) != nil {
+				return "", false
+			}
+
+			return string(plan.Nodes), true
+		}
+
+		made, read := said()
+		require.True(t, read)
+
+		// every resync runs its plan again, and finds each node there.
+		assert.Never(t, func() bool {
+			now, read := said()
+
+			return read && now != made
+		}, 10*4*beat, beat, "a run that found every node as it was changed what its plan says of them")
+
 		status, body := w.controlPlane(t, http.MethodGet, "/api/containers/"+root.UUID+"/plan", nil)
 		require.Equal(t, http.StatusOK, status, string(body))
 

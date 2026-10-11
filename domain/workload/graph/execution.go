@@ -73,10 +73,11 @@ type Execution struct {
 }
 
 // Executions keeps how each node of each root's plan went, the last time the
-// plan was carried out: one execution for a node of a root, by the root's
-// uuid and the node, whichever action it was of, written over each time it is
-// saved. Only one control plane carries a root's plan out at a time, so what
-// was saved last is what is so.
+// plan was carried out and found anything to say: one execution for a node of
+// a root, by the root's uuid and the node, whichever action it was of,
+// written over each time it is saved. Only one control plane carries a root's
+// plan out at a time, so what was saved last is what is so. A run that finds
+// every node as the run before left it saves nothing.
 type Executions interface {
 	// Save keeps e in place of what was kept of its node of its root, every
 	// field of it, those left empty too. One that names no root's uuid or no
