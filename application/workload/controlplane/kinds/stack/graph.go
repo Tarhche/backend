@@ -91,8 +91,9 @@ func (g *Graph) Root(r kind.Raw) (graph.Requirement, error) {
 
 // WantOf is a stack as its graph needs it: known by its record's uuid, its
 // owner's, under its slug, in the Docker VM its spec names by its uuid and
-// whatever else its spec says of it, made of what its file says. One in no VM
-// named by its uuid, with no slug, or whose file cannot be read, is
+// whatever else its spec says of it, made of what its file says, and stopped
+// when it is expected to be, as it was last asked. One in no VM named by its
+// uuid, with no slug, or whose file cannot be read, is
 // kind.ErrInvalidPayload.
 func WantOf(s stackKind.Stack) (stackKind.Want, error) {
 	switch {
@@ -113,6 +114,7 @@ func WantOf(s stackKind.Stack) (stackKind.Want, error) {
 		Slug:      s.Metadata.Slug,
 		VM:        s.Spec.VM,
 		File:      file,
+		Stopped:   s.Status.Expected == stackKind.Stopped,
 	}, nil
 }
 
@@ -152,8 +154,10 @@ func (g *Graph) Requires(spec any) ([]graph.Requirement, error) {
 // as the service asks for it: on the stack's networks the service joins, and
 // with its volumes, each named under the stack's slug, binds as they are; and
 // reached by the service's name on each of its networks. It is labelled as the
-// stack's and as the service it is, and the stack owns it from its admission
-// on.
+// stack's and as the service it is, the stack owns it from its admission on,
+// and it is made stopped while the stack is expected stopped, as the stack's
+// stop holds each of its containers, so that one made again then does not
+// start.
 func containerOf(w stackKind.Want, service string) containerKind.Want {
 	s := w.File.Services[service]
 
@@ -203,6 +207,7 @@ func containerOf(w stackKind.Want, service string) containerKind.Want {
 		Owners:    []kind.Reference{{Kind: stackKind.Name, UUID: w.UUID}},
 		VM:        w.VM,
 		Spec:      spec,
+		Stopped:   w.Stopped,
 	}
 }
 

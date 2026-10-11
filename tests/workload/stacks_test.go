@@ -528,6 +528,40 @@ func TestAStacksGraph(t *testing.T) {
 		assert.Equal(t, []string{"start " + named("db"), "start " + named("web")}, did, "db, which web depends on, first")
 	})
 
+	t.Run("stopped, one of its containers, deleted, is made again stopped, and it stays stopped", func(t *testing.T) {
+		stopped, err := stopStack.NewUseCase(w.client, w.translator).Execute(ctx, &stopStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, stopped.ValidationErrors)
+
+		w.stack(t, stackUUID, "stopped", func(s presenter.StackDetail) bool { return s.State == "stopped" })
+
+		before := w.containerRecord(t, vmUUID, named("web"))
+		did := len(w.dockerd.Did(vmUUID))
+
+		deleted, err := deleteContainer.NewUseCase(w.client, w.translator).Execute(ctx, &deleteContainer.Request{VMUUID: vmUUID, ID: named("web"), Force: true, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, deleted.ValidationErrors)
+
+		again := w.containerKept(t, vmUUID, named("web"), "made again", func(c containerKind.Container) bool {
+			return c.Metadata.UUID != before.Metadata.UUID && c.Status.Docker != nil
+		})
+
+		assert.Equal(t, containerKind.Stopped, again.Status.Expected, "admitted expected stopped, as its stack is")
+
+		s := w.stack(t, stackUUID, "stopped with it", func(s presenter.StackDetail) bool {
+			return w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == again.Metadata.UUID
+		})
+		assert.Equal(t, "stopped", s.State, "and not degraded")
+
+		c, there := w.dockerd.Holds(t, vmUUID).Container(named("web"))
+		require.True(t, there)
+		assert.NotEqual(t, "running", c.State, "it is left stopped")
+
+		made := w.dockerd.Did(vmUUID)[did:]
+		require.Contains(t, made, "create "+named("web"))
+		assert.Equal(t, "stop "+named("web"), made[len(made)-1], "what docker starts as it makes it is stopped once it is made, and nothing starts it after")
+	})
+
 	t.Run("deleted, it takes its containers and its network with it, and leaves its volume and its vm", func(t *testing.T) {
 		deleted, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
 		require.NoError(t, err)

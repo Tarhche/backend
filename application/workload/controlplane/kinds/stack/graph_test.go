@@ -369,6 +369,57 @@ func TestGraph_Requires(t *testing.T) {
 	}
 }
 
+func TestGraph_Requires_stopped(t *testing.T) {
+	t.Parallel()
+
+	stacks := newStackGraph(t).stacks
+
+	// containers are what each container a stack requires is wanted as, by
+	// its name.
+	containers := func(t *testing.T, w stackKind.Want) map[string]containerKind.Want {
+		t.Helper()
+
+		required, err := stacks.Requires(w)
+		require.NoError(t, err)
+
+		wanted := map[string]containerKind.Want{}
+		for _, r := range required {
+			if c, ok := r.Spec.(containerKind.Want); ok {
+				wanted[c.Spec.Name] = c
+			}
+		}
+
+		require.Len(t, wanted, 4)
+
+		return wanted
+	}
+
+	t.Run("a stack expected stopped wants each of its containers made stopped", func(t *testing.T) {
+		t.Parallel()
+
+		w := wantOf(t, aStack("s-1", "vm-1", shop, func(s *stackKind.Stack) {
+			s.Status.State = stackKind.Stopped
+			s.Status.Expected = stackKind.Stopped
+		}))
+		require.True(t, w.Stopped)
+
+		for name, c := range containers(t, w) {
+			assert.True(t, c.Stopped, "%s", name)
+		}
+	})
+
+	t.Run("and one expected running, running", func(t *testing.T) {
+		t.Parallel()
+
+		w := wantOf(t, aStack("s-1", "vm-1", shop))
+		require.False(t, w.Stopped)
+
+		for name, c := range containers(t, w) {
+			assert.False(t, c.Stopped, "%s", name)
+		}
+	})
+}
+
 func TestGraph_plan(t *testing.T) {
 	t.Parallel()
 

@@ -54,8 +54,10 @@ const tries = 3
 // One that is not made is made: admitted when there is no record of it, but
 // for a root, whose record gone is never admitted again; its create asked
 // when its record is pending, a root's from when it was admitted on, or
-// missing; started, which makes it, when it failed before it ever was; and
-// waited on while it is being made. What is asked of one is asked on the
+// missing, expected stopped first when it is to be made stopped (Want.Stopped,
+// a stopped stack's service), which its create leaves it; started, which
+// makes it, when it failed before it ever was; and waited on while it is
+// being made. What is asked of one is asked on the
 // node its VM is on, where it is placed first when it is not: one admitted
 // before its VM was made, or kept when its VM went, which was made again
 // elsewhere. Nothing is asked of it while its VM does not run, nor of one on
@@ -211,7 +213,7 @@ func (g *Graph) create(ctx context.Context, w containerKind.Want, vmUUID string)
 	}
 
 	if err == nil {
-		r, err = g.again(ctx, r, vmUUID)
+		r, err = g.again(ctx, w, r, vmUUID)
 	}
 
 	if err != nil {
@@ -230,13 +232,14 @@ func (g *Graph) create(ctx context.Context, w containerKind.Want, vmUUID string)
 }
 
 // again is a container whose record there is, in the Docker VM vmUUID names,
-// made: as it is when it is made already, its create asked again when it is
-// pending or missing, started, which makes it, when it failed before it ever
-// was, and waited on while it is being made. What is asked of it is asked on
-// the node its VM is on (ask). One on its way out, and one last seen waiting
-// on its VM, which nothing can be asked of until its VM is looked into again,
-// wait.
-func (g *Graph) again(ctx context.Context, r resource.Record, vmUUID string) (resource.Record, error) {
+// made as w wants it: as it is when it is made already, its create asked
+// again when it is pending or missing, expected stopped first when w says it
+// is to be stopped (held), started, which makes it, when it failed before it
+// ever was, and waited on while it is being made. What is asked of it is
+// asked on the node its VM is on (ask). One on its way out, and one last
+// seen waiting on its VM, which nothing can be asked of until its VM is
+// looked into again, wait.
+func (g *Graph) again(ctx context.Context, w containerKind.Want, r resource.Record, vmUUID string) (resource.Record, error) {
 	c, err := kind.Decode[containerKind.Spec, containerKind.Status](r.Raw)
 	if err != nil {
 		return resource.Record{}, err
@@ -260,7 +263,12 @@ func (g *Graph) again(ctx context.Context, r resource.Record, vmUUID string) (re
 
 		return settled, err
 	case state == containerKind.Pending, state == containerKind.Missing:
-		return g.ask(ctx, r, vmUUID, containerKind.ActionCreate)
+		held, err := g.held(ctx, w, r)
+		if err != nil {
+			return resource.Record{}, err
+		}
+
+		return g.ask(ctx, held, vmUUID, containerKind.ActionCreate)
 	case state == containerKind.Failed:
 		return g.ask(ctx, r, vmUUID, containerKind.ActionStart)
 	case state == containerKind.Waiting:
@@ -268,6 +276,30 @@ func (g *Graph) again(ctx context.Context, r resource.Record, vmUUID string) (re
 	}
 
 	return r, nil
+}
+
+// held is r, the record of a container w wants, expected stopped, asking it
+// for nothing, when w says it is to be stopped and it is expected to be
+// anything else: what its create then leaves it, made and not started. A
+// stack's stop holds each of its containers so, and one admitted while its
+// stack is expected stopped, or made again once it went missing, is held so
+// before anything is asked of it, which nothing but its graph does of one
+// pending. One w says nothing of is as it is.
+func (g *Graph) held(ctx context.Context, w containerKind.Want, r resource.Record) (resource.Record, error) {
+	if !w.Stopped {
+		return r, nil
+	}
+
+	c, err := kind.Decode[containerKind.Spec, containerKind.Status](r.Raw)
+	if err != nil {
+		return resource.Record{}, err
+	}
+
+	if c.Status.Expected == containerKind.Stopped {
+		return r, nil
+	}
+
+	return g.records.Dispatcher.Desire(ctx, r, containerKind.Stopped, true)
 }
 
 // ask asks a container whose record there is for action, on the node the

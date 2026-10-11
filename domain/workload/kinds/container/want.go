@@ -36,6 +36,11 @@ type Want struct {
 	// joins, the volumes it mounts, and which of them are not its own
 	// (Spec.External), among the rest.
 	Spec Spec `json:"spec"`
+
+	// Stopped says it is to be stopped once it is made, rather than running,
+	// as it is expected to be once it is admitted: a stack's service, made
+	// while its stack is expected stopped.
+	Stopped bool `json:"stopped,omitempty"`
 }
 
 // Requirement is the container as a graph requires it, by its Docker name,

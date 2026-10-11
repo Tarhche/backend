@@ -23,6 +23,10 @@ type Want struct {
 
 	// File is what its file says.
 	File File `json:"file"`
+
+	// Stopped says it is expected stopped, as it was last asked to be: a
+	// container its graph makes of a service then is made stopped.
+	Stopped bool `json:"stopped,omitempty"`
 }
 
 // Requirement is the stack as a graph requires it, by its record's uuid:

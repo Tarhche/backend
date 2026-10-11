@@ -390,6 +390,50 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, c.Metadata.Refs, "and lives in its vm")
 	})
 
+	t.Run("one to be made stopped, a service of a stack expected stopped, is expected stopped before its create is asked, which then leaves it so", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		ref, err := w.Kinds[containerKind.Name].Create(ctx, wanted("vm-1", func(w *containerKind.Want) {
+			w.Spec.Name = "shop_web"
+			w.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}
+			w.Stopped = true
+		}), inVM)
+		require.NoError(t, err)
+
+		c, kept := stored(t, w, ref.UUID)
+		require.True(t, kept)
+		assert.Equal(t, containerKind.Stopped, c.Status.Expected)
+
+		sent := w.Node.Sent()
+		require.Len(t, sent, 1)
+		assert.Equal(t, containerKind.ActionCreate, sent[0].Action)
+
+		asked := typed(t, sent[0].Resource)
+		assert.Equal(t, containerKind.Stopped, asked.Status.Expected, "its node is asked to make it stopped, which it makes it and does not start it")
+	})
+
+	t.Run("and so is one gone missing, made again", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		w.Keep(blockstest.AContainer("c-1", "vm-1", containerKind.Missing, containerKind.Running, func(c *containerKind.Container) {
+			c.Spec.Name = "web"
+			c.Metadata.Name = "web"
+		}))
+
+		_, err := w.Kinds[containerKind.Name].Create(ctx, wanted("vm-1", func(w *containerKind.Want) { w.Stopped = true }), inVM)
+		require.NoError(t, err)
+
+		c, _ := stored(t, w, "c-1")
+		assert.Equal(t, containerKind.Stopped, c.Status.Expected)
+
+		sent := w.Node.Sent()
+		require.Len(t, sent, 1)
+		assert.Equal(t, containerKind.Stopped, typed(t, sent[0].Resource).Status.Expected)
+	})
+
 	t.Run("under its record's uuid, when it is known by one, as its admission kept it", func(t *testing.T) {
 		t.Parallel()
 
