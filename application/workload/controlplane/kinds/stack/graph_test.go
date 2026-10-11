@@ -213,6 +213,11 @@ func TestGraph_Root(t *testing.T) {
 			err:    kind.ErrInvalidPayload,
 			says:   "compose.services.web.build: unsupported_key",
 		},
+		"one whose file says an alias, kept before the platform refused them, which is never followed": {
+			record: aStack("s-1", "vm-1", "services:\n  web: &web\n    image: nginx\n  api: *web\n"),
+			err:    kind.ErrInvalidPayload,
+			says:   "compose.services.api: unsupported_alias",
+		},
 	} {
 		t.Run("not "+name, func(t *testing.T) {
 			t.Parallel()

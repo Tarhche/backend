@@ -2,6 +2,7 @@ package stack_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -206,6 +207,22 @@ func TestStacks_Admit(t *testing.T) {
 				s.Spec.Compose = "version: '3'\nservices:\n  web:\n    image: nginx\n    build: .\n    restart: always\n"
 			},
 			want: domain.ValidationErrors{"compose.version": "unsupported_key", "compose.services.web.build": "unsupported_key"},
+		},
+		"one whose file says an anchor and an alias of it, refused before anything else of it is read": {
+			change: func(s *stackKind.Stack) {
+				s.Spec.Compose = "services:\n  web: &web\n    image: nginx\n    build: .\n  api: *web\n"
+			},
+			want: domain.ValidationErrors{"compose.services.web": "unsupported_alias", "compose.services.api": "unsupported_alias"},
+		},
+		"one with more services than a stack may have": {
+			change: func(s *stackKind.Stack) {
+				s.Spec.Compose = "services:\n"
+
+				for i := range stackKind.MaxServices + 1 {
+					s.Spec.Compose += fmt.Sprintf("  s%d: {image: nginx}\n", i)
+				}
+			},
+			want: domain.ValidationErrors{"compose.services": "too_large"},
 		},
 		"one whose file names what it does not have": {
 			change: func(s *stackKind.Stack) {

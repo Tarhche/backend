@@ -1,6 +1,10 @@
 package stack_test
 
 import (
+	"fmt"
+	"maps"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -349,7 +353,7 @@ func TestParse_unsupportedKeys(t *testing.T) {
 		"a key compose has of its own":  {file: service("    container_name: shop"), path: "compose.services.web.container_name"},
 		"any other key":                 {file: service("    flavour: vanilla"), path: "compose.services.web.flavour"},
 		"an x- key of a service":        {file: service("    x-team: shop"), path: "compose.services.web.x-team"},
-		"a merge of another's":          {file: "x-base: &base\n  image: nginx\nservices:\n  web:\n    <<: *base\n", path: "compose.x-base"},
+		"a merge of another mapping":    {file: service("    <<: {user: root}"), path: "compose.services.web.<<"},
 		"a top-level version":           {file: "version: '3.9'\n" + service(""), path: "compose.version"},
 		"a top-level name":              {file: "name: shop\n" + service(""), path: "compose.name"},
 		"a top-level x- key":            {file: "x-common: {}\n" + service(""), path: "compose.x-common"},
@@ -380,6 +384,375 @@ func TestParse_unsupportedKeys(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParse_aliases(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		file    string
+		invalid domain.ValidationErrors
+	}{
+		"a service anchored, and another that is an alias of it": {
+			file:    "services:\n  web: &web\n    image: nginx\n  api: *web\n",
+			invalid: domain.ValidationErrors{"compose.services.web": stack.CodeUnsupportedAlias, "compose.services.api": stack.CodeUnsupportedAlias},
+		},
+		"an anchor nothing is an alias of": {
+			file:    "services:\n  web:\n    image: &image nginx\n",
+			invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeUnsupportedAlias},
+		},
+		"a merge of what an x- key anchors": {
+			file:    "x-base: &base\n  image: nginx\nservices:\n  web:\n    <<: *base\n",
+			invalid: domain.ValidationErrors{"compose.x-base": stack.CodeUnsupportedAlias, "compose.services.web.<<": stack.CodeUnsupportedAlias},
+		},
+		"an environment anchored, and another service's alias of it": {
+			file:    "services:\n  web:\n    image: nginx\n    environment: &env {MODE: production}\n  api:\n    image: api\n    environment: *env\n",
+			invalid: domain.ValidationErrors{"compose.services.web.environment": stack.CodeUnsupportedAlias, "compose.services.api.environment": stack.CodeUnsupportedAlias},
+		},
+		"an item of a list, and an alias of it beside it": {
+			file:    "services:\n  web:\n    image: nginx\n    ports: [&port \"80\", *port]\n",
+			invalid: domain.ValidationErrors{"compose.services.web.ports[0]": stack.CodeUnsupportedAlias, "compose.services.web.ports[1]": stack.CodeUnsupportedAlias},
+		},
+		"a key anchored": {
+			file:    "services:\n  &name web:\n    image: nginx\n",
+			invalid: domain.ValidationErrors{"compose.services.web": stack.CodeUnsupportedAlias},
+		},
+		"the file itself anchored": {
+			file:    "--- &file\nservices:\n  web:\n    image: nginx\n",
+			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedAlias},
+		},
+		"before anything else of the file is read": {
+			file:    "version: '3'\nservices:\n  web:\n    image: nginx latest\n    build: .\n    user: &user root\n",
+			invalid: domain.ValidationErrors{"compose.services.web.user": stack.CodeUnsupportedAlias},
+		},
+	} {
+		t.Run("refuses "+name+", saying where", func(t *testing.T) {
+			t.Parallel()
+
+			file, invalid := stack.Parse(tt.file)
+
+			assert.Equal(t, tt.invalid, invalid)
+			assert.Empty(t, file.Services, "and is no file")
+		})
+	}
+}
+
+func TestParse_caps(t *testing.T) {
+	t.Parallel()
+
+	// services are n services, s0 first; and declared is a service, and n
+	// volumes or networks the file declares under key.
+	services := func(n int) string {
+		var b strings.Builder
+
+		b.WriteString("services:\n")
+		for i := range n {
+			fmt.Fprintf(&b, "  s%d: {image: nginx}\n", i)
+		}
+
+		return b.String()
+	}
+
+	declared := func(key string, n int) string {
+		var b strings.Builder
+
+		b.WriteString("services:\n  web: {image: nginx}\n" + key + ":\n")
+		for i := range n {
+			fmt.Fprintf(&b, "  d%d:\n", i)
+		}
+
+		return b.String()
+	}
+
+	for name, tt := range map[string]struct {
+		file    string
+		invalid domain.ValidationErrors
+	}{
+		"as many services as a file may have":     {file: services(stack.MaxServices)},
+		"one more is too many":                    {file: services(stack.MaxServices + 1), invalid: domain.ValidationErrors{"compose.services": "too_large"}},
+		"as many volumes as it may declare":       {file: declared("volumes", stack.MaxVolumes)},
+		"one more volume is too many":             {file: declared("volumes", stack.MaxVolumes+1), invalid: domain.ValidationErrors{"compose.volumes": "too_large"}},
+		"as many networks as it may declare":      {file: declared("networks", stack.MaxNetworks)},
+		"one more network is too many":            {file: declared("networks", stack.MaxNetworks+1), invalid: domain.ValidationErrors{"compose.networks": "too_large"}},
+		"as many ports as its services may share": {file: "services:\n  web:\n    image: nginx\n    ports: [1-600]\n  db:\n    image: postgres\n    ports: [1-399, {target: 5432}]\n"},
+		"and one more, refused where it is, the services read in the order the file says them, and no port after it read": {
+			file:    "services:\n  web:\n    image: nginx\n    ports: [1-600]\n  db:\n    image: postgres\n    ports: [1-400, \"5432\", nope]\n",
+			invalid: domain.ValidationErrors{"compose.services.db.ports[1]": "too_large"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			file, invalid := stack.Parse(tt.file)
+
+			assert.Equal(t, tt.invalid, invalid)
+
+			if len(tt.invalid) > 0 {
+				assert.Empty(t, file.Services, "and is no file")
+
+				return
+			}
+
+			published := 0
+			for _, s := range file.Services {
+				published += len(s.Ports)
+			}
+
+			assert.LessOrEqual(t, published, stack.MaxPorts)
+			assert.NotEmpty(t, file.Services)
+		})
+	}
+
+	t.Run("a range is counted by its size before any port of it is, all of a file's ports at most", func(t *testing.T) {
+		t.Parallel()
+
+		file, invalid := stack.Parse("services:\n  web:\n    image: nginx\n    ports: [\"1-1000:1-1000\"]\n")
+		require.Empty(t, invalid)
+
+		ports := file.Services["web"].Ports
+		require.Len(t, ports, stack.MaxPorts)
+		assert.Equal(t, stack.Port{Container: 1000, Host: 1000, Protocol: "tcp"}, ports[stack.MaxPorts-1])
+
+		_, invalid = stack.Parse("services:\n  web:\n    image: nginx\n    ports: [\"1-65535\"]\n")
+		assert.Equal(t, domain.ValidationErrors{"compose.services.web.ports[0]": "too_large"}, invalid)
+	})
+}
+
+func TestParse_mostInvalid(t *testing.T) {
+	t.Parallel()
+
+	t.Run("what is wrong is said of the first a file says, as many as it ever says, and of nothing after", func(t *testing.T) {
+		t.Parallel()
+
+		var b strings.Builder
+
+		b.WriteString("services:\n  web:\n    image: nginx\n")
+		for i := range stack.MaxInvalid + 50 {
+			fmt.Fprintf(&b, "    k%03d: 1\n", i)
+		}
+
+		_, invalid := stack.Parse(b.String())
+		require.Len(t, invalid, stack.MaxInvalid)
+
+		var want []string
+		for i := range stack.MaxInvalid {
+			want = append(want, fmt.Sprintf("compose.services.web.k%03d", i))
+		}
+
+		assert.Equal(t, want, slices.Sorted(maps.Keys(invalid)))
+	})
+
+	t.Run("its services in the order the file says them, not of their names", func(t *testing.T) {
+		t.Parallel()
+
+		var b strings.Builder
+
+		b.WriteString("services:\n")
+		for i := stack.MaxServices - 1; i >= 0; i-- {
+			fmt.Fprintf(&b, "  s%02d: {image: nginx latest, restart: always}\n", i)
+		}
+
+		_, invalid := stack.Parse(b.String())
+		require.Len(t, invalid, stack.MaxInvalid)
+
+		for i := range stack.MaxServices {
+			said := stack.MaxServices-i <= stack.MaxInvalid/2
+
+			for key, code := range map[string]string{"image": "invalid_image", "restart": stack.CodeInvalidRestart} {
+				path := fmt.Sprintf("compose.services.s%02d.%s", i, key)
+
+				if said {
+					assert.Equal(t, code, invalid[path], path)
+				} else {
+					assert.NotContains(t, invalid, path)
+				}
+			}
+		}
+	})
+
+	t.Run("and the keys of a service in the order it says them", func(t *testing.T) {
+		t.Parallel()
+
+		var b strings.Builder
+
+		b.WriteString("services:\n  web:\n    restart: always\n    environment:\n")
+		for range stack.MaxInvalid - 1 {
+			b.WriteString("      - MODE\n")
+		}
+		b.WriteString("    image: nginx latest\n")
+
+		_, invalid := stack.Parse(b.String())
+		require.Len(t, invalid, stack.MaxInvalid)
+
+		assert.Equal(t, stack.CodeInvalidRestart, invalid["compose.services.web.restart"])
+		assert.Equal(t, "invalid_value", invalid[fmt.Sprintf("compose.services.web.environment[%d]", stack.MaxInvalid-2)])
+		assert.NotContains(t, invalid, "compose.services.web.image", "which comes after the most that is said")
+	})
+}
+
+// TestParse_bounded holds what reading a stack's file takes to what the file
+// is, however it is written: each file a review found taking up to a
+// gigabyte to read, by aliases and ranges of ports, is refused, taking a few
+// megabytes; and a file as large as a stack's may be, as costly as the
+// bounds let one be, is read in a few tens of them.
+//
+// It runs alone, not in parallel, since what other tests allocated meanwhile
+// would be counted with what reading the files does.
+func TestParse_bounded(t *testing.T) {
+	const megabyte = 1 << 20
+
+	for name, tt := range map[string]struct {
+		file    string
+		invalid func(t *testing.T, invalid domain.ValidationErrors)
+		most    uint64
+	}{
+		"ports anchored on one service, a hundred ranges of a thousand, and aliased by thirty more": {
+			file: func() string {
+				var b strings.Builder
+
+				b.WriteString("services:\n  s0:\n    image: a\n    ports: &p\n" + strings.Repeat("      - 1-1000\n", 100))
+				for i := 1; i <= 30; i++ {
+					fmt.Fprintf(&b, "  s%d: {image: a, ports: *p}\n", i)
+				}
+
+				return b.String()
+			}(),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				want := domain.ValidationErrors{}
+				for i := 0; i <= 30; i++ {
+					want[fmt.Sprintf("compose.services.s%d.ports", i)] = stack.CodeUnsupportedAlias
+				}
+
+				assert.Equal(t, want, invalid)
+			},
+			most: 4 * megabyte,
+		},
+		"64 KiB of ranges of a thousand ports, no alias among them": {
+			file: ranges(64 << 10),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.services.web.ports[1]": "too_large"}, invalid)
+			},
+			most: 8 * megabyte,
+		},
+		"as many of them as a file may be": {
+			file: ranges(stack.MaxFile),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.services.web.ports[1]": "too_large"}, invalid)
+			},
+			most: 16 * megabyte,
+		},
+		"a service anchored with a thousand keys it does not take, aliased by two thousand": {
+			file: func() string {
+				var b strings.Builder
+
+				b.WriteString("services:\n  s0: &s\n    image: a\n")
+				for i := range 1000 {
+					fmt.Fprintf(&b, "    k%d: 1\n", i)
+				}
+
+				for i := 1; i <= 2000; i++ {
+					fmt.Fprintf(&b, "  s%d: *s\n", i)
+				}
+
+				return b.String()
+			}(),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				want := domain.ValidationErrors{}
+				for i := range stack.MaxInvalid {
+					want[fmt.Sprintf("compose.services.s%d", i)] = stack.CodeUnsupportedAlias
+				}
+
+				assert.Equal(t, want, invalid, "the first of them, and no more")
+			},
+			most: 4 * megabyte,
+		},
+		"an environment anchored on one service, and aliased by every other": {
+			file: func() string {
+				var b strings.Builder
+
+				b.WriteString("services:\n  s0:\n    image: a\n    environment: &e\n")
+				for i := range 2000 {
+					fmt.Fprintf(&b, "      K%d: v\n", i)
+				}
+
+				for i := 1; b.Len() < stack.MaxFile-40 && i <= 2000; i++ {
+					fmt.Fprintf(&b, "  s%d: {image: a, environment: *e}\n", i)
+				}
+
+				return b.String()
+			}(),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				want := domain.ValidationErrors{}
+				for i := range stack.MaxInvalid {
+					want[fmt.Sprintf("compose.services.s%d.environment", i)] = stack.CodeUnsupportedAlias
+				}
+
+				assert.Equal(t, want, invalid)
+			},
+			most: 8 * megabyte,
+		},
+		"a file as large as one may be, as costly to read as one can be: as many services as it may have, and each word of their commands a node of its own": {
+			file: costliest(),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Empty(t, invalid)
+			},
+			most: 64 * megabyte,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.LessOrEqual(t, len(tt.file), stack.MaxFile)
+
+			var before, after runtime.MemStats
+
+			runtime.GC()
+			runtime.ReadMemStats(&before)
+
+			_, invalid := stack.Parse(tt.file)
+
+			runtime.ReadMemStats(&after)
+
+			tt.invalid(t, invalid)
+
+			allocated := after.TotalAlloc - before.TotalAlloc
+			assert.Less(t, allocated, tt.most, "%d MiB allocated reading %d KiB", allocated/megabyte, len(tt.file)>>10)
+		})
+	}
+}
+
+// ranges is a file of one service whose ports are ranges of a thousand each,
+// as many as size bytes hold.
+func ranges(size int) string {
+	var b strings.Builder
+
+	b.WriteString("services:\n  web:\n    image: a\n    ports:\n")
+	for b.Len()+len("      - 1-1000\n") <= size {
+		b.WriteString("      - 1-1000\n")
+	}
+
+	return b.String()
+}
+
+// costliest is a file as large as a stack's may be, of as many services as it
+// may have, each of whose commands is as many one-letter words as fit,
+// written as a list, each a node YAML reads.
+func costliest() string {
+	var b strings.Builder
+
+	b.WriteString("services:\n")
+
+	room := (stack.MaxFile - b.Len()) / stack.MaxServices
+	for i := range stack.MaxServices {
+		start := b.Len()
+
+		fmt.Fprintf(&b, "  s%02d:\n    image: a\n    command: [a", i)
+		for b.Len()-start+len(",a]\n") <= room {
+			b.WriteString(",a")
+		}
+
+		b.WriteString("]\n")
+	}
+
+	return b.String()
 }
 
 func TestParse_ports(t *testing.T) {

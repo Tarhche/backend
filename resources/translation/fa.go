@@ -82,6 +82,7 @@ var farsi = map[string]string{
 	// a stack's file: what the platform reads in it, and refuses of it.
 	"unsupported_key":      "فایل استک این کلید را نمی‌پذیرد",
 	"duplicate_key":        "این کلید بیش از یک بار آمده است",
+	"unsupported_alias":    "فایل استک anchor (&name) و alias (*name) را نمی‌پذیرد: هر چیز را همان‌جا بنویسید که به کار می‌رود",
 	"undefined_service":    "فایل سرویسی با این نام ندارد",
 	"undefined_volume":     "فایل ولومی با این نام در بخش volumes تعریف نکرده است",
 	"undefined_network":    "فایل شبکه‌ای با این نام در بخش networks تعریف نکرده است",

@@ -23,6 +23,30 @@ import (
 // MaxFile is the most a stack's file may be, in bytes.
 const MaxFile = 256 << 10
 
+// The most a stack's file may say of each thing, so that what reading it, and
+// planning and carrying out what it says, takes is bounded by these, as what
+// it is is by MaxFile: it says nothing twice, an anchor or an alias being
+// refused (CodeUnsupportedAlias), and a range of ports is counted by its size
+// before any port of it is.
+const (
+	// MaxServices, MaxNetworks and MaxVolumes are the most services,
+	// networks and volumes it declares, each refused as too_large beyond
+	// them, under its services, its networks or its volumes.
+	MaxServices = 100
+	MaxNetworks = 100
+	MaxVolumes  = 100
+
+	// MaxPorts is the most ports its services publish, all of them
+	// together, each port of a range one: the port that would take them past
+	// it is refused as too_large, and no port after it is read.
+	MaxPorts = 1000
+
+	// MaxInvalid is the most of what is wrong with it that is said: the
+	// first of it, as the file is read, in the order the file says things.
+	// Nothing more of it is read once that much is said.
+	MaxInvalid = 100
+)
+
 // FileField is the field of a stack's spec its file is asked for under, and
 // what everything wrong with the file is said under: the file itself, or a
 // path in it beneath it, compose.services.web.image.
@@ -67,6 +91,11 @@ const (
 	// CodeDuplicateKey is a key a mapping of the file says twice.
 	CodeDuplicateKey = "duplicate_key"
 
+	// CodeUnsupportedAlias is an anchor (&name) or an alias (*name), which
+	// the file does not take: what it says, it says once, so that reading it
+	// is never more than what it is.
+	CodeUnsupportedAlias = "unsupported_alias"
+
 	// CodeUndefinedService, CodeUndefinedVolume and CodeUndefinedNetwork are a
 	// service, a volume and a network the file names and does not have.
 	CodeUndefinedService = "undefined_service"
@@ -99,9 +128,6 @@ const (
 	// one another, which no order starts.
 	CodeDependsOnCycle = "depends_on_cycle"
 )
-
-// maxRange is the most ports one entry of a service's ports publishes.
-const maxRange = 1000
 
 // File is a stack's file as the platform reads it: what compose would read in
 // it, of what the platform carries out itself, and nothing else. Its services
@@ -271,11 +297,12 @@ func Field(path string) string {
 // is refused with.
 //
 // The file is YAML, a document of one mapping, read strictly into the
-// platform's own shape of it (yaml.Decoder.KnownFields): a key it does not
-// take is refused under its own path, compose.services.web.healthcheck, be it
-// one compose takes that the platform does not carry out, build, healthcheck,
-// configs, secrets, profiles, extends, deploy, a top-level version or name or
-// an x- key among them, or any other. What it takes:
+// platform's own shape of it: a key it does not take, which is no field of
+// that shape, is refused under its own path before anything is read into it,
+// compose.services.web.healthcheck, be it one compose takes that the platform
+// does not carry out, build, healthcheck, configs, secrets, profiles, extends,
+// deploy, a top-level version or name or an x- key among them, or any other.
+// What it takes:
 //
 //   - at the top, services, at least one, and the volumes and the networks it
 //     declares, each by its name and with nothing beneath it;
@@ -296,6 +323,15 @@ func Field(path string) string {
 // a volume is named, and a name is one docker takes. Nothing is interpolated:
 // ${VAR} is what it says. That no services depend on one another in a ring is
 // a stack's plan's to say, which says it of each of them (CodeDependsOnCycle).
+//
+// What reading it takes is bounded by what it is: an anchor or an alias,
+// anywhere in it, is refused under its path (CodeUnsupportedAlias) before
+// anything else of it is read, so that nothing in it is read twice; it
+// declares MaxServices services, MaxNetworks networks and MaxVolumes volumes
+// at most, and its services publish MaxPorts ports at most, a range counted by
+// its size before any port of it is; and MaxInvalid of what is wrong with it
+// is said at most, the first of it, as it is read, in the order it says
+// things, and nothing more of it is read once that much is.
 func Parse(compose string) (File, domain.ValidationErrors) {
 	invalid := make(domain.ValidationErrors)
 
@@ -319,24 +355,21 @@ func Parse(compose string) (File, domain.ValidationErrors) {
 
 	r := &reading{invalid: invalid}
 
-	if !r.shaped(root) {
+	if !r.unaliased(root) || !r.shaped(root) {
 		return File{}, invalid
 	}
 
+	// what is shaped as the file is read into it, as it was read already
+	// rather than read again: a key it does not take was refused above,
+	// under its path, as yaml.Decoder.KnownFields would refuse it.
 	var d document
-
-	decoder := yaml.NewDecoder(strings.NewReader(compose))
-	decoder.KnownFields(true)
-
-	if err := decoder.Decode(&d); err != nil {
-		// what is shaped as the file is read into it: a key it does not take
-		// was refused above, under its path.
+	if err := root.Decode(&d); err != nil {
 		invalid[Field("")] = "invalid_value"
 
 		return File{}, invalid
 	}
 
-	file := r.file(d)
+	file := r.file(d, entry(root, "services"))
 	if len(invalid) > 0 {
 		return File{}, invalid
 	}
@@ -363,7 +396,7 @@ func documentOf(compose string) (*yaml.Node, error) {
 		return nil, errors.New("a stack's file is a document")
 	}
 
-	mapping := resolved(root.Content[0])
+	mapping := root.Content[0]
 	if mapping.Kind != yaml.MappingNode {
 		return nil, errors.New("a stack's file is a mapping")
 	}
@@ -372,8 +405,9 @@ func documentOf(compose string) (*yaml.Node, error) {
 }
 
 // document is a stack's file as it is decoded, strictly: a key that is no
-// field of these is refused (yaml.Decoder.KnownFields), and each value is kept
-// as it is written, to be read under its path.
+// field of these is refused before it is (reading.shaped), as
+// yaml.Decoder.KnownFields would refuse it, and each value is kept as it is
+// written, to be read under its path.
 type document struct {
 	Services map[string]serviceDocument `yaml:"services"`
 	Volumes  map[string]yaml.Node       `yaml:"volumes"`
@@ -428,7 +462,7 @@ var (
 )
 
 // keysOf are the keys a mapping decoded into a T has, as its fields' yaml tags
-// name them: what yaml.Decoder.KnownFields holds one to.
+// name them: what yaml.Decoder.KnownFields would hold one to.
 func keysOf[T any]() []string {
 	t := reflect.TypeFor[T]()
 
@@ -466,117 +500,202 @@ func ExitCode(status string) (int, bool) {
 }
 
 // reading is a stack's file being read: what is wrong with it, by the path
-// of each thing wrong.
+// of each thing wrong, and what is read of it so far that the rest is held
+// to.
 type reading struct {
 	invalid domain.ValidationErrors
+
+	// declared is the file as it was decoded, whose services, volumes and
+	// networks, by their names, what its services name is held to being.
+	declared document
+
+	// published are how many ports its services read so far publish, each
+	// port of a range one, and capped whether a port would have taken them
+	// past MaxPorts, which no port after it is read once it would.
+	published int
+	capped    bool
 }
 
 // refuse has the file refused, path being what is wrong, with code: the first
-// thing said of a path is what it is refused for.
+// thing said of a path is what it is refused for, and nothing more is said
+// once MaxInvalid things are.
 func (r *reading) refuse(path string, code string) {
+	if r.full() {
+		return
+	}
+
 	if _, said := r.invalid[Field(path)]; !said {
 		r.invalid[Field(path)] = code
 	}
 }
 
+// full reports whether as much of what is wrong with the file is said as is
+// ever said (MaxInvalid): nothing more of it is read once it is.
+func (r *reading) full() bool {
+	return len(r.invalid) >= MaxInvalid
+}
+
+// unaliased reports whether nothing of a stack's file, root, is an anchor or
+// an alias, saying of each node that is, under its path, that it is refused
+// (CodeUnsupportedAlias): each node is looked at as it is written, and what
+// an alias stands for is never followed, so that nothing is read twice. The
+// paths are worked out only of a file that has one.
+func (r *reading) unaliased(root *yaml.Node) bool {
+	if !aliased(root) {
+		return true
+	}
+
+	r.aliases(root, "")
+
+	return false
+}
+
+// aliased reports whether n, or anything beneath it, is an anchor or an
+// alias.
+func aliased(n *yaml.Node) bool {
+	return n.Kind == yaml.AliasNode || len(n.Anchor) > 0 || slices.ContainsFunc(n.Content, aliased)
+}
+
+// aliases says of n, at path, and of everything beneath it, in the order it
+// is written, each that is an anchor or an alias. A key of a mapping is said
+// under the path of its entry.
+func (r *reading) aliases(n *yaml.Node, path string) {
+	if r.full() {
+		return
+	}
+
+	if n.Kind == yaml.AliasNode || len(n.Anchor) > 0 {
+		r.refuse(path, CodeUnsupportedAlias)
+	}
+
+	switch n.Kind {
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			at := field(path, keyOf(n.Content[i]))
+
+			r.aliases(n.Content[i], at)
+			r.aliases(n.Content[i+1], at)
+		}
+	case yaml.SequenceNode:
+		for i, item := range n.Content {
+			r.aliases(item, indexed(path, i))
+		}
+	}
+}
+
 // shaped reports whether a stack's file is shaped as the platform reads one,
-// saying of each mapping whose keys are fixed what is not: a key it does not
-// take, or takes once and is given twice, under its own path, and a value
-// beneath one that is not shaped as it is to be.
+// saying of each mapping whose keys are fixed what is not, in the order the
+// file says them: a key it does not take, or takes once and is given twice,
+// under its own path, a value beneath one that is not shaped as it is to be,
+// and more services, volumes or networks than it takes.
 func (r *reading) shaped(root *yaml.Node) bool {
 	before := len(r.invalid)
 
-	r.keys(root, "", fileKeys)
+	if entry(root, "services") == nil {
+		r.refuse("services", "required_field")
+	}
 
-	services := entry(root, "services")
+	r.keys(root, "", fileKeys, func(key string, path string, value *yaml.Node) {
+		switch key {
+		case "services":
+			r.servicesShaped(value, path)
+		case "volumes":
+			r.declaredShaped(value, path, MaxVolumes)
+		case "networks":
+			r.declaredShaped(value, path, MaxNetworks)
+		}
+	})
+
+	return len(r.invalid) == before
+}
+
+// servicesShaped says what of the services of a stack's file, at path, is not
+// shaped as they are to be: none, more than MaxServices, a service that is
+// not a mapping, and a key of one, of its resources or of its limits it does
+// not take, or is given twice.
+func (r *reading) servicesShaped(services *yaml.Node, path string) {
 	switch {
 	case isNull(services) || (services.Kind == yaml.MappingNode && len(services.Content) == 0):
-		r.refuse("services", "required_field")
+		r.refuse(path, "required_field")
 	case services.Kind != yaml.MappingNode:
-		r.refuse("services", "invalid_value")
+		r.refuse(path, "invalid_value")
+	case len(services.Content)/2 > MaxServices:
+		r.refuse(path, "too_large")
 	default:
-		r.each(services, "services", func(_ string, path string, service *yaml.Node) {
+		r.each(services, path, func(_ string, path string, service *yaml.Node) {
 			if service.Kind != yaml.MappingNode {
 				r.refuse(path, "invalid_value")
 
 				return
 			}
 
-			r.keys(service, path, serviceKeys)
+			r.keys(service, path, serviceKeys, func(key string, path string, resources *yaml.Node) {
+				if key != "resources" || !r.mappingOrNull(resources, path) {
+					return
+				}
 
-			resources := entry(service, "resources")
-			if !r.mappingOrNull(resources, field(path, "resources")) {
-				return
-			}
+				r.keys(resources, path, resourcesKeys, func(_ string, path string, limits *yaml.Node) {
+					if r.mappingOrNull(limits, path) {
+						r.keys(limits, path, limitsKeys, nil)
+					}
+				})
+			})
+		})
+	}
+}
 
-			r.keys(resources, field(path, "resources"), resourcesKeys)
-
-			limits := entry(resources, "limits")
-			if r.mappingOrNull(limits, field(path, "resources", "limits")) {
-				r.keys(limits, field(path, "resources", "limits"), limitsKeys)
+// declaredShaped says what of the volumes or the networks a stack's file
+// declares, at path, is not shaped as they are to be: more than most, and one
+// with anything beneath it.
+func (r *reading) declaredShaped(declared *yaml.Node, path string, most int) {
+	switch {
+	case !r.mappingOrNull(declared, path):
+	case len(declared.Content)/2 > most:
+		r.refuse(path, "too_large")
+	default:
+		r.each(declared, path, func(_ string, path string, value *yaml.Node) {
+			if r.mappingOrNull(value, path) {
+				r.keys(value, path, nil, nil)
 			}
 		})
 	}
-
-	for _, declared := range []string{"volumes", "networks"} {
-		if top := entry(root, declared); r.mappingOrNull(top, declared) {
-			r.each(top, declared, func(_ string, path string, value *yaml.Node) {
-				if r.mappingOrNull(value, path) {
-					r.keys(value, path, nil)
-				}
-			})
-		}
-	}
-
-	return len(r.invalid) == before
 }
 
 // keys says of a mapping at path each key it does not take, and each it is
-// given twice, under its own path. A mapping that is not there takes any.
-func (r *reading) keys(mapping *yaml.Node, path string, takes []string) {
-	mapping = resolved(mapping)
+// given twice, under its own path, and has what of each other, in the order
+// the mapping gives them, when there is a what. A mapping that is not there
+// takes any.
+func (r *reading) keys(mapping *yaml.Node, path string, takes []string, what func(key string, path string, value *yaml.Node)) {
 	if mapping == nil || mapping.Kind != yaml.MappingNode {
 		return
 	}
 
 	seen := make(map[string]bool)
 
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
+	for i := 0; i+1 < len(mapping.Content) && !r.full(); i += 2 {
 		key := keyOf(mapping.Content[i])
+		at := field(path, key)
 
 		switch {
 		case !slices.Contains(takes, key):
-			r.refuse(field(path, key), CodeUnsupportedKey)
+			r.refuse(at, CodeUnsupportedKey)
 		case seen[key]:
-			r.refuse(field(path, key), CodeDuplicateKey)
+			r.refuse(at, CodeDuplicateKey)
+		case what != nil:
+			what(key, at, mapping.Content[i+1])
 		}
 
 		seen[key] = true
 	}
 }
 
-// unique says of a mapping at path each key it is given twice, under its own
-// path: one whose keys are anything of a service's, its environment's or what
-// it depends on.
-func (r *reading) unique(mapping *yaml.Node, path string) {
-	seen := make(map[string]bool)
-
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		key := keyOf(mapping.Content[i])
-		if seen[key] {
-			r.refuse(field(path, key), CodeDuplicateKey)
-		}
-
-		seen[key] = true
-	}
-}
-
-// each has what of each entry of a mapping at path, by its name, which has to
-// be a name docker takes and be given once, under the entry's path.
+// each has what of each entry of a mapping at path, by its name, in the order
+// the mapping gives them, each of which has to be a name docker takes and be
+// given once, under the entry's path.
 func (r *reading) each(mapping *yaml.Node, path string, what func(key string, path string, value *yaml.Node)) {
 	seen := make(map[string]bool)
 
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
+	for i := 0; i+1 < len(mapping.Content) && !r.full(); i += 2 {
 		key := keyOf(mapping.Content[i])
 		at := field(path, key)
 
@@ -586,7 +705,7 @@ func (r *reading) each(mapping *yaml.Node, path string, what func(key string, pa
 		case seen[key]:
 			r.refuse(at, CodeDuplicateKey)
 		default:
-			what(key, at, resolved(mapping.Content[i+1]))
+			what(key, at, mapping.Content[i+1])
 		}
 
 		seen[key] = true
@@ -600,7 +719,7 @@ func (r *reading) mappingOrNull(value *yaml.Node, path string) bool {
 	switch {
 	case isNull(value):
 		return false
-	case resolved(value).Kind != yaml.MappingNode:
+	case value.Kind != yaml.MappingNode:
 		r.refuse(path, "invalid_value")
 
 		return false
@@ -609,72 +728,95 @@ func (r *reading) mappingOrNull(value *yaml.Node, path string) bool {
 	return true
 }
 
-// file is a stack's file as decoded read, each value under its path, and
-// held to what it names being there.
-func (r *reading) file(d document) File {
+// file is a stack's file as it was decoded (d) read, its services in the
+// order the file says them (services, its services as it is written), each
+// value under its path, and held to what it names being there.
+func (r *reading) file(d document, services *yaml.Node) File {
+	r.declared = d
+
 	f := File{
 		Services: make(map[string]Service, len(d.Services)),
 		Volumes:  slices.Sorted(maps.Keys(d.Volumes)),
 		Networks: slices.Sorted(maps.Keys(d.Networks)),
 	}
 
-	for _, name := range slices.Sorted(maps.Keys(d.Services)) {
-		f.Services[name] = r.service(field("services", name), d.Services[name])
-	}
-
-	// what each names is there.
-	for _, name := range slices.Sorted(maps.Keys(f.Services)) {
-		path := field("services", name)
-		service := f.Services[name]
-
-		for _, dependency := range service.DependsOn {
-			if _, defined := f.Services[dependency]; !defined {
-				r.refuse(field(path, "depends_on", dependency), CodeUndefinedService)
-			}
-		}
-
-		for _, network := range service.Networks {
-			if network != DefaultNetwork && !slices.Contains(f.Networks, network) {
-				r.refuse(field(path, "networks", network), CodeUndefinedNetwork)
-			}
-		}
-
-		for i, m := range service.Volumes {
-			if m.Type == MountVolume && !slices.Contains(f.Volumes, m.Source) {
-				r.refuse(indexed(field(path, "volumes"), i), CodeUndefinedVolume)
-			}
-		}
-	}
+	r.each(services, "services", func(name string, path string, service *yaml.Node) {
+		f.Services[name] = r.service(path, service, d.Services[name])
+	})
 
 	return f
 }
 
-// service is one service of a stack's file, read under path.
-func (r *reading) service(path string, d serviceDocument) Service {
-	s := Service{
-		Image:       r.image(&d.Image, field(path, "image")),
-		Command:     r.words(&d.Command, field(path, "command")),
-		Entrypoint:  r.words(&d.Entrypoint, field(path, "entrypoint")),
-		Environment: r.environment(&d.Environment, field(path, "environment")),
-		Ports:       r.ports(&d.Ports, field(path, "ports")),
-		Privileged:  r.boolean(&d.Privileged, field(path, "privileged")),
-		Restart:     r.restart(&d.Restart, field(path, "restart")),
-		DependsOn:   r.dependsOn(&d.DependsOn, field(path, "depends_on")),
-		Volumes:     r.volumes(&d.Volumes, field(path, "volumes")),
-		Networks:    r.networks(&d.Networks, field(path, "networks")),
-		PidsLimit:   r.pidsLimit(&d.PidsLimit, field(path, "pids_limit")),
-		User:        r.text(&d.User, field(path, "user")),
-		Runtime:     r.text(&d.Runtime, field(path, "runtime")),
+// service is one service of a stack's file, read under path: each of its
+// values as it was decoded (d), in the order the service, n as it is
+// written, says them. One that names no image is refused for it first.
+func (r *reading) service(path string, n *yaml.Node, d serviceDocument) Service {
+	s := Service{Restart: RestartNo}
+
+	if entry(n, "image") == nil {
+		r.refuse(field(path, "image"), "required_field")
 	}
 
-	if d.Resources != nil && d.Resources.Limits != nil {
-		limits := field(path, "resources", "limits")
+	r.keys(n, path, serviceKeys, func(key string, at string, value *yaml.Node) {
+		switch key {
+		case "image":
+			s.Image = r.image(&d.Image, at)
+		case "command":
+			s.Command = r.words(&d.Command, at)
+		case "entrypoint":
+			s.Entrypoint = r.words(&d.Entrypoint, at)
+		case "environment":
+			s.Environment = r.environment(&d.Environment, at)
+		case "ports":
+			s.Ports = r.ports(&d.Ports, at)
+		case "privileged":
+			s.Privileged = r.boolean(&d.Privileged, at)
+		case "restart":
+			s.Restart = r.restart(&d.Restart, at)
+		case "depends_on":
+			s.DependsOn = r.dependsOn(&d.DependsOn, at)
+		case "volumes":
+			s.Volumes = r.volumes(&d.Volumes, at)
+		case "networks":
+			s.Networks = r.networks(&d.Networks, at)
+		case "pids_limit":
+			s.PidsLimit = r.pidsLimit(&d.PidsLimit, at)
+		case "user":
+			s.User = r.text(&d.User, at)
+		case "runtime":
+			s.Runtime = r.text(&d.Runtime, at)
+		case "resources":
+			s.CPUs, s.Memory = r.limits(value, d.Resources, at)
+		}
+	})
 
-		s.CPUs = r.cpus(&d.Resources.Limits.CPUs, field(limits, "cpus"))
-		s.Memory = r.memory(&d.Resources.Limits.Memory, field(limits, "memory"))
+	if len(s.Networks) == 0 {
+		s.Networks = []string{DefaultNetwork}
 	}
 
 	return s
+}
+
+// limits are the cores and the bytes a service's resources, n as it is
+// written, d as it was decoded, at path, hold it to, each read in the order
+// its limits say them: nothing when they say nothing.
+func (r *reading) limits(n *yaml.Node, d *resourcesDocument, path string) (cpus float64, memory uint64) {
+	if d == nil || d.Limits == nil {
+		return 0, 0
+	}
+
+	at := field(path, "limits")
+
+	r.keys(entry(n, "limits"), at, limitsKeys, func(key string, at string, _ *yaml.Node) {
+		switch key {
+		case "cpus":
+			cpus = r.cpus(&d.Limits.CPUs, at)
+		case "memory":
+			memory = r.memory(&d.Limits.Memory, at)
+		}
+	})
+
+	return cpus, memory
 }
 
 // image is what a service runs: a reference with no blank in it, which it
@@ -721,7 +863,6 @@ func (r *reading) words(n *yaml.Node, path string) []string {
 
 // list is each scalar of a sequence, as it is written.
 func (r *reading) list(n *yaml.Node, path string) []string {
-	n = resolved(n)
 	if n.Kind != yaml.SequenceNode {
 		r.refuse(path, "invalid_value")
 
@@ -731,6 +872,10 @@ func (r *reading) list(n *yaml.Node, path string) []string {
 	values := make([]string, 0, len(n.Content))
 
 	for i, item := range n.Content {
+		if r.full() {
+			break
+		}
+
 		value, ok := scalar(item)
 		if !ok || isNull(item) {
 			r.refuse(indexed(path, i), "invalid_value")
@@ -746,40 +891,47 @@ func (r *reading) list(n *yaml.Node, path string) []string {
 
 // environment is each variable a service is given, as KEY=value, in the
 // order it says them: a mapping of each to a scalar, nothing being nothing,
-// or a list of KEY=VALUE. A key is something, and has no = in it.
+// each once, or a list of KEY=VALUE. A key is something, and has no = in it.
 func (r *reading) environment(n *yaml.Node, path string) []string {
 	if isNull(n) {
 		return nil
 	}
 
-	n = resolved(n)
-
 	var variables []string
 
 	switch n.Kind {
 	case yaml.MappingNode:
-		r.unique(n, path)
+		seen := make(map[string]bool)
 
-		for i := 0; i+1 < len(n.Content); i += 2 {
+		for i := 0; i+1 < len(n.Content) && !r.full(); i += 2 {
 			key := keyOf(n.Content[i])
+			at := field(path, key)
 
 			value, ok := scalar(n.Content[i+1])
 			if isNull(n.Content[i+1]) {
 				value, ok = "", true
 			}
 
-			if !ok || len(key) == 0 || strings.Contains(key, "=") {
-				r.refuse(field(path, key), "invalid_value")
-
-				continue
+			switch {
+			case seen[key]:
+				r.refuse(at, CodeDuplicateKey)
+			case !ok || len(key) == 0 || strings.Contains(key, "="):
+				r.refuse(at, "invalid_value")
+			default:
+				variables = append(variables, key+"="+value)
 			}
 
-			variables = append(variables, key+"="+value)
+			seen[key] = true
 		}
 
 	case yaml.SequenceNode:
-		for i, variable := range r.list(n, path) {
-			if key, _, ok := strings.Cut(variable, "="); !ok || len(key) == 0 {
+		for i, item := range n.Content {
+			if r.full() {
+				break
+			}
+
+			variable, ok := scalar(item)
+			if key, _, cut := strings.Cut(variable, "="); !ok || isNull(item) || !cut || len(key) == 0 {
 				r.refuse(indexed(path, i), "invalid_value")
 
 				continue
@@ -797,12 +949,14 @@ func (r *reading) environment(n *yaml.Node, path string) []string {
 
 // ports are each port a service publishes, a range being each of its ports:
 // [ip:][host:]container[/tcp|udp] or target, published, host_ip and protocol.
+// A port that would take what the file publishes past MaxPorts is refused,
+// counted by the size of its ranges before any port of them is, and no port
+// is read after it.
 func (r *reading) ports(n *yaml.Node, path string) []Port {
 	if isNull(n) {
 		return nil
 	}
 
-	n = resolved(n)
 	if n.Kind != yaml.SequenceNode {
 		r.refuse(path, "invalid_value")
 
@@ -812,11 +966,16 @@ func (r *reading) ports(n *yaml.Node, path string) []Port {
 	var ports []Port
 
 	for i, item := range n.Content {
+		if r.full() || r.capped {
+			break
+		}
+
 		at := indexed(path, i)
-		item = resolved(item)
 
 		if item.Kind == yaml.MappingNode {
-			ports = append(ports, r.longPort(item, at)...)
+			if p := r.longPort(item, at); r.publish(1, at) {
+				ports = append(ports, p)
+			}
 
 			continue
 		}
@@ -829,23 +988,40 @@ func (r *reading) ports(n *yaml.Node, path string) []Port {
 		}
 
 		published, code := shortPort(written)
-		if len(code) > 0 {
+
+		switch {
+		case len(code) > 0:
 			r.refuse(at, code)
-
-			continue
+		case r.publish(published.containers.size(), at):
+			ports = append(ports, published.ports()...)
 		}
-
-		ports = append(ports, published...)
 	}
 
 	return ports
 }
 
+// publish counts as many ports more published, at path, and reports whether
+// that is within MaxPorts, every port the file's services publish together:
+// what would take them past it is refused, and nothing is published after
+// it.
+func (r *reading) publish(ports int, path string) bool {
+	if r.capped || r.published+ports > MaxPorts {
+		r.refuse(path, "too_large")
+		r.capped = true
+
+		return false
+	}
+
+	r.published += ports
+
+	return true
+}
+
 // longPort is a port a service publishes, in its long form: target,
 // published, host_ip and protocol, the target one port and published one or
 // none.
-func (r *reading) longPort(n *yaml.Node, path string) []Port {
-	r.keys(n, path, longPortKeys)
+func (r *reading) longPort(n *yaml.Node, path string) Port {
+	r.keys(n, path, longPortKeys, nil)
 
 	p := Port{Protocol: ProtocolTCP}
 
@@ -874,22 +1050,65 @@ func (r *reading) longPort(n *yaml.Node, path string) []Port {
 		}
 	}
 
-	return []Port{p}
+	return p
 }
 
-// shortPort is each port [ip:][host:]container[/tcp|udp] publishes, ranges of
-// as many ports on either side being each of them, or the code it is refused
+// portMapping is a port a service publishes in its short form, as it is
+// written, its ranges by their ends, before any port of them is counted out
+// (ports).
+type portMapping struct {
+	// containers are its container ports, and hosts as many on the VM, or
+	// none, each of the containers' then published on a port docker picks.
+	containers portSpan
+	hosts      portSpan
+
+	hostIP   string
+	protocol string
+}
+
+// ports are the ports m publishes, each port of its ranges one.
+func (m portMapping) ports() []Port {
+	ports := make([]Port, m.containers.size())
+	for i := range ports {
+		ports[i] = Port{Container: m.containers.first + port.Port(i), HostIP: m.hostIP, Protocol: m.protocol}
+
+		if m.hosts.size() > 0 {
+			ports[i].Host = m.hosts.first + port.Port(i)
+		}
+	}
+
+	return ports
+}
+
+// portSpan is the ports from first to last, both among them: none when it is
+// nothing.
+type portSpan struct {
+	first port.Port
+	last  port.Port
+}
+
+// size is how many ports s is.
+func (s portSpan) size() int {
+	if s.first == 0 {
+		return 0
+	}
+
+	return int(s.last-s.first) + 1
+}
+
+// shortPort is what [ip:][host:]container[/tcp|udp] publishes, ranges of as
+// many ports on either side being each of them, or the code it is refused
 // with: an address in brackets when it is an IPv6 one, a host that says no
 // port being one docker picks, and a range of container ports with none on
 // the host each with one docker picks.
-func shortPort(written string) ([]Port, string) {
+func shortPort(written string) (portMapping, string) {
 	mapping, protocol, protocolled := strings.Cut(written, "/")
 	if !protocolled {
 		protocol = ProtocolTCP
 	}
 
 	if protocol != ProtocolTCP && protocol != ProtocolUDP {
-		return nil, "invalid_protocol"
+		return portMapping{}, "invalid_protocol"
 	}
 
 	var hostIP string
@@ -897,16 +1116,16 @@ func shortPort(written string) ([]Port, string) {
 	if strings.HasPrefix(mapping, "[") {
 		closing := strings.Index(mapping, "]:")
 		if closing < 0 {
-			return nil, CodeInvalidPortMapping
+			return portMapping{}, CodeInvalidPortMapping
 		}
 
 		hostIP, mapping = mapping[1:closing], mapping[closing+2:]
 
 		switch {
 		case !isIP(hostIP):
-			return nil, "invalid_ip"
+			return portMapping{}, "invalid_ip"
 		case !strings.Contains(mapping, ":"):
-			return nil, CodeInvalidPortMapping
+			return portMapping{}, CodeInvalidPortMapping
 		}
 	}
 
@@ -921,50 +1140,37 @@ func shortPort(written string) ([]Port, string) {
 		host, container = parts[0], parts[1]
 	case 3:
 		if len(hostIP) > 0 {
-			return nil, CodeInvalidPortMapping
+			return portMapping{}, CodeInvalidPortMapping
 		}
 
 		hostIP, host, container = parts[0], parts[1], parts[2]
 
 		if !isIP(hostIP) {
-			return nil, "invalid_ip"
+			return portMapping{}, "invalid_ip"
 		}
 	default:
-		return nil, CodeInvalidPortMapping
+		return portMapping{}, CodeInvalidPortMapping
 	}
 
 	containers, ok := portRange(container)
 	if !ok {
-		return nil, CodeInvalidPortMapping
+		return portMapping{}, CodeInvalidPortMapping
 	}
 
-	var hosts []port.Port
+	var hosts portSpan
 
 	if len(host) > 0 {
-		if hosts, ok = portRange(host); !ok || (len(hosts) != len(containers)) {
-			return nil, CodeInvalidPortMapping
+		if hosts, ok = portRange(host); !ok || hosts.size() != containers.size() {
+			return portMapping{}, CodeInvalidPortMapping
 		}
 	}
 
-	if len(containers) > maxRange {
-		return nil, "too_large"
-	}
-
-	ports := make([]Port, len(containers))
-	for i, c := range containers {
-		ports[i] = Port{Container: c, HostIP: hostIP, Protocol: protocol}
-
-		if hosts != nil {
-			ports[i].Host = hosts[i]
-		}
-	}
-
-	return ports, ""
+	return portMapping{containers: containers, hosts: hosts, hostIP: hostIP, protocol: protocol}, ""
 }
 
-// portRange is each port a port, or a range of them first-last, says, and
+// portRange is the ports a port, or a range of them first-last, says, and
 // whether it says any: a port is from 1 to 65535.
-func portRange(written string) ([]port.Port, bool) {
+func portRange(written string) (portSpan, bool) {
 	first, last, ranged := strings.Cut(written, "-")
 	if !ranged {
 		last = first
@@ -974,15 +1180,10 @@ func portRange(written string) ([]port.Port, bool) {
 	to, toOK := parsePort(last)
 
 	if !fromOK || !toOK || to < from {
-		return nil, false
+		return portSpan{}, false
 	}
 
-	ports := make([]port.Port, 0, to-from+1)
-	for p := from; p <= to && len(ports) <= maxRange; p++ {
-		ports = append(ports, p)
-	}
-
-	return ports, true
+	return portSpan{first: from, last: to}, true
 }
 
 // portOf is the one port a node says, and whether it says one.
@@ -1044,50 +1245,66 @@ func (r *reading) restart(n *yaml.Node, path string) string {
 
 // dependsOn are the services a service is started after, in the order of
 // their names, each once: a list of them, or a mapping of each to the one
-// condition it is waited on with, or to nothing, which is that one.
+// condition it is waited on with, or to nothing, which is that one. Each is
+// held to being one of the file's services as it is read.
 func (r *reading) dependsOn(n *yaml.Node, path string) []string {
 	if isNull(n) {
 		return nil
 	}
 
-	n = resolved(n)
-
 	var services []string
 
 	switch n.Kind {
 	case yaml.SequenceNode:
-		for i, service := range r.list(n, path) {
-			if slices.Contains(services, service) {
-				r.refuse(indexed(path, i), CodeDuplicateKey)
+		for i, item := range n.Content {
+			if r.full() {
+				break
+			}
+
+			at := indexed(path, i)
+
+			service, ok := scalar(item)
+
+			switch {
+			case !ok || isNull(item):
+				r.refuse(at, "invalid_value")
+			case slices.Contains(services, service):
+				r.refuse(at, CodeDuplicateKey)
+			default:
+				services = append(services, service)
+				r.defined(service, field(path, service))
+			}
+		}
+
+	case yaml.MappingNode:
+		seen := make(map[string]bool)
+
+		for i := 0; i+1 < len(n.Content) && !r.full(); i += 2 {
+			service := keyOf(n.Content[i])
+			at := field(path, service)
+
+			if seen[service] {
+				r.refuse(at, CodeDuplicateKey)
 
 				continue
 			}
 
-			services = append(services, service)
-		}
+			seen[service] = true
 
-	case yaml.MappingNode:
-		r.unique(n, path)
-
-		for i := 0; i+1 < len(n.Content); i += 2 {
-			service := keyOf(n.Content[i])
-			at := field(path, service)
-
-			if condition := resolved(n.Content[i+1]); !isNull(condition) {
+			if condition := n.Content[i+1]; !isNull(condition) {
 				if !r.mappingOrNull(condition, at) {
 					continue
 				}
 
-				r.keys(condition, at, conditionKeys)
+				r.keys(condition, at, conditionKeys, nil)
 
 				if waited, ok := scalar(entry(condition, "condition")); !isNull(entry(condition, "condition")) && (!ok || waited != ConditionStarted) {
 					r.refuse(field(at, "condition"), CodeInvalidCondition)
 				}
 			}
 
-			if !slices.Contains(services, service) {
-				services = append(services, service)
-			}
+			services = append(services, service)
+			r.defined(service, at)
 		}
 
 	default:
@@ -1099,15 +1316,22 @@ func (r *reading) dependsOn(n *yaml.Node, path string) []string {
 	return services
 }
 
+// defined says under path that the file has no service called service, when
+// it has none.
+func (r *reading) defined(service string, path string) {
+	if _, defined := r.declared.Services[service]; !defined {
+		r.refuse(path, CodeUndefinedService)
+	}
+}
+
 // volumes are what a service mounts: source:target[:ro|rw], or type, source,
 // target and read_only, a bind of an absolute path of its VM, or a volume
-// by its name, which its file declares.
+// by its name, which its file declares, as it is held to as it is read.
 func (r *reading) volumes(n *yaml.Node, path string) []Mount {
 	if isNull(n) {
 		return nil
 	}
 
-	n = resolved(n)
 	if n.Kind != yaml.SequenceNode {
 		r.refuse(path, "invalid_value")
 
@@ -1117,29 +1341,43 @@ func (r *reading) volumes(n *yaml.Node, path string) []Mount {
 	var mounts []Mount
 
 	for i, item := range n.Content {
+		if r.full() {
+			break
+		}
+
 		at := indexed(path, i)
-		item = resolved(item)
+
+		var (
+			m    Mount
+			read bool
+		)
 
 		if item.Kind == yaml.MappingNode {
-			if m, read := r.longVolume(item, at); read {
-				mounts = append(mounts, m)
+			m, read = r.longVolume(item, at)
+		} else {
+			written, ok := scalar(item)
+			if !ok || isNull(item) {
+				r.refuse(at, "invalid_mount")
+
+				continue
 			}
 
+			var code string
+			if m, code = shortVolume(written); len(code) > 0 {
+				r.refuse(at, code)
+
+				continue
+			}
+
+			read = true
+		}
+
+		if !read {
 			continue
 		}
 
-		written, ok := scalar(item)
-		if !ok || isNull(item) {
-			r.refuse(at, "invalid_mount")
-
-			continue
-		}
-
-		m, code := shortVolume(written)
-		if len(code) > 0 {
-			r.refuse(at, code)
-
-			continue
+		if _, declared := r.declared.Volumes[m.Source]; m.Type == MountVolume && !declared {
+			r.refuse(at, CodeUndefinedVolume)
 		}
 
 		mounts = append(mounts, m)
@@ -1153,7 +1391,7 @@ func (r *reading) volumes(n *yaml.Node, path string) []Mount {
 func (r *reading) longVolume(n *yaml.Node, path string) (Mount, bool) {
 	before := len(r.invalid)
 
-	r.keys(n, path, longVolumeKeys)
+	r.keys(n, path, longVolumeKeys, nil)
 
 	if len(r.invalid) > before {
 		return Mount{}, false
@@ -1254,33 +1492,44 @@ func mountCode(m Mount) string {
 
 // networks are the networks a service joins, in the order of their names,
 // each once: a list, or a mapping of each to nothing; the default one when it
-// names none.
+// names none. Each but the default one is held to being one the file
+// declares as it is read.
 func (r *reading) networks(n *yaml.Node, path string) []string {
 	var networks []string
 
 	if !isNull(n) {
-		n = resolved(n)
-
 		switch n.Kind {
 		case yaml.SequenceNode:
-			for i, network := range r.list(n, path) {
+			for i, item := range n.Content {
+				if r.full() {
+					break
+				}
+
+				at := indexed(path, i)
+
+				network, ok := scalar(item)
+
 				switch {
+				case !ok || isNull(item):
+					r.refuse(at, "invalid_value")
 				case !name.MatchString(network):
-					r.refuse(indexed(path, i), "invalid_name")
+					r.refuse(at, "invalid_name")
 				case slices.Contains(networks, network):
-					r.refuse(indexed(path, i), CodeDuplicateKey)
+					r.refuse(at, CodeDuplicateKey)
 				default:
 					networks = append(networks, network)
+					r.joins(network, field(path, network))
 				}
 			}
 
 		case yaml.MappingNode:
 			r.each(n, path, func(network string, at string, value *yaml.Node) {
 				if r.mappingOrNull(value, at) {
-					r.keys(value, at, nil)
+					r.keys(value, at, nil, nil)
 				}
 
 				networks = append(networks, network)
+				r.joins(network, at)
 			})
 
 		default:
@@ -1295,6 +1544,14 @@ func (r *reading) networks(n *yaml.Node, path string) []string {
 	slices.Sort(networks)
 
 	return networks
+}
+
+// joins says under path that the file declares no network called network,
+// when it declares none, but for the default one, which needs no declaring.
+func (r *reading) joins(network string, path string) {
+	if _, declared := r.declared.Networks[network]; !declared && network != DefaultNetwork {
+		r.refuse(path, CodeUndefinedNetwork)
+	}
 }
 
 // pidsLimit is the most processes a service runs at once, a whole number of
@@ -1489,44 +1746,32 @@ func Words(line string) ([]string, bool) {
 
 // entry is the value a mapping gives key, or nothing when it gives none.
 func entry(mapping *yaml.Node, key string) *yaml.Node {
-	mapping = resolved(mapping)
 	if mapping == nil || mapping.Kind != yaml.MappingNode {
 		return nil
 	}
 
 	for i := 0; i+1 < len(mapping.Content); i += 2 {
 		if keyOf(mapping.Content[i]) == key {
-			return resolved(mapping.Content[i+1])
+			return mapping.Content[i+1]
 		}
 	}
 
 	return nil
 }
 
-// keyOf is a mapping's key as it is written.
+// keyOf is a mapping's key as it is written: an alias as the name it is
+// written with, which the file is refused for (CodeUnsupportedAlias).
 func keyOf(key *yaml.Node) string {
-	return resolved(key).Value
-}
-
-// resolved is what n is: what an alias stands for, when it is one.
-func resolved(n *yaml.Node) *yaml.Node {
-	for n != nil && n.Kind == yaml.AliasNode {
-		n = n.Alias
-	}
-
-	return n
+	return key.Value
 }
 
 // isNull reports whether n says nothing: there is none, or it is null.
 func isNull(n *yaml.Node) bool {
-	n = resolved(n)
-
 	return n == nil || n.Kind == 0 || (n.Kind == yaml.ScalarNode && n.Tag == "!!null")
 }
 
 // scalar is what a scalar says, as it is written, and whether n is one.
 func scalar(n *yaml.Node) (string, bool) {
-	n = resolved(n)
 	if n == nil || n.Kind != yaml.ScalarNode {
 		return "", false
 	}
