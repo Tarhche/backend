@@ -472,7 +472,7 @@ func TestAStacksGraph(t *testing.T) {
 		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: stackUUID}}, again.Metadata.Owners, "the stack's, as it was")
 
 		w.stack(t, stackUUID, "running with it", func(s presenter.StackDetail) bool {
-			return s.State == "running" && w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == again.Metadata.UUID
+			return s.State == "running" && w.servedBy(ctx, stackUUID, "web") == again.Metadata.UUID
 		})
 	})
 
@@ -647,7 +647,7 @@ func TestAStacksGraph(t *testing.T) {
 		assert.Equal(t, containerKind.Stopped, again.Status.Expected, "admitted expected stopped, as its stack is")
 
 		s := w.stack(t, stackUUID, "stopped with it", func(s presenter.StackDetail) bool {
-			return w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == again.Metadata.UUID
+			return w.servedBy(ctx, stackUUID, "web") == again.Metadata.UUID
 		})
 		assert.Equal(t, "stopped", s.State, "and not degraded")
 
@@ -825,7 +825,7 @@ func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
 	s := eventually(t, "the stack stopped with it", func(ctx context.Context) (presenter.StackDetail, error) {
 		return w.readStack(ctx, stackUUID)
 	}, func(s presenter.StackDetail) bool {
-		return s.State == "stopped" && w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == again.Metadata.UUID
+		return s.State == "stopped" && w.servedBy(ctx, stackUUID, "web") == again.Metadata.UUID
 	})
 	assert.Equal(t, "stopped", s.State, "and not degraded")
 
@@ -918,6 +918,31 @@ func TestAStackWhoseFileCannotBeRead(t *testing.T) {
 	w.stored(t, vmUUID, "kept", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
 }
 
+// servedBy is the uuid of the container the record of the stack uuid names
+// says it made of service, or nothing while it says none: of a service it
+// says is missing, as a run of its graph says it while the service's
+// container is made again, or of a stack it cannot be read. A wait looks at
+// it from a goroutine of its own, which it ends nothing of.
+func (w *workload) servedBy(ctx context.Context, uuid string, service string) string {
+	r, err := w.resources.GetOne(ctx, stackKind.Name, uuid)
+	if err != nil {
+		return ""
+	}
+
+	s, err := kind.Decode[stackKind.Spec, stackKind.Status](r.Raw)
+	if err != nil {
+		return ""
+	}
+
+	for _, served := range s.Status.Services {
+		if served.Name == service && len(served.Containers) > 0 {
+			return served.Containers[0].ID
+		}
+	}
+
+	return ""
+}
+
 // stackRecord is the record of the stack uuid names, as the control plane
 // keeps it.
 func (w *workload) stackRecord(t *testing.T, uuid string) stackKind.Stack {
@@ -975,7 +1000,7 @@ func TestAStackItsVMsSnapshotHolds(t *testing.T) {
 	})
 
 	w.stack(t, stackUUID, "running with what was made again", func(s presenter.StackDetail) bool {
-		return s.State == "running" && w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == since.Metadata.UUID
+		return s.State == "running" && w.servedBy(ctx, stackUUID, "web") == since.Metadata.UUID
 	})
 
 	w.restore(t, vmUUID, snapshotUUID)
@@ -1010,7 +1035,7 @@ func TestAStackItsVMsSnapshotHolds(t *testing.T) {
 
 	t.Run("the stack runs with it, which its record names as its service's", func(t *testing.T) {
 		w.stack(t, stackUUID, "running with the container taken in", func(s presenter.StackDetail) bool {
-			return s.State == "running" && w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == snapshotted.Metadata.UUID
+			return s.State == "running" && w.servedBy(ctx, stackUUID, "web") == snapshotted.Metadata.UUID
 		})
 
 		web := w.stackRecord(t, stackUUID).Status.Services[1]
