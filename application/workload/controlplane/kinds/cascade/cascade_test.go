@@ -421,6 +421,65 @@ func TestRepository_Delete(t *testing.T) {
 		require.True(t, kept)
 		assert.True(t, fan.Reset)
 	})
+
+	t.Run("deleting a parent at the version it was read at takes what goes with it first, as deleting it does", func(t *testing.T) {
+		t.Parallel()
+
+		cascading, memory := repository(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+		)
+
+		read, err := memory.GetOne(ctx, kindstest.Parent, kindstest.House)
+		require.NoError(t, err)
+
+		require.NoError(t, cascading.DeleteAt(ctx, kindstest.Parent, kindstest.House, read.Version))
+
+		_, err = memory.GetOne(ctx, kindstest.Parent, kindstest.House)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "the parent is gone")
+
+		_, kept := held(t, memory, "in-it")
+		assert.False(t, kept, "and what lived in it with it")
+	})
+
+	t.Run("but one written since it was read is kept, and so is everything that lives in it", func(t *testing.T) {
+		t.Parallel()
+
+		cascading, memory := repository(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+		)
+
+		read, err := memory.GetOne(ctx, kindstest.Parent, kindstest.House)
+		require.NoError(t, err)
+
+		_, err = memory.Update(ctx, read)
+		require.NoError(t, err)
+
+		assert.ErrorIs(t, cascading.DeleteAt(ctx, kindstest.Parent, kindstest.House, read.Version), resource.ErrConflict)
+
+		_, err = memory.GetOne(ctx, kindstest.Parent, kindstest.House)
+		assert.NoError(t, err, "the parent is kept")
+
+		_, kept := held(t, memory, "in-it")
+		assert.True(t, kept, "and what lives in it, untouched")
+	})
+
+	t.Run("and one that is gone is said to be, what lived in it taken away all the same", func(t *testing.T) {
+		t.Parallel()
+
+		cascading, memory := repository(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+		)
+
+		read, err := memory.GetOne(ctx, kindstest.Parent, kindstest.House)
+		require.NoError(t, err)
+
+		require.NoError(t, memory.Delete(ctx, kindstest.Parent, kindstest.House))
+
+		assert.ErrorIs(t, cascading.DeleteAt(ctx, kindstest.Parent, kindstest.House, read.Version), domain.ErrNotExists)
+
+		_, kept := held(t, memory, "in-it")
+		assert.False(t, kept)
+	})
 }
 
 // looking is told of what changed, as the graphs of roots are, and looks,

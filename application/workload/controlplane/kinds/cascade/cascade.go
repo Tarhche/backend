@@ -133,12 +133,24 @@ func (r *Repository) Delete(ctx context.Context, kindName string, uuid string) e
 	return r.cascade.changed(ctx, touched)
 }
 
-// DeleteAt takes away what lives in a resource, by its kind's rules, as Delete
-// does, and then the resource, only at the version it was read at, and then
-// tells the graphs of roots what of it was kept or taken away. One written
-// since is ErrConflict, and one that is not there domain.ErrNotExists, what
-// lived in it taken away all the same, as a delete cut short leaves it.
+// DeleteAt takes away a resource only at the version it was read at: what
+// lives in it, by its kind's rules, as Delete does, and then the resource,
+// and then tells the graphs of roots what of it was kept or taken away. One
+// written since is ErrConflict, found before anything that lives in it is
+// touched, so that it is kept whole; only one written between that and its
+// own delete has what lived in it taken away and is kept, as a delete cut
+// short leaves it. One that is not there is domain.ErrNotExists, what lived
+// in it taken away all the same, as Delete takes it.
 func (r *Repository) DeleteAt(ctx context.Context, kindName string, uuid string, version int64) error {
+	held, err := r.Repository.GetOne(ctx, kindName, uuid)
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+	case err != nil:
+		return err
+	case held.Version != version:
+		return resource.ErrConflict
+	}
+
 	touched, err := r.cascade.deleted(ctx, kind.Reference{Kind: kindName, UUID: uuid})
 	if err != nil {
 		return err
