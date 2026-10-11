@@ -695,8 +695,10 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 //   - held, when a container of one of the services of its file it owns is
 //     no longer reset: one that look found in the restored disk, or one
 //     taken in from it, which is the stack's again (kinds/container's
-//     Adopt). A container of no service of its file, which its graph would
-//     remove, says nothing of it;
+//     Adopt). A container of no service of its file says nothing of it: a
+//     stack's spec is immutable, there being no update of a stack but a new
+//     one, so its file never had that service, no run of its graph made
+//     such a container, and none is taken in as its;
 //   - not known still while one is reset: what the disk holds of a container
 //     its record says, kept as it is found there, or forgotten once its node
 //     goes on beating for as long as what lives in a VM may go unheard
@@ -788,9 +790,9 @@ func (g *Graph) Restored(ctx context.Context, r kind.Raw, resetAt time.Time) (gr
 		return graph.RestorationUnknown, err
 	}
 
-	// a container of none of its file's services, which its graph would
-	// remove, says nothing of it; and of a file that cannot be read, which
-	// says of none, each says something.
+	// a container of none of its file's services says nothing of it, its
+	// file never having had that service, which never changes; and of a
+	// file that cannot be read, which says of none, each says something.
 	services := make(map[string]bool)
 	if w, err := WantOf(s); err == nil {
 		for _, service := range w.File.ServiceNames() {

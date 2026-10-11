@@ -653,9 +653,11 @@ type stacked struct {
 // not hold that record's, which is forgotten once its node goes on without a
 // word of it. Nothing otherwise: labels that say nothing of a stack, or name
 // one that is not there, is in another VM, or whose file cannot be read or
-// has no such service; and a container of a service the stack has a record
-// of already, found in the restored disk, taken in from it, or made since.
-// What reading the records fails with is an error.
+// has no such service, which it never had, a stack's spec being immutable,
+// so that no run of its graph made the container; and a container of a
+// service the stack has a record of already, found in the restored disk,
+// taken in from it, or made since. What reading the records fails with is
+// an error.
 //
 // The check, and the create of the record that follows it (blocks' adopt),
 // are not one write. A container is taken in once whoever takes it in, its
