@@ -3,6 +3,7 @@ package blocks_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -360,6 +361,47 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.Equal(t, blockKinds.ManagedByNobody, extras[0].Metadata.Labels[blockKinds.LabelManagedBy])
 	})
 
+	t.Run("and what telling whether its stack went meanwhile fails with is said, what was taken in kept as it was", func(t *testing.T) {
+		t.Parallel()
+
+		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
+		w := blockstest.New(vmtest.WithVMs(restored))
+
+		shop, err := kind.Encode(stackKind.Stack{
+			Kind:     stackKind.Name,
+			Metadata: kind.Metadata{UUID: "stack-uuid", Name: "shop", Slug: "shop-abcde", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+			Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+			Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running}},
+		})
+		require.NoError(t, err)
+
+		w.Keep(shop)
+
+		gone := errors.New("the database is gone")
+
+		// the database gone once the container's record is kept.
+		failing := &created{Repository: w.Resources, after: func(_ context.Context, r resource.Record) {
+			if r.Kind == containerKind.Name {
+				w.Memory.Fail = gone
+			}
+		}}
+
+		containers := controlPlaneContainers.New(blocks.Dependencies{Resources: failing, VMs: w.Records, Chooser: w.Chooser, Requester: w.Requester, Sightings: w.Sightings})
+
+		labels := labelled(t, "from-the-snapshot")
+		labels[stackKind.LabelStack] = "stack-uuid"
+		labels[stackKind.LabelService] = "web"
+
+		err = containers.Witnessed(ctx, vmtest.Node, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "shop-abcde_web", State: "running", Labels: labels}), false, at)
+		assert.ErrorIs(t, err, gone)
+
+		w.Memory.Fail = nil
+
+		adopted, kept := w.Kept(containerKind.Name, "from-the-snapshot")
+		require.True(t, kept)
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}, adopted.Metadata.Owners)
+	})
+
 	t.Run("the first look into a vm since its disk was restored is kept on its record, and no look before its restore, nor one after the first", func(t *testing.T) {
 		t.Parallel()
 
@@ -441,6 +483,25 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.True(t, kept, "taken in at the first look once the record says the restore")
 	})
 
+	t.Run("nor while its vm's record is yet to take a restore after one looked into", func(t *testing.T) {
+		t.Parallel()
+
+		stale := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+			v.Status.State = vmKind.Restoring
+			v.Status.RestoredAt = at.Add(-20 * time.Minute)
+			v.Status.LookedAt = at.Add(-19 * time.Minute)
+		})
+		w := blockstest.New(vmtest.WithVMs(stale))
+
+		witnessed(t, w, at, seen(t, "from-the-new-disk", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-new-disk")}))
+
+		_, kept := w.Kept(containerKind.Name, "from-the-new-disk")
+		assert.False(t, kept)
+
+		v, _ := w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAt.Equal(at.Add(-19*time.Minute)), "the look before is kept as it was")
+	})
+
 	t.Run("what the first look into a restored vm finds is taken in however long after the restore its dockerd came up", func(t *testing.T) {
 		t.Parallel()
 
@@ -505,6 +566,23 @@ func (c *creating) Create(ctx context.Context, r resource.Record) (resource.Reco
 	c.before(ctx, r)
 
 	return c.Repository.Create(ctx, r)
+}
+
+// created keeps records as the repository it wraps does, but for doing what
+// after says just after each record is created.
+type created struct {
+	resource.Repository
+
+	after func(ctx context.Context, r resource.Record)
+}
+
+func (c *created) Create(ctx context.Context, r resource.Record) (resource.Record, error) {
+	made, err := c.Repository.Create(ctx, r)
+	if err == nil {
+		c.after(ctx, r)
+	}
+
+	return made, err
 }
 
 // labelled are the labels a container the platform made as uuid has, its

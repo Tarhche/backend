@@ -374,7 +374,7 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 		if adopted {
 			b.Sightings.Forget(b.descriptor.Name, instance.UUID)
 
-			return failed
+			return errors.Join(failed, err)
 		}
 
 		failed = errors.Join(failed, err)
@@ -487,7 +487,9 @@ func adoptable(v vmKind.VM, at time.Time) bool {
 // adopt takes in what was found labelled as the platform's in a restored VM,
 // as the kind reads it off what was observed of it, living in the VM, owned
 // by what the kind says owns it, its spec its first generation, and reports
-// whether it did. One another control plane took in first is taken in.
+// whether it did. One another control plane took in first is taken in. What
+// telling whether what it was taken in as owned by went meanwhile fails with
+// is an error beside it, its record kept as taken in (orphaned).
 func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instance kind.Observation, at time.Time) (bool, error) {
 	adoption, ok, err := b.kind.Adopt(ctx, instance)
 	if err != nil || !ok {
