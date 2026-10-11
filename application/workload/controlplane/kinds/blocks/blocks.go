@@ -339,11 +339,15 @@ func (b *Blocks) request(ctx context.Context, r kind.Raw, action string, payload
 // alone, and one nobody keeps a record of is shown as it was seen from now on,
 // until a later heartbeat says otherwise, or until none has said it for long
 // enough (Sightings); one labelled as the platform's, under the uuid it is
-// told by, only once its node has gone on saying it for long enough. What it
-// found labelled as the platform's with no record, in the first look into a
-// VM whose disk was just restored, is taken in again instead; and that look
-// is kept on the VM's record (looked).
+// told by, only once its node has gone on saying it for long enough, and not
+// once its node has gone on as long saying what else its VMs hold, as every
+// heartbeat tells (Sightings.Heard). What it found labelled as the platform's
+// with no record, in the first look into a VM whose disk was just restored,
+// is taken in again instead; and that look is kept on the VM's record
+// (looked).
 func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.Observation, kept bool, at time.Time) error {
+	b.Sightings.Heard(nodeName, at)
+
 	if kept {
 		b.Sightings.Forget(b.descriptor.Name, instance.UUID)
 

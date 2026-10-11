@@ -32,6 +32,15 @@ import (
 // shown, here or by another control plane, which hears other heartbeats of
 // it. What outlived its record, or is on a disk restored long ago, is said
 // beat after beat, and is shown once it has been said for long enough.
+//
+// Nor is it shown once its node has gone on saying what else its Docker VMs
+// hold, as heard here, for as long without a word of it (Heard): heartbeats
+// of one kind heard so late that they alone span as long, a backlog of them
+// taken before a delete removed what they say, leave it behind the node's
+// other heartbeats of that beat on, which are heard in time. A backlog of
+// every heartbeat a node sends alike, as long as a record may go unheard,
+// tells nothing apart, and what it says is shown until it is stale: a ghost
+// for as long as twice that, from the last word of it, by the node's clock.
 type Sightings struct {
 	lock sync.RWMutex
 
@@ -47,6 +56,10 @@ type Sightings struct {
 	// labelled as its own before it is shown, and how long it may go
 	// without a word of it in between.
 	sureAfter time.Duration
+
+	// heard is the latest moment each node said what its Docker VMs hold as
+	// of, by its own clock, in a heartbeat heard here, of any kind.
+	heard map[string]time.Time
 
 	now func() time.Time
 }
@@ -84,7 +97,20 @@ type Seen struct {
 // labelled as its own only once its node has gone on saying it for as long
 // as sureAfter, never as long again without a word of it.
 func NewSightings(shownFor time.Duration, sureAfter time.Duration) *Sightings {
-	return &Sightings{seen: make(map[string]map[string]Seen), staleAfter: shownFor, sureAfter: sureAfter, now: time.Now}
+	return &Sightings{seen: make(map[string]map[string]Seen), heard: make(map[string]time.Time), staleAfter: shownFor, sureAfter: sureAfter, now: time.Now}
+}
+
+// Heard keeps that a node said what one of its Docker VMs holds as of a
+// moment, by its own clock, in a heartbeat heard here, of whatever kind, a
+// record kept of it or not: what the platform labelled as its own that its
+// node goes on that long after without a word of is not shown.
+func (s *Sightings) Heard(nodeName string, at time.Time) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if at.After(s.heard[nodeName]) {
+		s.heard[nodeName] = at
+	}
 }
 
 // Saw keeps what a node saw of one thing of the named kind, in place of what
@@ -198,9 +224,17 @@ func (s *Sightings) shown(kindName string, is func(kind.Raw) bool) []kind.Raw {
 }
 
 // shows reports whether what was seen is shown: seen lately, not taken away
-// since, and, when the platform labelled it as its own, said for long enough.
+// since, and, when the platform labelled it as its own, said for long enough,
+// and not left behind by its node.
 func (s *Sightings) shows(seen Seen) bool {
-	return !seen.gone && !s.stale(seen) && (!seen.Labelled || seen.said.Sub(seen.since) >= s.sureAfter)
+	return !seen.gone && !s.stale(seen) && (!seen.Labelled || (seen.said.Sub(seen.since) >= s.sureAfter && !s.left(seen)))
+}
+
+// left reports whether what was seen was left behind by its node: it went on
+// saying what else its Docker VMs hold, as heard here, for sureAfter since it
+// last said it.
+func (s *Sightings) left(seen Seen) bool {
+	return s.heard[seen.Node].Sub(seen.said) >= s.sureAfter
 }
 
 // stale reports whether what was seen was seen too long ago to show.

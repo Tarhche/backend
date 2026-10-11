@@ -143,6 +143,49 @@ func TestSightings_labelled(t *testing.T) {
 			said(s, now, "node-1", sure+time.Second, true)
 			assert.True(t, shown(s), "its run goes on, by its node's clock")
 		},
+		"what its node took before its record's delete removed it, heard as late as it waits for, is never shown, its node's other heartbeats heard in time": func(t *testing.T) {
+			s, now := sightings()
+
+			// web's heartbeats are heard 35 s after its node took them, while
+			// what else its node says of its Docker VMs is heard as it is
+			// said: the beats of web its node took over the 35 s before it
+			// removed web, at 35 s, are heard once its record went, one after
+			// another, and alone span longer than its node is waited on for.
+			for after := time.Duration(0); after < 35*time.Second; after += time.Second {
+				*now = start.Add(after + 35*time.Second)
+				s.Heard("node-1", *now)
+
+				s.Saw("container", Seen{Node: "node-1", At: start.Add(after), Labelled: true, Manifest: kind.Raw{Kind: "container", Metadata: kind.Metadata{UUID: "web"}}})
+				assert.False(t, shown(s), "said at %s", after)
+			}
+		},
+		"but what its node goes on saying beside the rest is shown, and left behind by the rest, is not shown from then on": func(t *testing.T) {
+			s, now := sightings()
+
+			for after := time.Duration(0); after <= sure; after += time.Second {
+				s.Heard("node-1", start.Add(after))
+				said(s, now, "node-1", after, true)
+			}
+
+			assert.True(t, shown(s))
+
+			s.Heard("node-1", start.Add(2*sure-time.Second))
+			assert.True(t, shown(s), "not before its node went on as long without it")
+
+			s.Heard("node-1", start.Add(2*sure))
+			assert.False(t, shown(s), "though it is not stale")
+
+			s.Heard("node-2", start.Add(time.Hour))
+			said(s, now, "node-1", 2*sure+time.Second, true)
+			assert.False(t, shown(s), "and its run starts again, by its node's clock, which another node's says nothing of")
+		},
+		"what is not labelled as the platform's is shown until it is stale, whatever else its node says": func(t *testing.T) {
+			s, now := sightings()
+
+			said(s, now, "node-1", 0, false)
+			s.Heard("node-1", start.Add(sure))
+			assert.True(t, shown(s))
+		},
 		"and what a command took away is seen anew, a heartbeat its node took before then never shown, whatever the control plane's clock": func(t *testing.T) {
 			s, now := sightings()
 

@@ -172,6 +172,35 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.ErrorIs(t, err, domain.ErrNotExists, "nor named, to be acted on")
 	})
 
+	t.Run("nor from a backlog of them as long as a record may go unheard, which what else its node says of its vm, heard in time, leaves behind", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		web := seen(t, "deleted-a-moment-ago", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "deleted-a-moment-ago")})
+
+		status, err := json.Marshal(networkKind.Status{Status: kind.Status{State: networkKind.Present}, Docker: &networkKind.Docker{ID: "n-bridge", Name: "bridge", Driver: "bridge"}})
+		require.NoError(t, err)
+
+		bridge := kind.Observation{Kind: networkKind.Name, Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, Status: status}
+
+		// web's heartbeats are heard 35 s after its node took them, and its
+		// vm's networks' as they are said: each beat of web its node took
+		// over the 35 s before it removed web is heard with the networks'
+		// of 35 s later, once web's record went.
+		for after := time.Duration(0); after < 35*time.Second; after += time.Second {
+			require.NoError(t, w.Networks.Witnessed(ctx, vmtest.Node, bridge, false, at.Add(after+35*time.Second)))
+			witnessed(t, w, at.Add(after), web)
+		}
+
+		extras, err := w.Containers.All(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, extras)
+
+		_, err = w.Containers.One(ctx, "deleted-a-moment-ago")
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
 	t.Run("but one its node goes on saying is shown as nobody's once its node has said it for as long as a record may go unheard", func(t *testing.T) {
 		t.Parallel()
 
