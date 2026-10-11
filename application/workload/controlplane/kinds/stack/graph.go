@@ -692,9 +692,11 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 // heartbeat of that look has been heard, and what it found, or took in, is
 // kept:
 //
-//   - held, when a container the stack owns is no longer reset: one that
-//     look found in the restored disk, or one taken in from it, which is the
-//     stack's again (kinds/container's Adopt);
+//   - held, when a container of one of the services of its file it owns is
+//     no longer reset: one that look found in the restored disk, or one
+//     taken in from it, which is the stack's again (kinds/container's
+//     Adopt). A container of no service of its file, which its graph would
+//     remove, says nothing of it;
 //   - not known still while one is reset: what the disk holds of a container
 //     its record says, kept as it is found there, or forgotten once its node
 //     goes on beating for as long as what lives in a VM may go unheard
@@ -772,10 +774,29 @@ func (g *Graph) Restored(ctx context.Context, r kind.Raw, resetAt time.Time) (gr
 		return graph.RestorationUnknown, err
 	}
 
-	switch {
-	case slices.ContainsFunc(containers, func(c resource.Record) bool { return !c.Reset }):
-		return graph.RestorationHeld, nil
-	case len(containers) > 0:
+	// a container of none of its file's services, which its graph would
+	// remove, says nothing of it; and of a file that cannot be read, which
+	// says of none, each says something.
+	services := make(map[string]bool)
+	if w, err := WantOf(s); err == nil {
+		for _, service := range w.File.ServiceNames() {
+			services[w.Named(service)] = true
+		}
+	}
+
+	left := false
+
+	for _, c := range containers {
+		switch {
+		case len(services) > 0 && !services[c.Metadata.Name]:
+		case !c.Reset:
+			return graph.RestorationHeld, nil
+		default:
+			left = true
+		}
+	}
+
+	if left {
 		return graph.RestorationUnknown, nil
 	}
 

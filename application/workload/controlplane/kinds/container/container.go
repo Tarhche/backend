@@ -574,11 +574,10 @@ func (s *Containers) Refuse(_ context.Context, r kind.Raw, action string, payloa
 // platform's with no record: as the spec it was made with, which its labels
 // carry, expected to be doing what it is doing, unless that is having been
 // stopped. One its labels say is a service of a stack whose record is there,
-// in the same VM, is the stack's again, as its stack's graph makes the
-// container of a service (stackOf): owned by the stack, labelled as the
-// stack's and as the service, and named <slug>_<service>, which the stack's
-// graph knows it by. One whose labels name a stack that is not there, or is
-// in another VM, is nobody's, as any other is: its labels confer nothing.
+// in the same VM, and which is that service's container as the stack's graph
+// makes it, is the stack's again (stackOf): owned by the stack, labelled as
+// the stack's and as the service, and named <slug>_<service>, which the
+// stack's graph knows it by. Any other is nobody's: its labels confer nothing.
 func (s *Containers) Adopt(ctx context.Context, observed kind.Observation) (blocks.Adoption, bool, error) {
 	var status containerKind.Status
 	if err := json.Unmarshal(observed.Status, &status); err != nil || status.Docker == nil {
@@ -602,7 +601,7 @@ func (s *Containers) Adopt(ctx context.Context, observed kind.Observation) (bloc
 
 	adoption := blocks.Adoption{Expected: expected}
 
-	stacked, err := s.stackOf(ctx, parent, status.Docker.Labels)
+	stacked, err := s.stackOf(ctx, parent, *status.Docker)
 	if err != nil {
 		return blocks.Adoption{}, false, err
 	}
@@ -635,12 +634,21 @@ type stacked struct {
 }
 
 // stackOf is the service of a stack a container in the Docker VM vmUUID
-// names is, as its labels say, when they say it of a stack whose record is
-// there, in that VM: nothing when they say nothing of a stack, or name one
-// that is not there, or is in another VM. What reading the stack fails with
-// is an error.
-func (s *Containers) stackOf(ctx context.Context, vmUUID string, labels map[string]string) (*stacked, error) {
-	uuid, service := labels[stackKind.LabelStack], labels[stackKind.LabelService]
+// names is, as docker, what its VM's dockerd says of it, says: when its labels
+// say it of a stack whose record is there, in that VM, whose file has that
+// service, and no record of the stack's is named as the service's container,
+// <slug>_<service>, already, which a second container taken in as the
+// service's would be named too. A record on its way out does not count, nor
+// does one reset that dockerd would name as it names this container, since
+// it names one container so at most, and this is it: the restored disk does
+// not hold that record's, which is forgotten once its node goes on without a
+// word of it. Nothing otherwise: labels that say nothing of a stack, or name
+// one that is not there, is in another VM, or whose file cannot be read or
+// has no such service; and a container of a service the stack has a record
+// of already, found in the restored disk, taken in from it, or made since.
+// What reading the records fails with is an error.
+func (s *Containers) stackOf(ctx context.Context, vmUUID string, docker containerKind.Docker) (*stacked, error) {
+	uuid, service := docker.Labels[stackKind.LabelStack], docker.Labels[stackKind.LabelService]
 	if len(uuid) == 0 || len(service) == 0 || len(vmUUID) == 0 {
 		return nil, nil
 	}
@@ -662,7 +670,54 @@ func (s *Containers) stackOf(ctx context.Context, vmUUID string, labels map[stri
 		return nil, nil
 	}
 
-	return &stacked{uuid: uuid, service: service, name: stackKind.Want{Slug: st.Metadata.Slug}.Named(service)}, nil
+	file, invalid := stackKind.Parse(st.Spec.Compose)
+	if _, defined := file.Services[service]; len(invalid) > 0 || !defined {
+		return nil, nil
+	}
+
+	name := stackKind.Want{Slug: st.Metadata.Slug}.Named(service)
+
+	containers, _, err := s.Resources.GetAll(ctx, containerKind.Name, resource.Filter{Parent: kind.Reference{Kind: stackKind.Name, UUID: uuid}}, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	named := slices.ContainsFunc(containers, func(c resource.Record) bool {
+		return c.Metadata.Name == name && !going(c) && (!c.Reset || dockerName(c) != docker.Name)
+	})
+	if named {
+		return nil, nil
+	}
+
+	return &stacked{uuid: uuid, service: service, name: name}, nil
+}
+
+// dockerName is the name dockerd has the container r is the record of under,
+// as its node last said, or as it was asked for when its node has said
+// nothing of it.
+func dockerName(r resource.Record) string {
+	c, err := kind.Decode[containerKind.Spec, containerKind.Status](r.Raw)
+	if err != nil {
+		return ""
+	}
+
+	if c.Status.Docker != nil && len(c.Status.Docker.Name) > 0 {
+		return c.Status.Docker.Name
+	}
+
+	return c.Spec.Name
+}
+
+// going reports whether the container r is the record of is on its way out:
+// asked to be deleted, or expected deleted, or deleted.
+func going(r resource.Record) bool {
+	if !r.Metadata.DeletionRequestedAt.IsZero() {
+		return true
+	}
+
+	common, err := r.Common()
+
+	return err == nil && (common.Expected == kind.Deleted || common.State == kind.Deleted)
 }
 
 // Named reports whether name is the name a container was asked for with.

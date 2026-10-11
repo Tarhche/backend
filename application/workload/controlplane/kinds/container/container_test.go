@@ -762,6 +762,24 @@ func TestContainers_Adopt(t *testing.T) {
 			stacks: []kind.Raw{aStack(t, "stack-1", "vm-1")},
 			labels: map[string]string{containerKind.LabelSpec: spec, stackKind.LabelStack: "stack-1"},
 		},
+		"one naming a service the stack's file has not": {
+			stacks: []kind.Raw{aStack(t, "stack-1", "vm-1")},
+			labels: map[string]string{containerKind.LabelSpec: spec, stackKind.LabelStack: "stack-1", stackKind.LabelService: "not-in-its-file"},
+		},
+		"one naming a stack whose file cannot be read": {
+			stacks: []kind.Raw{func() kind.Raw {
+				s, err := kind.Decode[stackKind.Spec, stackKind.Status](aStack(t, "stack-1", "vm-1"))
+				require.NoError(t, err)
+
+				s.Spec.Compose = "services:\n  web:\n    image: nginx:1.27\n    build: .\n"
+
+				raw, err := kind.Encode(s)
+				require.NoError(t, err)
+
+				return raw
+			}()},
+			labels: stackLabels("stack-1"),
+		},
 	} {
 		t.Run(name+" is nobody's, as any other is: its labels confer nothing", func(t *testing.T) {
 			t.Parallel()
@@ -778,6 +796,62 @@ func TestContainers_Adopt(t *testing.T) {
 			assert.Empty(t, adopted.Owners)
 			assert.Empty(t, adopted.Labels)
 			assert.Equal(t, "web", adopted.Name, "as it was asked for")
+		})
+	}
+
+	// a container record of stack-1's, named as its web server's, as changes
+	// say otherwise.
+	ofStack1 := func(uuid string, changes ...func(c *containerKind.Container)) kind.Raw {
+		return blockstest.AContainer(uuid, "vm-1", containerKind.Running, containerKind.Running, append([]func(c *containerKind.Container){func(c *containerKind.Container) {
+			c.Metadata.Name = "shop-abcde_web"
+			c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "stack-1"}}
+			c.Spec.Name = "shop-abcde_web"
+			c.Status.Docker.Name = "shop-abcde_web"
+		}}, changes...)...)
+	}
+
+	for name, tt := range map[string]struct {
+		kept  resource.Record
+		owned bool
+	}{
+		"a second container of a service whose container the stack has a record of, found in the restored disk or taken in from it, is nobody's: a stack's service has one container": {
+			kept: resource.Record{Raw: ofStack1("found")},
+		},
+		"but one whose record is on its way out is the stack's": {
+			kept:  resource.Record{Raw: ofStack1("going", func(c *containerKind.Container) { c.Status.Expected = kind.Deleted })},
+			owned: true,
+		},
+		"and so is one whose record is reset, dockerd naming its container as it names this one, so that the restored disk does not hold it": {
+			kept:  resource.Record{Raw: ofStack1("made-since-the-snapshot", func(c *containerKind.Container) { c.Status.Docker.Name = "web" }), Reset: true},
+			owned: true,
+		},
+		"but not one whose record is reset, dockerd naming its container otherwise, which the restored disk may hold beside it": {
+			kept: resource.Record{Raw: ofStack1("maybe-in-the-disk"), Reset: true},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w := blockstest.New()
+			w.Keep(aStack(t, "stack-1", "vm-1"))
+
+			_, err := w.Memory.Create(ctx, tt.kept)
+			require.NoError(t, err)
+
+			adopted, ok, err := w.Containers.Adopt(ctx, kind.Observation{UUID: "c-uuid", Owners: inVM1, Status: status(containerKind.Running, stackLabels("stack-1"))})
+			require.NoError(t, err)
+			require.True(t, ok)
+
+			if tt.owned {
+				assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "stack-1"}}, adopted.Owners)
+				assert.Equal(t, "shop-abcde_web", adopted.Name)
+
+				return
+			}
+
+			assert.Empty(t, adopted.Owners)
+			assert.Empty(t, adopted.Labels)
+			assert.Equal(t, "web", adopted.Name, "named as it was asked for, not as the service's")
 		})
 	}
 

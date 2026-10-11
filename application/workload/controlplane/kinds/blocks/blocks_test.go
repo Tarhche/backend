@@ -267,6 +267,49 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, adopted.Metadata.Refs, "living in its vm, which does not own it")
 	})
 
+	t.Run("but of two its labels say are the same service of a stack, only the first is taken in as the stack's, and one of a service its file has not is nobody's", func(t *testing.T) {
+		t.Parallel()
+
+		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
+		w := blockstest.New(vmtest.WithVMs(restored))
+
+		shop, err := kind.Encode(stackKind.Stack{
+			Kind:     stackKind.Name,
+			Metadata: kind.Metadata{UUID: "stack-uuid", Name: "shop", Slug: "shop-abcde", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+			Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+			Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running}},
+		})
+		require.NoError(t, err)
+
+		w.Keep(shop)
+
+		as := func(uuid string, service string) map[string]string {
+			labels := labelled(t, uuid)
+			labels[stackKind.LabelStack] = "stack-uuid"
+			labels[stackKind.LabelService] = service
+
+			return labels
+		}
+
+		witnessed(t, w, at,
+			seen(t, "web-1", containerKind.Docker{ID: "c1", Name: "shop-abcde_web", State: "running", Labels: as("web-1", "web")}),
+			seen(t, "web-2", containerKind.Docker{ID: "c2", Name: "copy-of-web", State: "running", Labels: as("web-2", "web")}),
+			seen(t, "bogus", containerKind.Docker{ID: "c3", Name: "anything", State: "running", Labels: as("bogus", "not-in-its-file")}),
+		)
+
+		first, kept := w.Kept(containerKind.Name, "web-1")
+		require.True(t, kept)
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}, first.Metadata.Owners)
+		assert.Equal(t, "shop-abcde_web", first.Metadata.Name)
+
+		for _, uuid := range []string{"web-2", "bogus"} {
+			r, kept := w.Kept(containerKind.Name, uuid)
+			require.True(t, kept, "%s is taken in", uuid)
+			assert.Empty(t, r.Metadata.Owners, "nobody's: %s", uuid)
+			assert.NotEqual(t, "shop-abcde_web", r.Metadata.Name, "and not named as the service's: %s", uuid)
+		}
+	})
+
 	t.Run("but one taken in for a stack forgotten meanwhile, as its vm's restored disk was found not to hold it, is forgotten too, as what the stack owned was, and is nobody's once its node goes on saying it", func(t *testing.T) {
 		t.Parallel()
 

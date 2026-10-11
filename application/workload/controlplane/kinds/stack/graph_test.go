@@ -947,13 +947,24 @@ func TestGraph_Restored(t *testing.T) {
 		return vmtest.In(v, func(v *vmKind.VM) { v.Status.State = vmKind.Restoring })
 	}
 
-	// a container of the stack s-1's in vm-1, reset by the vm's restore when
-	// reset says, and no longer otherwise: found in the restored disk, or
-	// taken in from it.
-	container := func(uuid string, reset bool) resource.Record {
+	// a container of the stack s-1's in vm-1, of its service named as its
+	// graph names it, reset by the vm's restore when reset says, and no
+	// longer otherwise: found in the restored disk, or taken in from it.
+	serviceOf := func(uuid string, name string, reset bool) resource.Record {
 		return resource.Record{Raw: blockstest.AContainer(uuid, "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
 			c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "s-1"}}
+			c.Metadata.Name = name
+			c.Spec.Name = name
 		}), Reset: reset}
+	}
+
+	// container is c-1, its web server's, or any other, its database's.
+	container := func(uuid string, reset bool) resource.Record {
+		if uuid == "c-1" {
+			return serviceOf(uuid, "shop_web", reset)
+		}
+
+		return serviceOf(uuid, "shop_db", reset)
 	}
 
 	// a moment after restoredAt: a restore of vm-1's after the one its
@@ -1014,6 +1025,16 @@ func TestGraph_Restored(t *testing.T) {
 		"nor while its vm failed": {
 			vms:      []vmKind.VM{failed(restored(looked, silence+time.Second))},
 			restored: graph.RestorationUnknown,
+		},
+		"a container of no service of its file, which its graph would remove, says nothing of it, found or not": {
+			vms:        []vmKind.VM{restored(looked, silence+time.Second)},
+			containers: []resource.Record{container("c-1", true), serviceOf("c-bogus", "shop_not-in-its-file", false)},
+			restored:   graph.RestorationUnknown,
+		},
+		"and lost with no other left": {
+			vms:        []vmKind.VM{restored(looked, silence+time.Second)},
+			containers: []resource.Record{serviceOf("c-bogus", "shop_not-in-its-file", false), serviceOf("c-left", "shop_gone", true)},
+			restored:   graph.RestorationLost,
 		},
 		"held when its vm is gone, which nothing looks into again: its graph makes it again": {
 			containers: []resource.Record{container("c-1", true)},
@@ -1079,6 +1100,22 @@ func TestGraph_Restored(t *testing.T) {
 			assert.Equal(t, tt.restored, restoration)
 		})
 	}
+
+	t.Run("of one whose file cannot be read, which says of none of them, each container it owns says something", func(t *testing.T) {
+		t.Parallel()
+
+		g := newStackGraph(t, vmtest.WithVMs(restored(looked, silence+time.Second)))
+
+		unread := aStack("s-1", "vm-1", "services:\n  web:\n    image: nginx:1.27\n    build: .\n")
+		g.Keep(unread)
+
+		_, err := g.Memory.Create(ctx, serviceOf("c-1", "anything", false))
+		require.NoError(t, err)
+
+		restoration, err := g.stacks.Restored(ctx, unread, restoredAt)
+		require.NoError(t, err)
+		assert.Equal(t, graph.RestorationHeld, restoration)
+	})
 
 	t.Run("a container another stack owns says nothing of it", func(t *testing.T) {
 		t.Parallel()
