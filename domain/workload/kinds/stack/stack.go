@@ -21,7 +21,10 @@
 // graph has its containers started a level of its services at a time, as
 // they depend on one another, and stopped the other way round. Deleted, it is
 // removing while its graph removes its containers, and then its networks, and
-// its record goes last of all; its volumes and its VM stay.
+// its record goes last of all; its volumes and its VM stay. Its VM's disk
+// restored from a snapshot, it is what the disk holds of it: it stays while
+// the disk holds any of its containers, which are its own again, and is
+// forgotten, with what it owns, once the disk is found to hold none of them.
 //
 // A stack's spec is immutable: there is no update, only a new stack.
 package stack
@@ -283,9 +286,12 @@ func Descriptor() kind.Descriptor {
 
 		// what a stack is, is its record, the control plane's own: deleting its
 		// VM takes it with it but for its graph keeping it, as it keeps what
-		// it makes, and restoring its VM's disk leaves it as it is, and resets
-		// its containers, its networks and its volumes to what the disk holds.
-		OnParent: kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeKeep},
+		// it makes; and restoring its VM's disk resets it, as it resets its
+		// containers, its networks and its volumes, to what the disk holds:
+		// kept while the disk holds any of its containers, and forgotten, with
+		// what it owns, once the disk is found to hold none of them. Nothing
+		// is made of it in the meantime (graph.ResetKind).
+		OnParent: kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
 
 		Machine: Machine(),
 		Actions: []kind.Action{

@@ -30,7 +30,7 @@ func TestDescriptor(t *testing.T) {
 		assert.Equal(t, "stacks", d.Plural)
 		assert.Equal(t, kind.OnControlPlane, d.StateBy, "no node says what a stack is doing")
 		assert.Equal(t, "vm", d.Parent)
-		assert.Equal(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeKeep}, d.OnParent)
+		assert.Equal(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset}, d.OnParent, "a vm's restore resets it to what the restored disk holds of it")
 		assert.False(t, d.Endpoints, "a stack's ports are its vm's")
 	})
 

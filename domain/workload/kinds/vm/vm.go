@@ -278,6 +278,15 @@ type Status struct {
 	// labelled as the platform's is taken in again rather than taken for
 	// somebody's own.
 	RestoredAt time.Time `json:"restored_at,omitzero"`
+
+	// LookedAt is when what lives in it was first looked at since its disk
+	// was last restored: the beat a node first said what it holds as of,
+	// which nothing its node says of it sets, but the control plane, as it
+	// hears what the heartbeats of what lives in it say. One before its
+	// restore, or none, is none since. What lived in it before is not taken
+	// to be missing from the restored disk until it was looked into, a
+	// stack's containers among it, however long its dockerd takes to come up.
+	LookedAt time.Time `json:"looked_at,omitzero"`
 }
 
 // Stats is one sample of what a VM uses.

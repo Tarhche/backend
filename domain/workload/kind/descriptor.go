@@ -84,7 +84,8 @@ const (
 	// when the parent no longer has it, and adopted when the parent has one
 	// nobody kept a record of. A restored Docker VM's containers are what its
 	// restored disk holds, so reconciling does not make again what the restore
-	// just took away.
+	// just took away; and so is a stack in it, which no node says anything of,
+	// as what the disk holds of its containers says (graph.ResetKind).
 	CascadeReset Cascade = "reset"
 )
 

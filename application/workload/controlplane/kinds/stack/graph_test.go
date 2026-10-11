@@ -3,6 +3,7 @@ package stack_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"slices"
 	"strconv"
@@ -71,6 +72,12 @@ networks:
   back:
 `
 
+// silence is how long what lives in a VM may go unheard while its node beats
+// before it is taken to be gone from it, which a stack its VM's restore reset
+// waits for, from the first look into the restored disk, before it is found
+// not to be there.
+const silence = 30 * time.Second
+
 // stackGraph is requirementstest's workload, with the stack kind registered
 // as the control plane registers it, its strategy planning stacks' graphs, and
 // the kinds a stack's graph is made of, its own among them.
@@ -91,7 +98,7 @@ func newStackGraph(t *testing.T, options ...vmtest.Option) *stackGraph {
 
 	w := requirementstest.New(options...)
 
-	g := &stackGraph{Workload: w, stacks: stack.NewGraph(w.Requirements), kinds: maps.Clone(w.Kinds)}
+	g := &stackGraph{Workload: w, stacks: stack.NewGraph(w.Requirements, silence), kinds: maps.Clone(w.Kinds)}
 	g.kinds[stackKind.Name] = g.stacks
 	g.planner = graph.NewPlanner(g.kinds, graph.DefaultPolicy())
 	g.strategy = g.strategyHolding()
@@ -737,7 +744,7 @@ func interloped(g *stackGraph, kindName string, uuid string, do func()) *stack.G
 	dependencies := g.Requirements.Dependencies
 	dependencies.Resources = &interloping{Repository: g.Resources, kindName: kindName, uuid: uuid, do: do}
 
-	return stack.NewGraph(requirements.New(dependencies))
+	return stack.NewGraph(requirements.New(dependencies), silence)
 }
 
 func TestGraph_Create_askedMeanwhile(t *testing.T) {
@@ -900,6 +907,135 @@ func TestGraph_Exists(t *testing.T) {
 
 		assert.False(t, there)
 		assert.Zero(t, ref)
+	})
+}
+
+func TestGraph_Restored(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	restoredAt := time.Now().Add(-time.Hour)
+
+	// vm-1, its disk restored at restoredAt, first looked into since as
+	// lookedAt says, a moment after, and heard of for as long as heard says
+	// since: what lives in it was looked at, and nothing of it heard, then.
+	restored := func(lookedAt time.Time, heard time.Duration) vmKind.VM {
+		return vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+			v.Status.RestoredAt = restoredAt
+			v.Status.LookedAt = lookedAt
+			v.Status.ObservedAt = lookedAt.Add(heard)
+		})
+	}
+
+	looked := restoredAt.Add(time.Second)
+
+	// a container of the stack s-1's in vm-1, reset by the vm's restore when
+	// reset says, and no longer otherwise: found in the restored disk, or
+	// taken in from it.
+	container := func(uuid string, reset bool) resource.Record {
+		return resource.Record{Raw: blockstest.AContainer(uuid, "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+			c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "s-1"}}
+		}), Reset: reset}
+	}
+
+	for name, tt := range map[string]struct {
+		vms        []vmKind.VM
+		containers []resource.Record
+		restored   graph.Restoration
+	}{
+		"held once its vm was looked into, and heard of for long enough since, when a container of it is no longer reset, found in the restored disk or taken in from it": {
+			vms:        []vmKind.VM{restored(looked, silence+time.Second)},
+			containers: []resource.Record{container("c-1", true), container("c-2", false)},
+			restored:   graph.RestorationHeld,
+		},
+		"but not known before then, its vm not heard of for long enough since the look for every word of it to be heard, though one is": {
+			vms:        []vmKind.VM{restored(looked, silence)},
+			containers: []resource.Record{container("c-1", false)},
+			restored:   graph.RestorationUnknown,
+		},
+		"not known while its vm was not looked into since its restore, however long its containers went unheard": {
+			vms:        []vmKind.VM{restored(time.Time{}, 0)},
+			containers: []resource.Record{container("c-1", true)},
+			restored:   graph.RestorationUnknown,
+		},
+		"nor while it was looked into before its restore alone": {
+			vms:      []vmKind.VM{restored(restoredAt.Add(-time.Minute), 2*silence)},
+			restored: graph.RestorationUnknown,
+		},
+		"nor while its node was heard of it for no longer than what lives in it may go unheard since it was looked into, every word of that look not yet heard": {
+			vms:        []vmKind.VM{restored(looked, silence)},
+			containers: []resource.Record{container("c-1", true)},
+			restored:   graph.RestorationUnknown,
+		},
+		"lost once its node was heard of it for longer since, none of its containers found": {
+			vms:        []vmKind.VM{restored(looked, silence+time.Second)},
+			containers: []resource.Record{container("c-1", true), container("c-2", true)},
+			restored:   graph.RestorationLost,
+		},
+		"and so is one none of whose containers is kept at all": {
+			vms:      []vmKind.VM{restored(looked, silence+time.Second)},
+			restored: graph.RestorationLost,
+		},
+		"held when its vm is gone, which nothing looks into again: its graph makes it again": {
+			containers: []resource.Record{container("c-1", true)},
+			restored:   graph.RestorationHeld,
+		},
+		"and when its vm's record says nothing of a restore": {
+			vms:      []vmKind.VM{vmtest.Docker("vm-1", "owner")},
+			restored: graph.RestorationHeld,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			g := newStackGraph(t, vmtest.WithVMs(tt.vms...))
+			g.Keep(aStack("s-1", "vm-1", shop))
+
+			for _, c := range tt.containers {
+				_, err := g.Memory.Create(ctx, c)
+				require.NoError(t, err)
+			}
+
+			restoration, err := g.stacks.Restored(ctx, aStack("s-1", "vm-1", shop))
+			require.NoError(t, err)
+			assert.Equal(t, tt.restored, restoration)
+		})
+	}
+
+	t.Run("a container another stack owns says nothing of it", func(t *testing.T) {
+		t.Parallel()
+
+		g := newStackGraph(t, vmtest.WithVMs(restored(looked, silence+time.Second)))
+		g.Keep(aStack("s-1", "vm-1", shop))
+
+		_, err := g.Memory.Create(ctx, resource.Record{Raw: blockstest.AContainer("c-other", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+			c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "s-2"}}
+		})})
+		require.NoError(t, err)
+
+		restoration, err := g.stacks.Restored(ctx, aStack("s-1", "vm-1", shop))
+		require.NoError(t, err)
+		assert.Equal(t, graph.RestorationLost, restoration)
+	})
+
+	t.Run("a record of another kind is no stack's to say of", func(t *testing.T) {
+		t.Parallel()
+
+		g := newStackGraph(t)
+
+		_, err := g.stacks.Restored(ctx, blockstest.AContainer("c-1", "vm-1", containerKind.Running, containerKind.Running))
+		assert.ErrorIs(t, err, kind.ErrUnknownKind)
+	})
+
+	t.Run("what reading the records fails with is an error", func(t *testing.T) {
+		t.Parallel()
+
+		g := newStackGraph(t, vmtest.WithVMs(restored(looked, silence+time.Second)))
+		g.Memory.Fail = errors.New("the database is gone")
+
+		_, err := g.stacks.Restored(ctx, aStack("s-1", "vm-1", shop))
+		assert.ErrorIs(t, err, g.Memory.Fail)
 	})
 }
 

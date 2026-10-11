@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/gofrs/uuid/v5"
 
@@ -39,12 +40,15 @@ func graphRoots() graph.Roots {
 // needs each (graph.Kind): a Docker VM, made through the chooser as one made
 // for what lives in it is; the building blocks that live in one, its
 // containers, networks and volumes, over their control-plane strategies; and
-// a stack, made of them as its file says. Each is made, asked and removed
-// through records.
-func controlPlaneGraphKinds(chooser *dockervm.Chooser, strategies blockStrategies, records *requirements.Records) graph.Kinds {
+// a stack, made of them as its file says, which its VM's restore resets, and
+// which is found not to be in the restored disk once what lives in the VM has
+// gone unheard for silence since it was first looked into, as the reconcile
+// loop takes what goes unheard for as long to be gone. Each is made, asked
+// and removed through records.
+func controlPlaneGraphKinds(chooser *dockervm.Chooser, strategies blockStrategies, records *requirements.Records, silence time.Duration) graph.Kinds {
 	return graph.Kinds{
 		vmKind.Name:        controlPlaneVMs.NewGraph(chooser, records),
-		stackKind.Name:     controlPlaneStacks.NewGraph(records),
+		stackKind.Name:     controlPlaneStacks.NewGraph(records, silence),
 		containerKind.Name: controlPlaneContainers.NewGraph(strategies.containers, records),
 		networkKind.Name:   controlPlaneNetworks.NewGraph(strategies.networks, records),
 		volumeKind.Name:    controlPlaneVolumes.NewGraph(strategies.volumes, records),

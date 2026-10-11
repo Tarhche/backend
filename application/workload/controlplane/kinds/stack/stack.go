@@ -17,8 +17,11 @@
 // networks and its volumes, and then its services' containers, as they depend
 // on one another, and then it; makes each again whenever it is gone; carries
 // out its start, its stop and its restart; and removes it, and what it owns,
-// once it is asked to go. Nothing else is asked of it: its record is the
-// control plane's own, and no node keeps any of it.
+// once it is asked to go. Its VM's disk restored from a snapshot, it is kept
+// while the restored disk holds any of its containers, and forgotten, with
+// what it owns, once the disk is looked into and found to hold none of them,
+// nothing made of it in the meantime (Graph.Restored). Nothing else is asked
+// of it: its record is the control plane's own, and no node keeps any of it.
 package stack
 
 import (

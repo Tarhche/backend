@@ -251,7 +251,7 @@ func graphKinds(w *blockstest.Workload, dispatcher *dispatch.Dispatcher, admissi
 
 	return graph.Kinds{
 		vmKind.Name:        controlplanevms.NewGraph(w.Chooser, records),
-		stackKind.Name:     controlplanestacks.NewGraph(records),
+		stackKind.Name:     controlplanestacks.NewGraph(records, time.Minute),
 		containerKind.Name: controlplanecontainers.NewGraph(w.Containers, records),
 		networkKind.Name:   controlplanenetworks.NewGraph(w.Networks, records),
 		volumeKind.Name:    controlplanevolumes.NewGraph(w.Volumes, records),

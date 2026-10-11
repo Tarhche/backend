@@ -221,6 +221,60 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, adopted.Metadata.Refs, "living in its vm, which does not own it")
 	})
 
+	t.Run("the first look into a vm since its disk was restored is kept on its record, and no look before its restore, nor one after the first", func(t *testing.T) {
+		t.Parallel()
+
+		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
+		w := blockstest.New(vmtest.WithVMs(restored))
+
+		db := seen(t, "", containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
+
+		witnessed(t, w, at.Add(-2*time.Minute), db)
+
+		v, _ := w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAt.IsZero(), "what a node saw before the restore says nothing of the restored disk")
+
+		witnessed(t, w, at, db)
+
+		v, _ = w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAt.Equal(at), "looked into as of the beat that first said what it holds since: %s", v.Status.LookedAt)
+
+		witnessed(t, w, at.Add(time.Second), db)
+
+		v, _ = w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAt.Equal(at), "the first look is kept, and no later one")
+		assert.True(t, v.Status.RestoredAt.Equal(at.Add(-time.Minute)), "and the rest of its status as it was")
+		assert.Equal(t, vmKind.Running, v.Status.State)
+	})
+
+	t.Run("one restored again since it was looked into is looked into again", func(t *testing.T) {
+		t.Parallel()
+
+		again := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+			v.Status.LookedAt = at.Add(-time.Hour)
+			v.Status.RestoredAt = at.Add(-time.Minute)
+		})
+		w := blockstest.New(vmtest.WithVMs(again))
+
+		witnessed(t, w, at, seen(t, "", containerKind.Docker{ID: "c-db", Name: "db", State: "running"}))
+
+		v, _ := w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAt.Equal(at))
+	})
+
+	t.Run("and a look into a vm never restored writes nothing of it", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		before, _ := w.Kept(vmKind.Name, "vm-1")
+
+		witnessed(t, w, at, seen(t, "", containerKind.Docker{ID: "c-db", Name: "db", State: "running"}))
+
+		after, _ := w.Kept(vmKind.Name, "vm-1")
+		assert.Equal(t, before.Version, after.Version)
+	})
+
 	t.Run("nor long after the restore", func(t *testing.T) {
 		t.Parallel()
 

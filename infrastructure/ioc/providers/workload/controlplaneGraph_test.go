@@ -71,11 +71,13 @@ func TestNewControlPlaneWorkload_graphs(t *testing.T) {
 	t.Run("a graph is made of a vm, the building blocks what lives in it needs, and stacks, and a stack and a container nothing owns are roots of their own", func(t *testing.T) {
 		t.Parallel()
 
-		kinds := controlPlaneGraphKinds(nil, blockStrategies{}, nil)
+		kinds := controlPlaneGraphKinds(nil, blockStrategies{}, nil, time.Minute)
 
 		assert.Equal(t, []string{containerKind.Name, networkKind.Name, stackKind.Name, vmKind.Name, volumeKind.Name}, slices.Sorted(maps.Keys(kinds)))
 		assert.Implements(t, (*graph.RootKind)(nil), kinds[containerKind.Name], "a container may be a root of its own")
 		assert.Implements(t, (*graph.RootKind)(nil), kinds[stackKind.Name], "and so is a stack")
+		assert.Implements(t, (*graph.ResetKind)(nil), kinds[stackKind.Name], "which its vm's restore resets to what the restored disk holds of it")
+		assert.NotImplements(t, (*graph.ResetKind)(nil), kinds[containerKind.Name], "while a container's own reset is its kind's, as its node finds it")
 
 		assert.Equal(t, graph.Roots{stackKind.Name, containerKind.Name}, graphRoots())
 	})

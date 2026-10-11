@@ -47,6 +47,10 @@ var defaultNetworks = []string{"bridge", "host", "none"}
 // container asked to run with any other is refused.
 var runtimes = []string{"runc", "io.containerd.runc.v2"}
 
+// listings are what a look into what a dockerd holds reads: its containers,
+// its images, its networks and its volumes.
+var listings = []string{"/containers/json", "/images/json", "/networks", "/volumes"}
+
 // What a request names, after the API version.
 var (
 	containerPath = regexp.MustCompile(`^/containers/([^/]+)(?:/(json|start|stop|restart|logs|stats))?$`)
@@ -85,6 +89,11 @@ type dockerd struct {
 
 	// refused are the references no registry has.
 	refused map[string]bool
+
+	// hidden are the VMs whose dockerd lists nothing of what it holds, as one
+	// still coming up after its VM's restore lists nothing: what the VM holds
+	// cannot be looked at, until Show.
+	hidden map[string]bool
 }
 
 // disks are where the VMs' dockerds keep what they hold.
@@ -125,6 +134,7 @@ func newDockerd(t *testing.T) *dockerd {
 		addresses: make(map[string]string),
 		did:       make(map[string][]string),
 		refused:   make(map[string]bool),
+		hidden:    make(map[string]bool),
 	}
 
 	// a server's close waits for the requests it is answering, which wait
@@ -273,6 +283,12 @@ func (d *dockerd) serve(id string, rw http.ResponseWriter, r *http.Request) {
 
 	d.lock.Lock()
 	defer d.lock.Unlock()
+
+	if d.hidden[id] && r.Method == http.MethodGet && slices.Contains(listings, path) {
+		failure(rw, http.StatusServiceUnavailable, "dockerd is still coming up")
+
+		return
+	}
 
 	h, err := d.load(id)
 	if err != nil {
@@ -1219,6 +1235,24 @@ func (d *dockerd) Allow(reference string) {
 	defer d.lock.Unlock()
 
 	delete(d.refused, normalized(reference))
+}
+
+// Hide has the dockerd of the VM id names list nothing of what it holds from
+// now on, as one still coming up after its VM's restore lists nothing, until
+// Show: what the VM holds is not looked at, and nothing in it is heard of.
+func (d *dockerd) Hide(id string) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.hidden[id] = true
+}
+
+// Show has the dockerd of the VM id names list what it holds again.
+func (d *dockerd) Show(id string) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	delete(d.hidden, id)
 }
 
 // Forget removes an image from the VM id names behind everybody's back, so

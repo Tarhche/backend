@@ -18,14 +18,18 @@
 // made, its record saying nothing a plan is made of, through what its records
 // say it owns; any other is applied at its record's generation
 // (execute.Executor.Apply), which makes what is missing of it, from the bottom
-// up, and nothing else. How its plan ended is kept on its lease as it is let go
-// of: one that failed backs the root off, longer with every failure in a row,
-// one done clears that, and one that waits on what it needs leaves it. While
-// the root itself is not made, why its plan failed or waits is said on its
-// record too, a refusal as its failure, by its code, for whoever waits for it
-// to be made. A root that is gone has its lease and how its plan went
-// forgotten, one that went while its plan ran among them, which nothing makes
-// again.
+// up, and nothing else. A root a restore of what it lives in reset, of a kind
+// that says what the restored parent holds of it (graph.ResetKind), a stack in
+// a Docker VM whose disk was restored, is carried out only once the restored
+// parent is found to hold it, forgotten with what it owns once it is found not
+// to, nothing asked of a node, and waits until then, nothing made for it. How
+// its plan ended is kept on its lease as it is let go of: one that failed
+// backs the root off, longer with every failure in a row, one done clears
+// that, and one that waits on what it needs leaves it. While the root itself
+// is not made, why its plan failed or waits is said on its record too, a
+// refusal as its failure, by its code, for whoever waits for it to be made. A
+// root that is gone has its lease and how its plan went forgotten, one that
+// went while its plan ran among them, which nothing makes again.
 //
 // What is reconciled is queued (Enqueue), each root once however often it is
 // queued before it is reconciled, and reconciled by as many workers as the
@@ -244,15 +248,20 @@ func New(dependencies Dependencies, config Config) (*Reconciler, error) {
 // is taken now, its backoff cleared in the same write, so that of two control
 // planes that come to it at once, one takes it. Then its record is read. One
 // that is gone, or that something owns now and is a root no more, has its
-// lease and how its plan went forgotten, and that is all. Any other's graph is
-// planned, from what its kind says it needs (graph.RootKind.Root), and carried
-// out while its lease is renewed every third of its time: removed when it was
-// asked to be deleted, a delete cut short taken up where it stopped, and
-// applied at its record's generation otherwise, a record kept before
-// generations at its first; one asked to be deleted whose graph cannot be
-// planned is removed through what its records say it owns, under its lease all
-// the same; and a lease lost meanwhile, which another control plane took once
-// it lapsed, stops the run.
+// lease and how its plan went forgotten, and that is all. One a restore of
+// what it lives in reset, not asked to go, is carried out only once its kind
+// finds the restored parent holds it, no longer reset then; it is forgotten,
+// with what it owns, once its kind finds it does not, and its lease and how
+// its plan went with it; and it waits until either, nothing of its plan
+// carried out (graph.ResetKind). Any other's graph is planned, from what its
+// kind says it needs (graph.RootKind.Root), and carried out while its lease
+// is renewed every third of its time: removed when it was asked to be
+// deleted, a delete cut short taken up where it stopped, and applied at its
+// record's generation otherwise, a record kept before generations at its
+// first; one asked to be deleted whose graph cannot be planned is removed
+// through what its records say it owns, under its lease all the same; and a
+// lease lost meanwhile, which another control plane took once it lapsed,
+// stops the run.
 //
 // How it ended is kept on its lease as it is let go of: done, waiting, or
 // failed, which a plan that could not be made is, and a run that was
@@ -392,6 +401,18 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.RootKind, rec resource.Record) (graph.Ended, bool, error) {
 	deleting := !rec.Metadata.DeletionRequestedAt.IsZero()
 
+	// one a restore of what it lives in reset is carried out once its kind
+	// finds the restored parent holds it, forgotten once it finds it does
+	// not, and waits until then (restored).
+	if resetting, resets := rooted.(graph.ResetKind); resets && rec.Reset && !deleting {
+		held, ended, gone, err := r.restored(ctx, root, resetting, rec)
+		if held == nil {
+			return ended, gone, err
+		}
+
+		rec = *held
+	}
+
 	unplanned := func(cause error) (ended graph.Ended, gone bool, err error) {
 		if !deleting {
 			return r.failed(cause)
@@ -469,10 +490,13 @@ func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.R
 
 // wanted is what a run applying the plan of root asks before it makes what is
 // not there: whether root is still to be made, its record there and not asked
-// to go. One whose record a run read before it was asked to go, or went, has
-// nothing made for it after, so that what a cascade took away with it, its
-// VM first among it, is not made again by a run that started before: what is
-// made is waited on instead, saying why, and the run ends.
+// to go, nor reset by a restore of what it lives in that its kind waits to
+// find it in (graph.ResetKind). One whose record a run read before it was
+// asked to go, or went, has nothing made for it after, so that what a cascade
+// took away with it, its VM first among it, is not made again by a run that
+// started before; and one a restore reset meanwhile has nothing made for it
+// beside what the restored parent may hold of it. What is made is waited on
+// instead, saying why, and the run ends.
 func (r *Reconciler) wanted(root graph.Ref) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		rec, there, err := r.read(ctx, root)
@@ -483,6 +507,8 @@ func (r *Reconciler) wanted(root graph.Ref) func(ctx context.Context) error {
 			return &graph.Waiting{Reason: "its root is gone"}
 		case going(rec):
 			return &graph.Waiting{Reason: "its root was asked to go"}
+		case rec.Reset && r.resets(root.Kind):
+			return &graph.Waiting{Reason: fmt.Sprintf("its root's %s was restored, and what the restored %s holds of its root is yet to be known", r.parentOf(root.Kind), r.parentOf(root.Kind))}
 		}
 
 		return nil

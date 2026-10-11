@@ -976,3 +976,176 @@ func TestAStackItsVMsSnapshotHolds(t *testing.T) {
 		w.stored(t, vmUUID, "kept", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
 	})
 }
+
+// TestAStackMadeSinceItsVMsSnapshot restores a Docker VM to a snapshot taken
+// before a stack was made in it: once the restored disk is looked into, which
+// holds none of the stack's containers, the stack is forgotten, and its
+// containers' and its network's records with it, as what the restored disk
+// does not hold is; nothing of it is made again, and its VM stays.
+func TestAStackMadeSinceItsVMsSnapshot(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID := w.dockerVM(t, "builds")
+	snapshotUUID := w.snapshot(t, vmUUID, "before the stack")
+
+	deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+		Name:      "store",
+		Compose:   storeCompose,
+		VMUUID:    vmUUID,
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, deployed.ValidationErrors)
+	require.NotNil(t, deployed.Stack)
+
+	stackUUID, slug := deployed.Stack.UUID, deployed.Stack.Slug
+	named := func(name string) string { return slug + "_" + name }
+
+	w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+	w.restore(t, vmUUID, snapshotUUID)
+	did := len(w.dockerd.Did(vmUUID))
+
+	t.Run("once its restored disk is looked into, the stack is forgotten, and its containers' and its network's records with it", func(t *testing.T) {
+		require.Eventually(t, func() bool {
+			_, err := w.resources.GetOne(ctx, stackKind.Name, stackUUID)
+
+			return errors.Is(err, domain.ErrNotExists)
+		}, settle, beat, "the stack was never forgotten")
+
+		_, err := w.readStack(ctx, stackUUID)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "and the dashboard shows none")
+
+		require.Eventually(t, func() bool {
+			_, networked := w.findBlock(t, networkKind.Name, vmUUID, named("backend"))
+
+			return len(w.containerRecords(t, vmUUID)) == 0 && !networked
+		}, settle, beat, "what it owned was never forgotten")
+	})
+
+	t.Run("nothing of it is made again, and its vm stays", func(t *testing.T) {
+		assert.Never(t, func() bool {
+			_, networked := w.findBlock(t, networkKind.Name, vmUUID, named("backend"))
+			made := slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") })
+
+			return made || networked || len(w.containerRecords(t, vmUUID)) > 0
+		}, 2*patience.ResourceSilentAfter, beat, "something of it was made again")
+
+		held := w.dockerd.Holds(t, vmUUID)
+
+		for _, service := range []string{"db", "web"} {
+			_, there := held.Container(named(service))
+			assert.False(t, there, "the restored disk holds no %s", service)
+		}
+
+		_, networked := held.Network(named("backend"))
+		assert.False(t, networked)
+
+		v := w.stored(t, vmUUID, "kept", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+		assert.Equal(t, vmKind.Running, v.Status.Expected)
+	})
+}
+
+// TestAStackBeforeItsRestoredVMIsLookedInto restores a stack's Docker VM to a
+// snapshot taken while the stack ran, the VM's dockerd listing nothing of what
+// it holds for longer than what lives in a VM may go unheard, as one slow to
+// come up after a restore lists nothing: until the restored disk is looked
+// into, nothing forgets the stack, though the records of what it owns go
+// unheard and are forgotten, and nothing of it is made in its VM. Once the
+// disk is looked into, what it holds of the stack is taken in again, its
+// containers as its own, under the uuids they had, and its network linked as
+// its own once its graph is carried out, and the stack runs with them,
+// nothing of it made again beside them.
+func TestAStackBeforeItsRestoredVMIsLookedInto(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID := w.dockerVM(t, "builds")
+
+	deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+		Name:      "store",
+		Compose:   storeCompose,
+		VMUUID:    vmUUID,
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, deployed.ValidationErrors)
+	require.NotNil(t, deployed.Stack)
+
+	stackUUID, slug := deployed.Stack.UUID, deployed.Stack.Slug
+	named := func(name string) string { return slug + "_" + name }
+
+	w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+	// what the control plane keeps in the vm, by uuid, as the snapshot has it.
+	kept := func() map[string]string {
+		records := map[string]string{}
+
+		for _, kindName := range []string{containerKind.Name, networkKind.Name, volumeKind.Name} {
+			listed, _, err := w.resources.GetAll(ctx, kindName, resource.Filter{Parent: kind.Reference{Kind: vmKind.Name, UUID: vmUUID}}, 0, 0)
+			require.NoError(t, err)
+
+			for _, r := range listed {
+				records[r.Metadata.UUID] = kindName + "/" + r.Metadata.Name
+			}
+		}
+
+		return records
+	}
+
+	snapshotted := kept()
+	require.Len(t, snapshotted, 4, "its two containers, its network and its volume")
+
+	snapshotUUID := w.snapshot(t, vmUUID, "with the stack")
+
+	w.dockerd.Hide(vmUUID)
+	w.restore(t, vmUUID, snapshotUUID)
+	did := len(w.dockerd.Did(vmUUID))
+
+	t.Run("until its restored disk is looked into, nothing forgets the stack, and nothing of it is made in its vm", func(t *testing.T) {
+		assert.Never(t, func() bool {
+			if _, err := w.resources.GetOne(ctx, stackKind.Name, stackUUID); err != nil {
+				return true
+			}
+
+			for uuid := range kept() {
+				if _, before := snapshotted[uuid]; !before {
+					return true
+				}
+			}
+
+			return slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") })
+		}, 2*patience.ResourceSilentAfter, beat, "the stack was forgotten, or something of it made, before its restored disk was looked into")
+
+		s := w.stackRecord(t, stackUUID)
+		assert.Equal(t, stackKind.Running, s.Status.Expected, "it is still to run, once it can be")
+	})
+
+	w.dockerd.Show(vmUUID)
+
+	t.Run("once it is looked into, what it holds of the stack is the stack's again, and the stack runs with it, nothing of it made again", func(t *testing.T) {
+		w.stack(t, stackUUID, "running again", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+		assert.Equal(t, snapshotted, kept(), "what the restored disk holds is taken in under the uuids it had")
+
+		for _, c := range w.containerRecords(t, vmUUID) {
+			assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: stackUUID}}, c.Metadata.Owners, "%s is the stack's", c.Spec.Name)
+		}
+
+		backend := eventually(t, "its network the stack's again", func(context.Context) (resource.Record, error) {
+			r, _ := w.findBlock(t, networkKind.Name, vmUUID, named("backend"))
+
+			return r, nil
+		}, func(r resource.Record) bool {
+			return slices.Contains(r.Metadata.Owners, kind.Reference{Kind: stackKind.Name, UUID: stackUUID})
+		})
+		assert.Len(t, backend.Metadata.Owners, 3, "owned by the stack and by what joins it, as one its graph made")
+
+		assert.False(t, slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") }), "nothing of it is made again: %v", w.dockerd.Did(vmUUID)[did:])
+	})
+}

@@ -60,6 +60,10 @@ const (
 	// prefixAtLeast is how much of a Docker id names one, as docker reads a
 	// short id: at least this much, and the only id beginning so.
 	prefixAtLeast = 4
+
+	// tries is how many times a record is read and written again when
+	// something else wrote it in the meantime.
+	tries = 3
 )
 
 // Kind is what the shared code is told of one of the building blocks.
@@ -350,7 +354,7 @@ func (b *Blocks) request(ctx context.Context, r kind.Raw, action string, payload
 // until a later heartbeat says otherwise, or until none has said it for long
 // enough (Sightings). What it found labelled as the platform's with no record,
 // in the first look into a VM whose disk was just restored, is taken in again
-// instead.
+// instead; and that look is kept on the VM's record (looked).
 func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.Observation, kept bool, at time.Time) error {
 	if kept {
 		b.Sightings.Forget(b.descriptor.Name, instance.UUID)
@@ -375,17 +379,17 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 		return nil
 	}
 
-	var failed error
+	failed := b.looked(ctx, v, at)
 
 	if len(instance.UUID) > 0 && b.adoptable(v, at) {
 		adopted, err := b.adopt(ctx, nodeName, v, instance, at)
 		if adopted {
 			b.Sightings.Forget(b.descriptor.Name, instance.UUID)
 
-			return nil
+			return failed
 		}
 
-		failed = err
+		failed = errors.Join(failed, err)
 	}
 
 	keepers, err := b.keepers(ctx, nodeName, at)
@@ -396,6 +400,72 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 	b.Sightings.Saw(b.descriptor.Name, Seen{Node: nodeName, At: at, Manifest: b.sighted(nodeName, v, instance, keepers)})
 
 	return failed
+}
+
+// looked keeps on the record of v, a Docker VM whose disk was restored, the
+// first look into it since, as of a moment, when that is the first one heard
+// of, here or by another control plane (vmKind.Status.LookedAt): what a node
+// said it holds as of a beat at or after its restore. What lived in it before
+// is not found missing from the restored disk until it was looked into, a
+// stack's containers among it, however long its dockerd takes to come up
+// (kinds/stack's Restored). Every look into a Docker VM says something of it
+// that nobody keeps a record of, the networks every dockerd has of its own
+// among it, so that every first look is heard of here. One written in the
+// meantime is read again, and one that is gone is let be.
+func (b *Blocks) looked(ctx context.Context, v vmKind.VM, at time.Time) error {
+	if !unlooked(v, at) {
+		return nil
+	}
+
+	look, err := json.Marshal(struct {
+		LookedAt time.Time `json:"looked_at"`
+	}{LookedAt: at})
+	if err != nil {
+		return err
+	}
+
+	for try := 1; ; try++ {
+		r, err := b.Resources.GetOne(ctx, vmKind.Name, v.Metadata.UUID)
+		if errors.Is(err, domain.ErrNotExists) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		if v, err = records.Decode(r); err != nil {
+			return err
+		}
+
+		if !unlooked(v, at) {
+			return nil
+		}
+
+		if r.Status, err = resource.Merge(r.Status, look); err != nil {
+			return err
+		}
+
+		_, err = b.Resources.Update(ctx, r)
+
+		switch {
+		case err == nil:
+			b.Logger.InfoContext(ctx, "looked into a vm whose disk was restored, since its restore", "vm", v.Metadata.UUID, "restored_at", v.Status.RestoredAt, "looked_at", at)
+
+			return nil
+		case errors.Is(err, domain.ErrNotExists):
+			return nil
+		case !errors.Is(err, resource.ErrConflict) || try >= tries:
+			return err
+		}
+	}
+}
+
+// unlooked reports whether a look into v at a moment is the first one since
+// its disk was last restored, as its record knows: one at or after its
+// restore, before which it was not looked into since.
+func unlooked(v vmKind.VM, at time.Time) bool {
+	restoredAt := v.Status.RestoredAt
+
+	return !restoredAt.IsZero() && !at.Before(restoredAt) && v.Status.LookedAt.Before(restoredAt)
 }
 
 // adoptable reports whether what is found in v labelled as the platform's,

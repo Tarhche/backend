@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/requirements"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -57,16 +58,32 @@ const tries = 3
 // through leaves it to the next to carry out where it was left. It has
 // nothing external. Deleted, its record says it is being removed, and goes
 // last of all, once what it owns is removed (graph.Ownership.Forget).
+//
+// A restore of its VM's disk resets it, as it resets what lives in the VM
+// (graph.ResetKind): once the restored disk was looked into, and every word
+// of that look heard, it is carried out again when the disk holds any of its
+// containers, and forgotten, with what it owns, when it holds none of them
+// (Restored).
 type Graph struct {
 	records *requirements.Records
+
+	// silence is how long what lives in a VM may go unheard while its node
+	// beats before it is taken to be gone from it: what a stack its VM's
+	// restore reset waits for, from the first look into the restored disk,
+	// before it is found not to be there (Restored).
+	silence time.Duration
 }
 
-var _ graph.RootKind = &Graph{}
+var _ graph.ResetKind = &Graph{}
 
 // NewGraph is the stack kind as a graph needs it, reading and writing stacks,
-// and reading the containers their graphs made, through records.
-func NewGraph(records *requirements.Records) *Graph {
-	return &Graph{records: records}
+// and reading the containers their graphs made, through records; a stack its
+// VM's restore reset is found not to be in the restored disk once what lives
+// in the VM has gone unheard for silence since it was first looked into, as
+// the reconcile loop takes what goes unheard for as long to be gone
+// (reconcileResources.Config.ResourceSilentAfter).
+func NewGraph(records *requirements.Records, silence time.Duration) *Graph {
+	return &Graph{records: records, silence: silence}
 }
 
 // Root is the stack r is the record of, as the root of its graph needs it
@@ -665,6 +682,75 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 	}
 
 	return containers, nil
+}
+
+// Restored is what the restored Docker VM of the stack the record r is was
+// found to hold of it, once the VM's restore reset it (graph.ResetKind): what
+// the restored disk holds of the stack's containers, which is known once the
+// VM was looked into since its restore and its VM was heard of for longer
+// than what lives in it may go unheard since (silence), so that every
+// heartbeat of that look has been heard, and what it found, or took in, is
+// kept:
+//
+//   - held, when a container the stack owns is no longer reset: one that
+//     look found in the restored disk, or one taken in from it, which is the
+//     stack's again (kinds/container's Adopt);
+//   - lost, when none is: what that look did not find is not there. Its
+//     containers' records may be there still, reset, which their own kind's
+//     reset forgets once they go unheard for as long.
+//
+// Until then it is not known, whatever its containers' records say: a stack
+// none of whose containers was heard of since its VM's restore is never lost
+// before its VM is looked into, a dockerd slow to come up after the restore
+// keeping them unheard; nor is it carried out before every heartbeat of that
+// look is heard, which would make again, beside what the restored disk holds,
+// what was yet to be taken in from it. A container made since the restore
+// would say the stack is held too, which is why nothing is made for a stack
+// its VM's restore reset until this says.
+//
+// One whose VM is gone, which nothing will look into again, or whose VM's
+// record says nothing of a restore, is held: what lives in it is its graph's
+// to make again, as when its VM is deleted under it.
+func (g *Graph) Restored(ctx context.Context, r kind.Raw) (graph.Restoration, error) {
+	if r.Kind != stackKind.Name {
+		return graph.RestorationUnknown, fmt.Errorf("%w: a %s is not a stack", kind.ErrUnknownKind, r.Kind)
+	}
+
+	s, err := kind.Decode[stackKind.Spec, stackKind.Status](r)
+	if err != nil {
+		return graph.RestorationUnknown, err
+	}
+
+	vr, there, err := g.records.Read(ctx, vmKind.Name, stackKind.VMOf(s))
+	switch {
+	case err != nil:
+		return graph.RestorationUnknown, err
+	case !there:
+		return graph.RestorationHeld, nil
+	}
+
+	v, err := kind.Decode[vmKind.Spec, vmKind.Status](vr.Raw)
+	if err != nil {
+		return graph.RestorationUnknown, err
+	}
+
+	switch looked := v.Status.LookedAt; {
+	case v.Status.RestoredAt.IsZero():
+		return graph.RestorationHeld, nil
+	case looked.Before(v.Status.RestoredAt), v.Status.ObservedAt.Sub(looked) <= g.silence:
+		return graph.RestorationUnknown, nil
+	}
+
+	containers, _, err := g.records.Resources.GetAll(ctx, containerKind.Name, resource.Filter{Parent: kind.Reference{Kind: stackKind.Name, UUID: s.Metadata.UUID}}, 0, 0)
+	if err != nil {
+		return graph.RestorationUnknown, err
+	}
+
+	if slices.ContainsFunc(containers, func(c resource.Record) bool { return !c.Reset }) {
+		return graph.RestorationHeld, nil
+	}
+
+	return graph.RestorationLost, nil
 }
 
 // Delete has the record of the stack ref names say it is being removed, as

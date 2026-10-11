@@ -60,7 +60,9 @@ type Record struct {
 	// snapshot since its node last saw it there, and its kind resets to what
 	// the restored parent holds (kind.CascadeReset): the next look inside the
 	// parent keeps it as it is found, and takes its record away when it is
-	// not there, rather than making it again.
+	// not there, rather than making it again. A root no node says anything
+	// of, a stack, is found there as its kind says (graph.ResetKind), and
+	// nothing is made for it until it is.
 	Reset bool
 }
 

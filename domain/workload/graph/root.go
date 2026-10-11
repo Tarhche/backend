@@ -22,6 +22,48 @@ type RootKind interface {
 	Root(r kind.Raw) (Requirement, error)
 }
 
+// ResetKind is a kind of root whose roots a restore of what they live in
+// resets (kind.CascadeReset, resource.Record.Reset), as it resets what they
+// are made of, and which says what the restored parent was found to hold of
+// such a root: a stack, which the restored disk of its Docker VM holds when it
+// holds any of its containers. A root reset so is carried out once it is
+// found there, as it was before, and forgotten, with what it owns, once it is
+// found not to be; until then nothing is made for it, which would make,
+// beside what the restored parent may hold of it, what it is yet to be found
+// to hold.
+type ResetKind interface {
+	RootKind
+
+	// Restored is what the restored parent of the root the record r is was
+	// found to hold of it, as the records kept say now. A record that is
+	// not of the kind is kind.ErrUnknownKind, and what reading the records
+	// fails with is an error.
+	Restored(ctx context.Context, r kind.Raw) (Restoration, error)
+}
+
+// Restoration is what a restored parent was found to hold of a root its
+// restore reset (ResetKind).
+type Restoration string
+
+const (
+	// RestorationUnknown is a root what the restored parent holds of which
+	// is yet to be known: the parent was not looked into since its restore,
+	// or not long enough ago for every word of that look to have been heard.
+	// It waits, and nothing is made for it.
+	RestorationUnknown Restoration = "unknown"
+
+	// RestorationHeld is a root the restored parent holds: it is no longer
+	// reset, and is carried out as before, making again what of it the
+	// parent does not hold.
+	RestorationHeld Restoration = "held"
+
+	// RestorationLost is a root the restored parent does not hold: it is
+	// forgotten, with what it owns, as what a restored parent does not hold
+	// is, and nothing is asked of a node, since none of it is there to
+	// remove.
+	RestorationLost Restoration = "lost"
+)
+
 // Roots are the kinds whose resources are roots of graphs of their own, by
 // their names: each resource of one that nothing owns is a root, whose graph
 // makes it and what it needs, in order, for as long as it lives, and removes

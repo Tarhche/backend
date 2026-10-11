@@ -254,7 +254,7 @@ func NewControlPlaneWorkload(
 	// through the control plane's own admission, commands and delete, and
 	// waited on as the reconcile loop waits on it; planned as the policy
 	// types its edges, a stack's when it is admitted too.
-	graphKinds := controlPlaneGraphKinds(chooser, strategies, controlPlaneGraphRecords(registry, kinds, settings.reconcile))
+	graphKinds := controlPlaneGraphKinds(chooser, strategies, controlPlaneGraphRecords(registry, kinds, settings.reconcile), settings.reconcile.ResourceSilentAfter)
 	planner := graph.NewPlanner(graphKinds, policy)
 
 	// a stack is admitted with its file read and its graph planned, into the

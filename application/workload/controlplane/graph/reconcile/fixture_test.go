@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -112,13 +113,14 @@ func registry(t *testing.T) *kind.Registry[kind.ControlPlaneBinding] {
 	return r
 }
 
-// fixture is reconcilers of roots whose graphs are made of one fake kind,
-// which owns the records it holds as a test says, unless a test has the
-// records say it; over records kept in memory, which every read and write of
+// fixture is reconcilers of roots whose graphs are made of one fake kind, or
+// of what a test has stand for one of its kinds (overrides), which owns the
+// records it holds as a test says, unless a test has the records say it; over records kept in memory, which every read and write of
 // is counted; keeping how each node went in memory, every save recorded; and
 // the leases in memory, on a clock a test moves on.
 type fixture struct {
 	kinds      *graphtest.Kind
+	overrides  graph.Kinds
 	ownership  graph.Ownership
 	registry   *kind.Registry[kind.ControlPlaneBinding]
 	records    *resourcesMemory.Repository
@@ -133,6 +135,7 @@ func newFixture(t *testing.T, kinds *graphtest.Kind, records ...resource.Record)
 
 	f := &fixture{
 		kinds:      kinds,
+		overrides:  make(graph.Kinds),
 		ownership:  kinds.Ownership(),
 		registry:   registry(t),
 		records:    resourcesMemory.NewRepository(),
@@ -165,6 +168,7 @@ func (f *fixture) reconcilerOver(t *testing.T, leases graph.Leases, holder strin
 	t.Helper()
 
 	kinds := f.kinds.Kinds(every...)
+	maps.Copy(kinds, f.overrides)
 
 	executor, err := execute.New(kinds, f.ownership, f.executions, f.clock.Now)
 	require.NoError(t, err)
@@ -482,4 +486,51 @@ func (g *gate) wait(ctx context.Context) error {
 // Open lets whatever waits on the gate, and will, go on.
 func (g *gate) Open() {
 	g.once.Do(func() { close(g.open) })
+}
+
+// resetting is the fake kind as a kind of root whose roots a restore of what
+// they live in resets (graph.ResetKind), which finds each in the restored
+// parent as a test says, doing first what the test has it do.
+type resetting struct {
+	*graphtest.Kind
+
+	lock  sync.Mutex
+	found graph.Restoration
+	fails error
+	first func(ctx context.Context)
+	asked int
+}
+
+var _ graph.ResetKind = &resetting{}
+
+// resetting has the fixture's container kind, the kind of its roots, stand
+// as one whose roots a restore of what they live in resets, which finds each
+// in the restored parent as found says, for the reconcilers made after.
+func (f *fixture) resetting(found graph.Restoration) *resetting {
+	k := &resetting{Kind: f.kinds, found: found}
+	f.overrides[containerKind.Name] = k
+
+	return k
+}
+
+func (k *resetting) Restored(ctx context.Context, _ kind.Raw) (graph.Restoration, error) {
+	k.lock.Lock()
+	k.asked++
+	found, fails, first := k.found, k.fails, k.first
+	k.lock.Unlock()
+
+	if first != nil {
+		first(ctx)
+	}
+
+	return found, fails
+}
+
+// Asked is how many times the kind was asked what a restored parent holds of
+// a root.
+func (k *resetting) Asked() int {
+	k.lock.Lock()
+	defer k.lock.Unlock()
+
+	return k.asked
 }
