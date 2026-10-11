@@ -444,17 +444,25 @@ func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.R
 		if deleting {
 			outcome, err = r.executor.Remove(ctx, root, generation, plan)
 		} else {
-			outcome, err = r.executor.Apply(ctx, root, generation, plan, execute.While(r.wanted(root)))
+			outcome, err = r.executor.Apply(ctx, root, generation, plan, execute.While(r.wanted(root, generation)))
 		}
 	})
 
 	// gone while its plan ran, it is not made again, whatever is left of its
-	// plan (wanted): it is forgotten, as a root found gone is.
+	// plan (wanted): it is forgotten, as a root found gone is. Changed while
+	// it ran, at another generation, its graph is planned again by the run
+	// after, which it is queued for.
 	if !deleting && err == nil && outcome.State != execute.Done {
-		if _, there, readErr := r.read(ctx, root); readErr == nil && !there {
+		read, there, readErr := r.read(ctx, root)
+
+		switch {
+		case readErr != nil:
+		case !there:
 			r.logger.InfoContext(ctx, "forgetting a root that went while its plan ran, its lease and how its plan went", "kind", root.Kind, "uuid", root.UUID)
 
 			return graph.Ended{}, true, nil
+		case max(read.Metadata.Generation, 1) != generation:
+			r.Enqueue(root)
 		}
 	}
 
@@ -488,16 +496,21 @@ func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.R
 	return r.failed(fmt.Errorf("%w: %s", errCutShort, interruptedBy(outcome)))
 }
 
-// wanted is what a run applying the plan of root asks before it makes what is
-// not there: whether root is still to be made, its record there and not asked
-// to go, nor reset by a restore of what it lives in that its kind waits to
-// find it in (graph.ResetKind). One whose record a run read before it was
-// asked to go, or went, has nothing made for it after, so that what a cascade
-// took away with it, its VM first among it, is not made again by a run that
-// started before; and one a restore reset meanwhile has nothing made for it
-// beside what the restored parent may hold of it. What is made is waited on
-// instead, saying why, and the run ends.
-func (r *Reconciler) wanted(root graph.Ref) func(ctx context.Context) error {
+// wanted is what a run applying the plan of root, made at generation, asks
+// before it makes what is not there: whether root is still to be made as that
+// plan says, its record there, at that generation, and not asked to go, nor
+// reset by a restore of what it lives in that its kind waits to find it in
+// (graph.ResetKind). One whose record a run read before it was asked to go,
+// or went, has nothing made for it after, so that what a cascade took away
+// with it, its VM first among it, is not made again by a run that started
+// before; one changed since the run read it has nothing made of a plan that
+// says what it was, as its VM's delete changes a root it keeps, to make the
+// VM again as it was, before the VM's record goes, where a run that planned
+// it before would make another VM in its place, named by nothing but its
+// uuid; and one a restore reset meanwhile has nothing made for it beside what
+// the restored parent may hold of it. What is made is waited on instead,
+// saying why, and the run ends.
+func (r *Reconciler) wanted(root graph.Ref, generation int64) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		rec, there, err := r.read(ctx, root)
 		switch {
@@ -507,6 +520,8 @@ func (r *Reconciler) wanted(root graph.Ref) func(ctx context.Context) error {
 			return &graph.Waiting{Reason: "its root is gone"}
 		case going(rec):
 			return &graph.Waiting{Reason: "its root was asked to go"}
+		case max(rec.Metadata.Generation, 1) != generation:
+			return &graph.Waiting{Reason: "its root was changed since its plan was made, which is made again"}
 		case rec.Reset && r.resets(root.Kind):
 			return &graph.Waiting{Reason: fmt.Sprintf("its root's %s was restored, and what the restored %s holds of its root is yet to be known", r.parentOf(root.Kind), r.parentOf(root.Kind))}
 		}

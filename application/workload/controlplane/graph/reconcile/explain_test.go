@@ -506,3 +506,55 @@ func TestReconciler_Reconcile_explainsAStack(t *testing.T) {
 		assert.NotContains(t, f.resources.Writes(), "update stack/store", "and nothing is written on it")
 	})
 }
+
+// TestReconciler_Reconcile_changedWhileItsPlanRuns holds a run of a root's
+// plan to making nothing of a plan the root's record says otherwise of since
+// the run read it: a VM's delete keeps a root that lives in it, to make the
+// VM again as it was, a generation later, before the VM's record goes, and a
+// run that planned it before would make the VM again as its plan says, named
+// by its uuid alone.
+func TestReconciler_Reconcile_changedWhileItsPlanRuns(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// web's vm is deleted once the run looks for it, as a cascade deletes
+	// it: web is kept a generation later, and then the vm's record goes.
+	kinds := container()
+	kinds.Hold(network, volume)
+
+	var f *fixture
+
+	kinds.On(graphtest.Exists, vm, func(ctx context.Context) error {
+		r, err := f.records.GetOne(ctx, containerKind.Name, web.Name())
+		if err != nil {
+			return err
+		}
+
+		r.Metadata.Generation++
+
+		_, err = f.records.Update(ctx, r)
+
+		return err
+	})
+
+	f = newFixture(t, kinds, rooted(stated(containerKind.Running)))
+	r := f.reconciler(t, "one", patient(), containerKind.Name)
+
+	require.NoError(t, r.Reconcile(ctx, refOf(web)), "it waits: it is no failure")
+
+	assert.Empty(t, kinds.Asked(graphtest.Create), "nothing of its plan is made")
+	assert.Equal(t, []graph.Ref{refOf(web)}, r.Queued(), "and it is queued, to be planned again")
+
+	var waiting []string
+	for _, e := range f.kept(t, web) {
+		if e.State == graph.StateWaiting {
+			waiting = append(waiting, e.Reason)
+		}
+	}
+
+	assert.Contains(t, waiting, "its root was changed since its plan was made, which is made again")
+
+	lease := f.lease(t, web)
+	assert.Zero(t, lease.Failures)
+}

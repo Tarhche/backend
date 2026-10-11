@@ -19,6 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
@@ -29,6 +30,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 )
 
@@ -398,4 +400,102 @@ func lost(t *testing.T, ctx context.Context, stored *resourcesMemory.Repository)
 
 	_, err = stored.Update(ctx, r)
 	require.NoError(t, err)
+}
+
+// looking keeps records as the repository it wraps does, but for doing what
+// do says, once armed, before the first read of the record of the kind and
+// the uuid it names: what goes on while that read is yet to be made.
+type looking struct {
+	resource.Repository
+
+	kind string
+	uuid string
+	do   func(ctx context.Context)
+
+	armed atomic.Bool
+}
+
+func (l *looking) GetOne(ctx context.Context, kindName string, uuid string) (resource.Record, error) {
+	if kindName == l.kind && uuid == l.uuid && l.armed.CompareAndSwap(true, false) {
+		l.do(ctx)
+	}
+
+	return l.Repository.GetOne(ctx, kindName, uuid)
+}
+
+// TestNewControlPlaneWorkload_vmDeletedUnderARun holds a run of the graph of a
+// container nothing owns, planned before its VM's delete was carried out, to
+// making nothing once the delete's cascade kept the container, to make the VM
+// again as it was, and took the VM's record away: the VM the run's plan names
+// by its uuid alone would be made named by nothing else, under a new slug,
+// with what any Docker VM is given. The run after plans it again.
+func TestNewControlPlaneWorkload_vmDeletedUnderARun(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	stored := resourcesMemory.NewRepository()
+
+	var workload *ControlPlaneWorkload
+
+	// the vm's delete carried out, its result heard, as the run that
+	// planned the container's graph before looks for the vm.
+	deleted, err := json.Marshal(kind.ResourceActedOn{ID: "delete-1", Kind: vmKind.Name, UUID: "vm-1", Action: vmKind.ActionDelete, Node: vmtest.Node, OK: true, At: time.Now()})
+	require.NoError(t, err)
+
+	records := &looking{Repository: stored, kind: vmKind.Name, uuid: "vm-1", do: func(ctx context.Context) {
+		require.NoError(t, workload.Subscribers[kind.ResourceActedOnName].Handle(ctx, deleted))
+	}}
+
+	stores := storesOf(stored)
+	stores.Resources = records
+	stores.Nodes = nodesMemory.NewRepository(vmtest.Alive(vmtest.Node))
+
+	produced := &messagingMock.Recorder{}
+
+	workload, err = NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), stores, nil, produced, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	// vm-1, named builds, being deleted, and a container nothing owns in it,
+	// which names it by its uuid alone.
+	deleting := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+		v.Metadata.Name = "builds"
+		v.Metadata.Slug = "builds-abcde"
+		v.Status.State = vmKind.Deleting
+		v.Status.Expected = kind.Deleted
+	})
+
+	raw, err := kind.Encode(deleting)
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: raw, Pending: &resource.Pending{Action: vmKind.ActionDelete, IDs: []string{"delete-1"}, SentAt: time.Now()}})
+	require.NoError(t, err)
+
+	_, err = stored.Create(ctx, resource.Record{Raw: blockstest.AContainer("c-1", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+		c.Metadata.Generation = 1
+	})})
+	require.NoError(t, err)
+
+	records.armed.Store(true)
+
+	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	ran := workload.Graphs.Reconcile(bounded, graph.Ref{Kind: containerKind.Name, UUID: "c-1"})
+	require.False(t, records.armed.Load(), "the vm's delete was carried out as the run looked for the vm")
+
+	made, err := stored.GetOne(ctx, vmKind.Name, "vm-1")
+	assert.ErrorIs(t, err, domain.ErrNotExists, "no vm is made of the plan the run made before the container was kept: %s, %s", made.Metadata.Name, made.Metadata.Slug)
+	assert.Empty(t, produced.Subjects(), "nor asked of a node")
+	require.NoError(t, ran, "the run waits, which is no failure")
+
+	c, err := stored.GetOne(ctx, containerKind.Name, "c-1")
+	require.NoError(t, err)
+
+	kept, err := kind.Decode[containerKind.Spec, containerKind.Status](c.Raw)
+	require.NoError(t, err)
+	assert.Equal(t, "builds", kept.Spec.VM.Name, "the container keeps what it makes its vm again with")
+	assert.Equal(t, int64(2), kept.Metadata.Generation, "a generation later")
+
+	assert.Contains(t, workload.Graphs.Queued(), graph.Ref{Kind: containerKind.Name, UUID: "c-1"}, "and it is queued, to be planned again")
 }
