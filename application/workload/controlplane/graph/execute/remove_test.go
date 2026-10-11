@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -267,6 +268,83 @@ func TestExecutor_Remove(t *testing.T) {
 		assert.Equal(t, []graph.NodeID{other, web, front, vm}, kinds.Held())
 		assert.Equal(t, []graph.NodeID{other}, f.ownership.OwnersOf(web))
 		assert.Equal(t, []graph.NodeID{web}, f.ownership.OwnersOf(front))
+	})
+
+	t.Run("a node whose other owner goes between its owners being read and its being unlinked goes, as nothing owns it then", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := graphtest.NewKind()
+		kinds.Require(web, requirement(vm), requirement(front))
+		kinds.Require(front, requirement(vm))
+
+		f := newFixture(t, kinds)
+		plan := f.plan(t, web)
+		f.made(plan)
+
+		// while web is removed, another root comes to own front, and goes
+		// just as front is unlinked from web.
+		kinds.On(graphtest.Delete, web, func(context.Context) error {
+			kinds.Hold(other)
+			f.ownership.Own(front, other)
+
+			return nil
+		})
+		kinds.On(graphtest.Disown, front, func(ctx context.Context) error {
+			return kinds.Delete(ctx, graphtest.Ref(other))
+		})
+
+		outcome := f.remove(t, plan)
+		require.Equal(t, execute.Done, outcome.State)
+
+		gone, _ := outcome.Node(front)
+		assert.Empty(t, gone.Reason, "it is removed, not kept")
+		assert.Equal(t, []graph.NodeID{web, other, front}, kinds.Asked(graphtest.Delete))
+		assert.Equal(t, []graph.NodeID{vm}, kinds.Held(), "and nothing is left owned by nothing")
+	})
+
+	t.Run("a network two roots own, deleted at once, each finding the other owns it, is never left owned by nothing", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := graphtest.NewKind()
+		kinds.Require(web, requirement(vm), requirement(shared))
+		kinds.Require(other, requirement(vm), requirement(shared))
+		kinds.Require(shared, requirement(vm))
+
+		f := newFixture(t, kinds)
+		plan := f.plan(t, web)
+		others := f.plan(t, other)
+		f.made(plan, others)
+
+		// the other root is removed as web's delete unlinks the network from
+		// web, the first time it does, and unlinks it itself meanwhile.
+		var (
+			began     atomic.Bool
+			theirs    execute.Outcome
+			theirsErr error
+		)
+
+		kinds.On(graphtest.Disown, shared, func(ctx context.Context) error {
+			if began.CompareAndSwap(false, true) {
+				theirs, theirsErr = f.executor.Remove(ctx, graphtest.Ref(other), 1, others)
+			}
+
+			return nil
+		})
+
+		outcome := f.remove(t, plan)
+		require.Equal(t, execute.Done, outcome.State)
+
+		require.NoError(t, theirsErr)
+		require.Equal(t, execute.Done, theirs.State)
+
+		kept, _ := theirs.Node(shared)
+		assert.Equal(t, "kept, owned by container/s_web", kept.Reason, "the other kept it, web still owning it")
+
+		kept, _ = outcome.Node(shared)
+		assert.Equal(t, "kept, owned by container/s_web alone now: it goes once that is gone", kept.Reason, "and web, which the other no longer did")
+
+		assert.Equal(t, []graph.NodeID{web}, f.ownership.OwnersOf(shared), "owned by web, which is gone, so that what removes what nothing left owns removes it")
+		assert.Equal(t, []graph.NodeID{shared, vm}, kinds.Held())
 	})
 
 	t.Run("what is gone already is done with nothing to remove, and a record not made is removed as a made one is", func(t *testing.T) {

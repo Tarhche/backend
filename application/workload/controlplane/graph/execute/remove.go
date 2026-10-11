@@ -236,6 +236,15 @@ func (d *deletion) levels() [][]graph.NodeID {
 // never taken for a root of its own, which it would be once nothing owned it;
 // one that something else still owns is unlinked from what is removed, and
 // kept instead, and is no longer removed, so that what it owns is kept too.
+//
+// What owns a node may go between it being read and the node being unlinked:
+// two roots that own one network, deleted at once, each finding the other
+// owns it. One unlinked from what is removed is never left owned by nothing,
+// which nothing would ever remove: at its turn, it is removed then, as it
+// would have been had nothing else owned it; kept from the start, before
+// what in it needs it is removed, it is owned by the root alone again, whose
+// next delete removes it at its turn, or, once the root is gone, a resync,
+// which removes what nothing left owns.
 func (d *deletion) carry(ctx context.Context, node graph.Node) (graph.Ref, string, error) {
 	id := node.ID()
 
@@ -245,8 +254,13 @@ func (d *deletion) carry(ctx context.Context, node graph.Node) (graph.Ref, strin
 	}
 
 	if owners, kept := d.kept[id]; kept {
-		if _, err := d.executor.ownership.Disown(ctx, ref, d.removing(ref)...); err != nil {
+		remaining, err := d.executor.ownership.Disown(ctx, ref, d.removing(ref)...)
+		if err != nil {
 			return ref, "", err
+		}
+
+		if len(remaining) == 0 {
+			return d.orphaned(ctx, ref)
 		}
 
 		return ref, keptBy(owners), nil
@@ -264,17 +278,33 @@ func (d *deletion) carry(ctx context.Context, node graph.Node) (graph.Ref, strin
 				return ref, "", err
 			}
 
-			d.keep(ref)
+			// what else owned it went meanwhile: it goes, nothing owning it.
+			if len(remaining) > 0 {
+				d.keep(ref)
 
-			if len(remaining) == 0 {
-				remaining = outside
+				return ref, keptBy(remaining), nil
 			}
-
-			return ref, keptBy(remaining), nil
 		}
 	}
 
 	return ref, "", d.executor.kinds[node.Kind].Delete(ctx, ref)
+}
+
+// orphaned is ref, kept from the start, which, unlinked from what is removed,
+// nothing owns any more, what else owned it having gone meanwhile: owned by
+// the root alone again, it is kept for now, as what in it needs it is still
+// there, and goes once the root does.
+func (d *deletion) orphaned(ctx context.Context, ref graph.Ref) (graph.Ref, string, error) {
+	root, recorded := d.records[d.plan.Root()]
+	if !recorded {
+		return ref, "", fmt.Errorf("nothing owns it any more, and %s, which it is kept for, is gone", d.plan.Root())
+	}
+
+	if err := d.executor.ownership.Link(ctx, ref, root, graph.Owned); err != nil {
+		return ref, "", err
+	}
+
+	return ref, "kept, owned by " + root.Kind + "/" + root.UUID + " alone now: it goes once that is gone", nil
 }
 
 // outside are those of owners, what owns ref, that are not removed.
