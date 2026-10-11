@@ -559,6 +559,37 @@ func TestParse_tags(t *testing.T) {
 	})
 }
 
+func TestParse_keyLength(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		file    string
+		invalid domain.ValidationErrors
+	}{
+		"a key as long as a key may be is read, and refused as a key it does not take": {
+			file:    "services:\n  web: {image: a}\n? " + strings.Repeat("k", stack.MaxKeyLength) + "\n: 1\n",
+			invalid: domain.ValidationErrors{"compose." + strings.Repeat("k", stack.MaxKeyLength): stack.CodeUnsupportedKey},
+		},
+		"and so is one as long in letters each more than a byte, counted in letters": {
+			file:    "services:\n  web: {image: a}\n? " + strings.Repeat("ک", stack.MaxKeyLength) + "\n: 1\n",
+			invalid: domain.ValidationErrors{"compose." + strings.Repeat("ک", stack.MaxKeyLength): stack.CodeUnsupportedKey},
+		},
+		"one a letter longer is refused as too large, once, under its own path, and nothing beneath it is read, an anchor among it": {
+			file:    "services:\n  web: {image: a}\n? " + strings.Repeat("k", stack.MaxKeyLength+1) + "\n: {a: &x b, c: *x}\n",
+			invalid: domain.ValidationErrors{"compose." + strings.Repeat("k", stack.MaxKeyLength+1): "too_large"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			file, invalid := stack.Parsed(t, tt.file)
+
+			assert.Equal(t, tt.invalid, invalid)
+			assert.Empty(t, file.Services, "and is no file")
+		})
+	}
+}
+
 func TestParse_aliases(t *testing.T) {
 	t.Parallel()
 
@@ -937,11 +968,13 @@ func TestParse_mostInvalid(t *testing.T) {
 // is, however it is written: each file a review found taking up to a
 // gigabyte to read, by aliases and ranges of ports, and up to seventeen, by
 // the paths of what is beneath a long name or nested deep, each written out
-// whether it was refused or not, is refused or read taking a few megabytes, or
-// a few tens of them where as much is said of it as ever is; and a file as
-// large as a stack's may be, as costly as the bounds let one be, is read in a
-// few tens of them, read into nodes once to be read, and again to be decoded
-// strictly (yaml.Decoder.KnownFields), which a file that is taken is.
+// whether it was refused or not, or up to ten, by the same path said again
+// and again beneath a key of 128 KiB, is refused or read taking a few
+// megabytes, or a few tens of them where as much is said of it as ever is;
+// and a file as large as a stack's may be, as costly as the bounds let one
+// be, is read in a few tens of them, read into nodes once to be read, and
+// again to be decoded strictly (yaml.Decoder.KnownFields), which a file that
+// is taken is.
 //
 // It runs alone, not in parallel, since what other tests allocated meanwhile
 // would be counted with what reading the files does.
@@ -1063,20 +1096,27 @@ func TestParse_bounded(t *testing.T) {
 			},
 			most: 72 * megabyte,
 		},
-		"a service named by 128 KiB, its command as many words as fit, the last of them anchored, which is said under its path once": {
+		"a service named by 128 KiB, an explicit key's, longer than a key may be, which is refused once, and nothing beneath it read, though its command's last word is anchored": {
 			file: anchoredBeneath(128<<10, 0),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.services." + strings.Repeat("a", 128<<10): "too_large"}, invalid)
+			},
+			most: 32 * megabyte,
+		},
+		"a service named by as many characters as a key may have, its command as many words as fit, the last of them anchored, which is said under its path once": {
+			file: anchoredBeneath(stack.MaxKeyLength, 0),
 			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
 				require.Len(t, invalid, 1)
 
 				for path, code := range invalid {
-					assert.True(t, strings.HasPrefix(path, "compose.services."+strings.Repeat("a", 128<<10)+".command["), "%.40s...", path)
+					assert.True(t, strings.HasPrefix(path, "compose.services."+strings.Repeat("a", stack.MaxKeyLength)+".command["), "%.40s...", path)
 					assert.Equal(t, stack.CodeUnsupportedAlias, code)
 				}
 			},
 			most: 32 * megabyte,
 		},
 		"and with a hundred and one anchored before the rest, which are said as many as are ever said, and nothing is read after them": {
-			file: anchoredBeneath(128<<10, stack.MaxInvalid+1),
+			file: anchoredBeneath(stack.MaxKeyLength, stack.MaxInvalid+1),
 			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
 				assert.Len(t, invalid, stack.MaxInvalid)
 
@@ -1085,6 +1125,69 @@ func TestParse_bounded(t *testing.T) {
 				}
 			},
 			most: 64 * megabyte,
+		},
+		"a key of 128 KiB whose mapping says an alias under one key as often as fit, which is refused once, as too large, and nothing beneath it read": {
+			file: longKeyed("x: &x a\n", "1: *x"),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, "compose." + strings.Repeat("a", 128<<10): "too_large"}, invalid)
+			},
+			most: 16 * megabyte,
+		},
+		"and one whose mapping says a key that is a number as often": {
+			file: longKeyed("", "1: a"),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose." + strings.Repeat("a", 128<<10): "too_large"}, invalid)
+			},
+			most: 16 * megabyte,
+		},
+		"and a key that is a list": {
+			file: longKeyed("", "[a]: 1"),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose." + strings.Repeat("a", 128<<10): "too_large"}, invalid)
+			},
+			most: 16 * megabyte,
+		},
+		"and a key that is nothing": {
+			file: longKeyed("", "? : 1"),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose." + strings.Repeat("a", 128<<10): "too_large"}, invalid)
+			},
+			most: 16 * megabyte,
+		},
+		"keys as long as a key may be, fourteen levels of them, whose innermost mapping says an alias under one key as often as fit, which is said as often as is ever said": {
+			file: deepKeyed(14, "1: *x"),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".1": stack.CodeUnsupportedAlias}, invalid)
+			},
+			most: 32 * megabyte,
+		},
+		"and a key that is a number as often": {
+			file: deepKeyed(14, "1: a"),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".1": stack.CodeUnsupportedKey}, invalid)
+			},
+			most: 32 * megabyte,
+		},
+		"and a key that is a list as often": {
+			file: deepKeyed(14, "[a]: 1"),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".": stack.CodeUnsupportedKey}, invalid)
+			},
+			most: 32 * megabyte,
+		},
+		"and a key that is nothing as often": {
+			file: deepKeyed(14, "? : 1"),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".": stack.CodeUnsupportedKey}, invalid)
+			},
+			most: 32 * megabyte,
+		},
+		"and fifteen levels of them, whose innermost mapping says one key as often as fit, each holding a list too deep to be read": {
+			file: deepKeyed(15, "k: [a]"),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(15) + ".k[0]": stack.CodeTooDeep}, invalid)
+			},
+			most: 32 * megabyte,
 		},
 		"a list nested 9990 deep, an anchor at its bottom, which is too deep to be read": {
 			file: "services:\n  web:\n    image: a\n    command: " + strings.Repeat("[", 9990) + "&x a" + strings.Repeat("]", 9990) + "\n",
@@ -1183,6 +1286,60 @@ func ranges(size int) string {
 	for b.Len()+len("      - 1-1000\n") <= size {
 		b.WriteString("      - 1-1000\n")
 	}
+
+	return b.String()
+}
+
+// longKeyed is a file as large as a stack's may be: what prefix says, a
+// service, and a key of 128 KiB, an explicit key's, which YAML holds to no
+// length, whose mapping says entry as many times as fit.
+func longKeyed(prefix string, entry string) string {
+	var b strings.Builder
+
+	b.WriteString(prefix + "services:\n  web: {image: a}\n? " + strings.Repeat("a", 128<<10) + "\n: {" + entry)
+	for b.Len()+len(", "+entry+"}\n") <= stack.MaxFile {
+		b.WriteString(", " + entry)
+	}
+
+	b.WriteString("}\n")
+
+	return b.String()
+}
+
+// keyed is the key of the level at i of deepKeyed: as many characters as a
+// key may have, each the level's letter.
+func keyed(i int) string {
+	return strings.Repeat(string(rune('a'+i%26)), stack.MaxKeyLength)
+}
+
+// keyedPath is the path deepKeyed's levels of keys are under.
+func keyedPath(levels int) string {
+	keys := make([]string, levels)
+	for i := range keys {
+		keys[i] = keyed(i)
+	}
+
+	return "compose." + strings.Join(keys, ".")
+}
+
+// deepKeyed is a file as large as a stack's may be: x, anchored, a service,
+// and as many levels of keys as long as a key may be as levels says, each the
+// one key of the mapping of the one before, the innermost of which says entry
+// as many times as fit.
+func deepKeyed(levels int, entry string) string {
+	var b strings.Builder
+
+	b.WriteString("x: &x a\nservices:\n  web: {image: a}\n? " + keyed(0) + "\n: ")
+	for i := 1; i < levels; i++ {
+		b.WriteString("{? " + keyed(i) + " : ")
+	}
+
+	b.WriteString("{" + entry)
+	for b.Len()+len(", "+entry)+levels+len("\n") <= stack.MaxFile {
+		b.WriteString(", " + entry)
+	}
+
+	b.WriteString(strings.Repeat("}", levels) + "\n")
 
 	return b.String()
 }

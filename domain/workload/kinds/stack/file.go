@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"go.yaml.in/yaml/v3"
 
@@ -63,6 +64,13 @@ const (
 	// deeper is refused as too_deep, under the path of the first of it in
 	// what holds it, and nothing beneath that is read.
 	MaxDepth = 16
+
+	// MaxKeyLength is the most characters a key of it has, as YAML holds a
+	// key written with no ? before it to: a longer one, which only a ? key
+	// can be, is refused as too_large, once, under its own path, and nothing
+	// beneath it is read, so that no path in the file is longer than its
+	// levels' keys, each this long at most.
+	MaxKeyLength = 1024
 
 	// MaxInvalid is the most of what is wrong with it that is said: the
 	// first of it, as the file is read, in the order the file says things.
@@ -371,8 +379,10 @@ func Field(path string) string {
 // What reading it takes is bounded by what it is: an anchor or an alias,
 // anywhere in it, is refused under its path (CodeUnsupportedAlias) before
 // anything else of it is read, so that nothing in it is read twice, and so is
-// a tag but a string's, a key that is not a string, and what is nested in it
-// deeper than MaxDepth (CodeTooDeep); it declares MaxServices services,
+// a tag but a string's, a key that is not a string or is longer than
+// MaxKeyLength, and what is nested in it deeper than MaxDepth (CodeTooDeep),
+// the walk that says where each is ending once it has said as much as is
+// ever said, a path said again counting; it declares MaxServices services,
 // MaxNetworks networks and MaxVolumes volumes at most, and its services
 // publish MaxPorts ports at most, a range counted by its size before any port
 // of it is, and name MaxReferences of what it declares at most, which
@@ -641,13 +651,15 @@ func (r *reading) full() bool {
 // sound reports whether a stack's file, root, is sound to be read: nothing
 // of it an anchor or an alias, which would have what it stands for read
 // again wherever it is, nothing of it tagged but as a string (tagged), every
-// key of it a string (stringKey), and nothing of it deeper than MaxDepth. One
-// that is not is walked as it is written (walker), which says of each node
-// that is not, under its path, what it is refused for: an anchor or an alias
-// (CodeUnsupportedAlias), a tag (CodeUnsupportedTag), a key that is no string
-// (CodeUnsupportedKey), and the first of what is too deep in what holds it
-// (CodeTooDeep). What an alias stands for is never followed, and a file that
-// is sound is looked over once, allocating nothing.
+// key of it a string (stringKey) of MaxKeyLength characters at most
+// (tooLong), and nothing of it deeper than MaxDepth. One that is not is
+// walked as it is written (walker), which says of each node that is not,
+// under its path, what it is refused for: an anchor or an alias
+// (CodeUnsupportedAlias), a tag (CodeUnsupportedTag), a key that is too long
+// (too_large), or is no string (CodeUnsupportedKey), and the first of what is
+// too deep in what holds it (CodeTooDeep). What an alias stands for is never
+// followed, and a file that is sound is looked over once, allocating
+// nothing.
 func (r *reading) sound(root *yaml.Node) bool {
 	if isSound(root, 0) {
 		return true
@@ -671,7 +683,7 @@ func isSound(n *yaml.Node, depth int) bool {
 	}
 
 	for i, child := range n.Content {
-		if n.Kind == yaml.MappingNode && i%2 == 0 && !stringKey(child) {
+		if n.Kind == yaml.MappingNode && i%2 == 0 && (!stringKey(child) || tooLong(child)) {
 			return false
 		}
 
@@ -696,6 +708,13 @@ func tagged(n *yaml.Node) bool {
 	return n.Style&yaml.TaggedStyle != 0 && n.ShortTag() != "!!str"
 }
 
+// tooLong reports whether key, a key of a mapping, is longer than a key may
+// be (MaxKeyLength), counted in characters, and allocating nothing: what is
+// written of it, which a path in the file is written with.
+func tooLong(key *yaml.Node) bool {
+	return len(key.Value) > MaxKeyLength && utf8.RuneCountInString(key.Value) > MaxKeyLength
+}
+
 // stringKey reports whether key, a key of a mapping, is a string as YAML
 // reads it: a scalar it reads as one, written plainly or quoted, and tagged
 // as nothing else. A number, a boolean, nothing, a merge, a date, and what a
@@ -710,11 +729,31 @@ func stringKey(key *yaml.Node) bool {
 // (reading.sound). Where it is is kept as the steps of its path, which are
 // written out as one only for a node that is refused, so that walking a file
 // takes as much as the file is, and as much again as each path said is; and
-// it stops once as much is said of the file as ever is (MaxInvalid).
+// it stops once it has said as much of the file as is ever said (MaxInvalid),
+// each thing it says counted, though it says it of a path said already.
 type walker struct {
 	*reading
 
 	steps []step
+
+	// said is how many things the walker has said of the file.
+	said int
+}
+
+// say says of what is at the walker's path that it is refused with code, and
+// counts it, whether that path was said already or not: a mapping that says
+// one key as often as it fits, under keys as long as a key may be, has its
+// path written out no more often than as much as is ever said.
+func (w *walker) say(code string) {
+	w.said++
+	w.refuse(w.path(), code)
+}
+
+// full reports whether the walker has said as much of the file as is ever
+// said (MaxInvalid), or as much is said of it already: nothing more of it is
+// walked once either is.
+func (w *walker) full() bool {
+	return w.said >= MaxInvalid || w.reading.full()
 }
 
 // step is one step of a path in a stack's file: a key, or the index of an
@@ -731,9 +770,9 @@ type step struct {
 func (w *walker) walk(n *yaml.Node, depth int) {
 	switch {
 	case aliasing(n):
-		w.refuse(w.path(), CodeUnsupportedAlias)
+		w.say(CodeUnsupportedAlias)
 	case tagged(n):
-		w.refuse(w.path(), CodeUnsupportedTag)
+		w.say(CodeUnsupportedTag)
 	}
 
 	w.beneath(n, depth)
@@ -743,9 +782,10 @@ func (w *walker) walk(n *yaml.Node, depth int) {
 // the file and at the walker's path, is not sound to be read, in the order it
 // is written: the first of it, when that is deeper than MaxDepth, and nothing
 // else; and otherwise of each entry of a mapping, an anchor or an alias of
-// its key or of its value, or else either of them tagged, or else its key not
-// being a string, under the entry's path, and of each item of a sequence its
-// being an anchor or an alias, or tagged, and what is beneath each of them.
+// its key or of its value, or else either of them tagged, or else its key
+// longer than a key may be, beneath which nothing is read, or else not being
+// a string, under the entry's path, and of each item of a sequence its being
+// an anchor or an alias, or tagged, and what is beneath each of them.
 func (w *walker) beneath(n *yaml.Node, depth int) {
 	switch {
 	case w.full() || len(n.Content) == 0:
@@ -757,7 +797,7 @@ func (w *walker) beneath(n *yaml.Node, depth int) {
 		}
 
 		w.steps = append(w.steps, first)
-		w.refuse(w.path(), CodeTooDeep)
+		w.say(CodeTooDeep)
 		w.steps = w.steps[:len(w.steps)-1]
 
 		return
@@ -770,17 +810,23 @@ func (w *walker) beneath(n *yaml.Node, depth int) {
 
 			w.steps = append(w.steps, step{key: keyOf(key)})
 
+			long := tooLong(key)
+
 			switch {
 			case aliasing(key) || aliasing(value):
-				w.refuse(w.path(), CodeUnsupportedAlias)
+				w.say(CodeUnsupportedAlias)
 			case tagged(key) || tagged(value):
-				w.refuse(w.path(), CodeUnsupportedTag)
+				w.say(CodeUnsupportedTag)
+			case long:
+				w.say("too_large")
 			case !stringKey(key):
-				w.refuse(w.path(), CodeUnsupportedKey)
+				w.say(CodeUnsupportedKey)
 			}
 
-			w.beneath(key, depth+1)
-			w.beneath(value, depth+1)
+			if !long {
+				w.beneath(key, depth+1)
+				w.beneath(value, depth+1)
+			}
 
 			w.steps = w.steps[:len(w.steps)-1]
 		}
