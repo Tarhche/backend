@@ -114,10 +114,14 @@ const (
 // invalid_ip, invalid_protocol, invalid_mount and too_large.
 const (
 	// CodeUnsupportedKey is a key the file does not take: one compose takes
-	// that the platform does not carry out, such as build or healthcheck, and
-	// any other; and one that is not a string as YAML reads it, a number, a
-	// boolean, nothing or a merge, which is quoted to be taken as a string.
+	// that the platform does not carry out, such as build or healthcheck, a
+	// merge (<<) among them, and any other.
 	CodeUnsupportedKey = "unsupported_key"
+
+	// CodeInvalidKey is a key that is not a string as YAML reads it, a
+	// number, a boolean, nothing, a date or a list say, which the file does
+	// not take as one: quoted, it is read as the name it is written as.
+	CodeInvalidKey = "invalid_key"
 
 	// CodeDuplicateKey is a key a mapping of the file says twice.
 	CodeDuplicateKey = "duplicate_key"
@@ -343,14 +347,15 @@ func Field(path string) string {
 // compose.services.web.healthcheck, be it one compose takes that the platform
 // does not carry out, build, healthcheck, configs, secrets, profiles, extends,
 // deploy, a top-level version or name or an x- key among them, or any other;
-// and so is a key, anywhere in it, that is not a string as YAML reads it, a
-// number, a boolean, nothing or a merge, which is quoted to be taken as one,
-// and a tag on anything in it but a string's (CodeUnsupportedTag): what it
-// says is read as it is written. Once nothing is wrong with it, it is decoded
-// strictly into that shape too (yaml.Decoder.KnownFields), which refuses
-// nothing it was not refused for already: what that refuses all the same is a
-// mistake of the reading's, which refuses the file under its own path,
-// compose, as one the platform does not read. What it takes:
+// and so is a merge (<<), anywhere in it; a key that is not a string as YAML
+// reads it (CodeInvalidKey), a number, a boolean, nothing or a date, which is
+// quoted to be taken as one; and a tag on anything in it but a string's
+// (CodeUnsupportedTag): what it says is read as it is written. Once nothing
+// is wrong with it, it is decoded strictly into that shape too
+// (yaml.Decoder.KnownFields), which refuses nothing it was not refused for
+// already: what that refuses all the same is a mistake of the reading's,
+// which refuses the file under its own path, compose, as one the platform
+// does not read. What it takes:
 //
 //   - at the top, services, at least one, and the volumes and the networks it
 //     declares, each by its name and with nothing beneath it;
@@ -653,8 +658,8 @@ func (r *reading) full() bool {
 // walked as it is written (walker), which says of each node that is not,
 // under its path, what it is refused for: an anchor or an alias
 // (CodeUnsupportedAlias), a tag (CodeUnsupportedTag), a key that is too long
-// (too_large), or is no string (CodeUnsupportedKey), and the first of what is
-// too deep in what holds it (CodeTooDeep). What an alias stands for is never
+// (too_large), or is no string (notString), and the first of what is too deep
+// in what holds it (CodeTooDeep). What an alias stands for is never
 // followed, and a file that is sound is looked over once, allocating
 // nothing.
 func (r *reading) sound(root *yaml.Node) bool {
@@ -712,11 +717,22 @@ func tooLong(key *yaml.Node) bool {
 	return len(key.Value) > MaxKeyLength && utf8.RuneCountInString(key.Value) > MaxKeyLength
 }
 
+// notString is what a key of a mapping that is not a string is refused with:
+// a merge (<<), compose's, which the file does not take, as a key it does not
+// take (CodeUnsupportedKey); and anything else, a number, a boolean, nothing,
+// a date or a list say, as a key to be quoted (CodeInvalidKey).
+func notString(key *yaml.Node) string {
+	if key.Kind == yaml.ScalarNode && key.ShortTag() == "!!merge" {
+		return CodeUnsupportedKey
+	}
+
+	return CodeInvalidKey
+}
+
 // stringKey reports whether key, a key of a mapping, is a string as YAML
 // reads it: a scalar it reads as one, written plainly or quoted, and tagged
 // as nothing else. A number, a boolean, nothing, a merge, a date, and what a
-// tag says is anything but a string, binary say, are not, and are quoted to
-// be taken as one.
+// tag says is anything but a string, binary say, are not (notString).
 func stringKey(key *yaml.Node) bool {
 	return key.Kind == yaml.ScalarNode && key.ShortTag() == "!!str"
 }
@@ -817,7 +833,7 @@ func (w *walker) beneath(n *yaml.Node, depth int) {
 			case long:
 				w.say("too_large")
 			case !stringKey(key):
-				w.say(CodeUnsupportedKey)
+				w.say(notString(key))
 			}
 
 			if !long {

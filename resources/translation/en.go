@@ -81,6 +81,7 @@ var english = map[string]string{
 
 	// a stack's file: what the platform reads in it, and refuses of it.
 	"unsupported_key":      "a stack's file does not take this key",
+	"invalid_key":          "this key is not read as a name: quote it, as '1' or 'true', when YAML would read it as a number, a boolean, a date or nothing",
 	"duplicate_key":        "this key is given more than once",
 	"unsupported_alias":    "a stack's file takes no anchor (&name) or alias (*name): say each thing where it is used",
 	"unsupported_tag":      "a stack's file takes no tag (!name, !!type) but !!str: write each value as it is to be read",

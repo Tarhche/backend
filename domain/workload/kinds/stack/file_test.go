@@ -426,15 +426,15 @@ func TestParse_keys(t *testing.T) {
 		"a volume's name binary, whose text is read as ../":           {file: "services:\n  web: {image: a}\nvolumes:\n  !!binary Li4v: ~\n", invalid: domain.ValidationErrors{"compose.volumes.Li4v": stack.CodeUnsupportedTag}},
 		"and a network's":                                             {file: "services:\n  web: {image: a}\nnetworks:\n  !!binary Li4v: ~\n", invalid: domain.ValidationErrors{"compose.networks.Li4v": stack.CodeUnsupportedTag}},
 		"and a service's, whose text is read as another's name":       {file: "services:\n  web: {image: a, privileged: false}\n  !!binary d2Vi: {image: a, privileged: true}\n", invalid: domain.ValidationErrors{"compose.services.d2Vi": stack.CodeUnsupportedTag}},
-		"a volume's name that is nothing":                             {file: "services:\n  web: {image: a}\nvolumes:\n  null: ~\n", invalid: domain.ValidationErrors{"compose.volumes.null": stack.CodeUnsupportedKey}},
-		"a key that is a list, under the path of its mapping's entry": {file: "services:\n  web: {image: a, ? [x, y] : 1}\n", invalid: domain.ValidationErrors{"compose.services.web.": stack.CodeUnsupportedKey}},
+		"a volume's name that is nothing":                             {file: "services:\n  web: {image: a}\nvolumes:\n  null: ~\n", invalid: domain.ValidationErrors{"compose.volumes.null": stack.CodeInvalidKey}},
+		"a key that is a list, under the path of its mapping's entry": {file: "services:\n  web: {image: a, ? [x, y] : 1}\n", invalid: domain.ValidationErrors{"compose.services.web.": stack.CodeInvalidKey}},
 		"a key given twice":                                           {file: "services:\n  web: {image: a, image: b}\n", invalid: domain.ValidationErrors{"compose.services.web.image": stack.CodeDuplicateKey}},
 		"resources tagged as nothing, before a key of its limits":     {file: "services:\n  web: {image: a, resources: !!null {limits: {bogus: 1}}}\n", invalid: domain.ValidationErrors{"compose.services.web.resources": stack.CodeUnsupportedTag}},
-		"a volume's name that is a number":                            {file: "services:\n  web: {image: a}\nvolumes:\n  1: ~\n", invalid: domain.ValidationErrors{"compose.volumes.1": stack.CodeUnsupportedKey}},
-		"a network's that is a boolean":                               {file: "services:\n  web: {image: a}\nnetworks:\n  true: ~\n", invalid: domain.ValidationErrors{"compose.networks.true": stack.CodeUnsupportedKey}},
-		"a service's that is a date":                                  {file: "services:\n  2026-10-11: {image: a}\n", invalid: domain.ValidationErrors{"compose.services.2026-10-11": stack.CodeUnsupportedKey}},
-		"a variable's that is a number":                               {file: "services:\n  web: {image: a, environment: {1: a}}\n", invalid: domain.ValidationErrors{"compose.services.web.environment.1": stack.CodeUnsupportedKey}},
-		"a service depended on that is a number, in a mapping":        {file: "services:\n  web: {image: a, depends_on: {1: ~}}\n", invalid: domain.ValidationErrors{"compose.services.web.depends_on.1": stack.CodeUnsupportedKey}},
+		"a volume's name that is a number":                            {file: "services:\n  web: {image: a}\nvolumes:\n  1: ~\n", invalid: domain.ValidationErrors{"compose.volumes.1": stack.CodeInvalidKey}},
+		"a network's that is a boolean":                               {file: "services:\n  web: {image: a}\nnetworks:\n  true: ~\n", invalid: domain.ValidationErrors{"compose.networks.true": stack.CodeInvalidKey}},
+		"a service's that is a date":                                  {file: "services:\n  2026-10-11: {image: a}\n", invalid: domain.ValidationErrors{"compose.services.2026-10-11": stack.CodeInvalidKey}},
+		"a variable's that is a number":                               {file: "services:\n  web: {image: a, environment: {1: a}}\n", invalid: domain.ValidationErrors{"compose.services.web.environment.1": stack.CodeInvalidKey}},
+		"a service depended on that is a number, in a mapping":        {file: "services:\n  web: {image: a, depends_on: {1: ~}}\n", invalid: domain.ValidationErrors{"compose.services.web.depends_on.1": stack.CodeInvalidKey}},
 	} {
 		t.Run("refuses "+name+", saying where", func(t *testing.T) {
 			t.Parallel()
@@ -1164,21 +1164,21 @@ func TestParse_bounded(t *testing.T) {
 		"and a key that is a number as often": {
 			file: deepKeyed(14, "1: a"),
 			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
-				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".1": stack.CodeUnsupportedKey}, invalid)
+				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".1": stack.CodeInvalidKey}, invalid)
 			},
 			most: 32 * megabyte,
 		},
 		"and a key that is a list as often": {
 			file: deepKeyed(14, "[a]: 1"),
 			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
-				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".": stack.CodeUnsupportedKey}, invalid)
+				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".": stack.CodeInvalidKey}, invalid)
 			},
 			most: 32 * megabyte,
 		},
 		"and a key that is nothing as often": {
 			file: deepKeyed(14, "? : 1"),
 			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
-				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".": stack.CodeUnsupportedKey}, invalid)
+				assert.Equal(t, domain.ValidationErrors{"compose.x": stack.CodeUnsupportedAlias, keyedPath(14) + ".": stack.CodeInvalidKey}, invalid)
 			},
 			most: 32 * megabyte,
 		},

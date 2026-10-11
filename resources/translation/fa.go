@@ -81,6 +81,7 @@ var farsi = map[string]string{
 
 	// a stack's file: what the platform reads in it, and refuses of it.
 	"unsupported_key":      "فایل استک این کلید را نمی‌پذیرد",
+	"invalid_key":          "این کلید به‌عنوان نام خوانده نمی‌شود: اگر YAML آن را عدد، بولی، تاریخ یا تهی می‌خواند، آن را در گیومه بنویسید، مانند '1' یا 'true'",
 	"duplicate_key":        "این کلید بیش از یک بار آمده است",
 	"unsupported_alias":    "فایل استک anchor (&name) و alias (*name) را نمی‌پذیرد: هر چیز را همان‌جا بنویسید که به کار می‌رود",
 	"unsupported_tag":      "فایل استک هیچ تگی (!name، !!type) جز !!str را نمی‌پذیرد: هر مقدار را همان‌طور بنویسید که باید خوانده شود",
