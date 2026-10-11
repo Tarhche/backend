@@ -539,26 +539,56 @@ func throughVMHost(t *testing.T, engine vm.Engine, logger *slog.Logger) vm.Engin
 }
 
 // natsServer is a NATS server with JetStream, of the test's own.
+//
+// Its store is a directory of the harness's own, removed once the server has
+// shut down, rather than the test's (t.TempDir), whose removal fails the test
+// when it finds the directory not empty: what JetStream's store writes of a
+// consumer, what it was last acked as, it writes a moment after the server
+// has shut down, now and then, a code runner's consumer's among it. The
+// directory is removed once nothing writes in it any more, and left, saying
+// so, should something go on writing in it.
 func natsServer(t *testing.T) string {
 	t.Helper()
+
+	store, err := os.MkdirTemp("", "workload-nats")
+	require.NoError(t, err)
 
 	natsServer, err := server.NewServer(&server.Options{
 		Host:      "127.0.0.1",
 		Port:      -1,
 		JetStream: true,
-		StoreDir:  t.TempDir(),
+		StoreDir:  store,
 		NoLog:     true,
 		NoSigs:    true,
 	})
 	require.NoError(t, err)
 
 	go natsServer.Start()
-	t.Cleanup(natsServer.Shutdown)
+
+	t.Cleanup(func() {
+		natsServer.Shutdown()
+		natsServer.WaitForShutdown()
+
+		removed := os.RemoveAll(store)
+		for tries := 1; removed != nil && tries < storeRemovals; tries++ {
+			time.Sleep(beat)
+
+			removed = os.RemoveAll(store)
+		}
+
+		if removed != nil {
+			t.Logf("the store of the test's nats server is left at %s: %v", store, removed)
+		}
+	})
 
 	require.True(t, natsServer.ReadyForConnections(5*time.Second), "nats did not come up")
 
 	return natsServer.ClientURL()
 }
+
+// storeRemovals is how many times the store of a test's NATS server is
+// removed, a beat apart, before it is left as it is.
+const storeRemovals = 100
 
 // connect is a connection of a service's own, as each service has one.
 func connect(t *testing.T, url string) *nats.Conn {
