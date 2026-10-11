@@ -127,11 +127,14 @@ func newDockerd(t *testing.T) *dockerd {
 		refused:   make(map[string]bool),
 	}
 
+	// a server's close waits for the requests it is answering, which wait
+	// for the dockerd's lock: the servers are closed with the lock let go of.
 	t.Cleanup(func() {
 		d.lock.Lock()
-		defer d.lock.Unlock()
+		servers := slices.Clone(d.servers)
+		d.lock.Unlock()
 
-		for _, server := range d.servers {
+		for _, server := range servers {
 			server.Close()
 		}
 	})
