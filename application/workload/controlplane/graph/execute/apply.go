@@ -41,6 +41,8 @@ import (
 // it would have saved so far, in order, and goes on as any run does; one cut
 // short meanwhile changes nothing, and saves nothing, however soon: what is
 // kept is read whatever becomes of its context, as what it saves is saved.
+// One that cannot save all it held puts back what it saved of it as the run
+// before left it.
 //
 // A plan with a node of a kind the executor is not given is carried out not
 // at all, and is kind.ErrUnknownKind. What fails to be saved is an error,

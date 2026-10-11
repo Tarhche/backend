@@ -290,7 +290,8 @@ func (r *run) began(ctx context.Context) error {
 
 // speak has a quiet run save what it held, in the order it would have saved
 // it, and everything after as any run does. What cannot be saved is the
-// run's error, as any save's.
+// run's error, as any save's, and what it saved of what it held before then
+// is put back as the run before left it (putBack).
 func (r *run) speak(ctx context.Context) error {
 	r.saving.Lock()
 	defer r.saving.Unlock()
@@ -306,13 +307,38 @@ func (r *run) speak(ctx context.Context) error {
 	r.held = nil
 	r.lock.Unlock()
 
-	for _, e := range held {
+	for n, e := range held {
 		if err := r.write(ctx, e); err != nil {
+			r.putBack(ctx, held[:n])
+
 			return err
 		}
 	}
 
 	return nil
+}
+
+// putBack saves again, as the run before left it, each node of what a quiet
+// run saved of what it held before saving the rest failed: its plan says how
+// that run went, rather than this one's start of a node or two beside it,
+// every node pending first, the rest of which it never saved. What cannot be
+// put back is left as it was saved, a node or two pending, as a run's start
+// that fails to save leaves it; and a node this run goes on with is saved as
+// it ends, as any run's is once it saves what it does.
+func (r *run) putBack(ctx context.Context, saved []graph.Execution) {
+	put := make(map[graph.NodeID]bool, len(saved))
+
+	for _, e := range saved {
+		if put[e.Node] {
+			continue
+		}
+
+		put[e.Node] = true
+
+		if kept, there := r.kept[e.Node]; there {
+			_ = r.executor.executions.Save(context.WithoutCancel(ctx), kept)
+		}
+	}
 }
 
 // save saves e, whatever becomes of the run's context: what it says of its

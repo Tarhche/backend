@@ -588,6 +588,31 @@ func TestExecutor_Apply_again(t *testing.T) {
 		assert.Equal(t, execute.Interrupted, outcome.State)
 		assert.Equal(t, graph.StatePending, byNode(outcome.Nodes)[network].State)
 	})
+
+	t.Run("and one that saves only part of what it held puts back what it saved of it as the run before left it", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container(false)
+		f, plan, _ := applied(t, kinds, execute.Concurrency(1))
+		before := f.kept(t, plan)
+
+		// its network is to be made, and of what the run held as it was
+		// quiet, the vm and the network pending are saved, and the volume
+		// pending is not.
+		kinds.Record(network)
+		f.executions.failWith(func(e graph.Execution) error {
+			if e.Node == volume && e.State == graph.StatePending {
+				return gone
+			}
+
+			return nil
+		})
+
+		_, err := f.executor.Apply(ctx, graphtest.Ref(web), 1, plan)
+		require.ErrorIs(t, err, gone)
+
+		assert.Equal(t, before, f.kept(t, plan), "what the plan says is how the run before went, and not the vm pending, which this run found done, beside it")
+	})
 }
 
 // honouring reads what is kept as MongoDB does: not at all once the read's
