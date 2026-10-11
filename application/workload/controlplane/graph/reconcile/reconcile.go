@@ -12,8 +12,9 @@
 // asked something of since, which is carried out at once. A root asked to be
 // deleted is removed, from the top down, through what it owns
 // (execute.Executor.Remove), however often it is reconciled, and whatever its
-// failures backed it off for, and is never made again; any other is applied
-// at its record's generation
+// failures backed it off for, and is never made again: one whose plan cannot
+// be made, its record saying nothing a plan is made of, through what its
+// records say it owns; any other is applied at its record's generation
 // (execute.Executor.Apply), which makes what is missing of it, from the
 // bottom up, and nothing else. How its plan ended is kept on its lease as it
 // is let go of: one that failed backs the root off, longer with every failure
@@ -364,21 +365,32 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 }
 
 // carried carries out the plan of root, whose record, rec, a root's that
-// nothing owns, the run read, as carry says.
+// nothing owns, the run read, as carry says. One asked to go whose plan
+// cannot be made is removed all the same, through what its records say it
+// owns (removeUnplanned).
 func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.RootKind, rec resource.Record) (graph.Ended, bool, error) {
+	deleting := !rec.Metadata.DeletionRequestedAt.IsZero()
+
+	unplanned := func(err error) (graph.Ended, bool, error) {
+		if deleting {
+			return r.removeUnplanned(ctx, root, rec, err)
+		}
+
+		return r.failed(err)
+	}
+
 	requirement, err := rooted.Root(rec.Raw)
 	if err != nil {
-		return r.failed(fmt.Errorf("what the root needs cannot be read off its record: %w", err))
+		return unplanned(fmt.Errorf("what the root needs cannot be read off its record: %w", err))
 	}
 
 	plan, err := r.planner.Plan(requirement)
 	if err != nil {
-		return r.failed(fmt.Errorf("its graph cannot be planned: %w", err))
+		return unplanned(fmt.Errorf("its graph cannot be planned: %w", err))
 	}
 
 	// a record kept before generations is at its first.
 	generation := max(rec.Metadata.Generation, 1)
-	deleting := !rec.Metadata.DeletionRequestedAt.IsZero()
 
 	outcome, err := r.held(ctx, root, func(ctx context.Context) (execute.Outcome, error) {
 		if deleting {

@@ -575,6 +575,86 @@ func TestAStacksGraph(t *testing.T) {
 	})
 }
 
+// TestAStackWhoseFileCannotBeRead deletes a stack whose file the platform
+// does not read as it is kept, as one kept before the platform read files
+// as it does now would be: its graph cannot be planned, and it is removed
+// all the same, through what its records say it owns, its containers and its
+// network, and its record goes, and its volume and its VM, which it only
+// uses, stay.
+func TestAStackWhoseFileCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+		Name:      "store",
+		Compose:   storeCompose,
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, deployed.ValidationErrors)
+	require.NotNil(t, deployed.Stack)
+
+	stackUUID, slug, vmUUID := deployed.Stack.UUID, deployed.Stack.Slug, deployed.VM.UUID
+	named := func(name string) string { return slug + "_" + name }
+
+	w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+	// its file, written straight to what keeps it, says what the platform
+	// does not take.
+	require.Eventually(t, func() bool {
+		r, err := w.resources.GetOne(ctx, stackKind.Name, stackUUID)
+		require.NoError(t, err)
+
+		s, err := kind.Decode[stackKind.Spec, stackKind.Status](r.Raw)
+		require.NoError(t, err)
+
+		s.Spec.Compose = "services:\n  web:\n    image: nginx:alpine\n    build: .\n"
+
+		raw, err := kind.Encode(s)
+		require.NoError(t, err)
+
+		r.Raw = raw
+
+		_, err = w.resources.Update(ctx, r)
+
+		return err == nil
+	}, settle, beat, "its file was never written")
+
+	deleted, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
+	require.NoError(t, err)
+	require.Empty(t, deleted.ValidationErrors)
+
+	require.Eventually(t, func() bool {
+		_, err := w.resources.GetOne(ctx, stackKind.Name, stackUUID)
+
+		return errors.Is(err, domain.ErrNotExists)
+	}, settle, beat, "the stack was never removed")
+
+	assert.Empty(t, w.containerRecords(t, vmUUID), "its containers went with it")
+
+	_, kept := w.findBlock(t, networkKind.Name, vmUUID, named("backend"))
+	assert.False(t, kept, "and so did its network")
+
+	held := w.dockerd.Holds(t, vmUUID)
+
+	for _, service := range []string{"db", "web"} {
+		_, there := held.Container(named(service))
+		assert.False(t, there, "%s went with it", service)
+	}
+
+	_, networked := held.Network(named("backend"))
+	assert.False(t, networked)
+
+	assert.True(t, held.Volume(named("data")), "its volume stays")
+
+	_, kept = w.findBlock(t, volumeKind.Name, vmUUID, named("data"))
+	assert.True(t, kept)
+
+	w.stored(t, vmUUID, "kept", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+}
+
 // stackRecord is the record of the stack uuid names, as the control plane
 // keeps it.
 func (w *workload) stackRecord(t *testing.T, uuid string) stackKind.Stack {
