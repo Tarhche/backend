@@ -54,6 +54,10 @@ func (s stackView) String() string {
 	states := make([]string, len(s.Containers))
 	for i, c := range s.Containers {
 		states[i] = c.Service + "=" + c.State
+
+		if len(c.ID) > 0 {
+			states[i] += "@" + c.ID[:min(len(c.ID), 12)]
+		}
 	}
 
 	slices.Sort(states)
@@ -125,10 +129,11 @@ func waitForMade(t testing.TB, uuid string, timeout time.Duration) vmView {
 // keeping what it holds on a volume of the stack's, in a Docker VM its graph
 // makes for it, naming none. It runs, its containers listed as its own; what
 // needs its VM, its network and its volume is the stack, read and nothing
-// changed; it is stopped and started; a file it does not take is refused,
-// naming what of it; its VM, deleted without cascade, is answered with the
-// stack, comes back under its uuid and the slug it had, and the stack runs
-// again in it; and deleted, its containers go, and its volume and its VM stay,
+// changed; it is stopped, started and restarted; a file it does not take is
+// refused, naming what of it; its VM, deleted without cascade, is answered
+// with the stack, comes back under its uuid and the slug it had, and the stack
+// runs again in it, in containers made again on its new disk; and deleted, its
+// containers go, none of them listed any more, and its volume and its VM stay,
 // the volume until it is removed, as somebody removes one.
 func TestStacks(t *testing.T) {
 	var created struct {
@@ -154,9 +159,9 @@ func TestStacks(t *testing.T) {
 	vmUUID, slug := created.VM.UUID, created.Stack.Slug
 	volume := slug + "_data"
 
-	// waitFor waits until the stack is in state with its containers in
-	// theirs, and ends the test when it fails on the way.
-	waitFor := func(t *testing.T, state, containers string) stackView {
+	// waitUntil waits until the stack is as done says, and ends the test
+	// when it fails on the way.
+	waitUntil := func(t *testing.T, done func(s stackView) bool) stackView {
 		t.Helper()
 
 		var s stackView
@@ -169,14 +174,22 @@ func TestStacks(t *testing.T) {
 				t.Fatalf("the stack failed: %s", s.Reason)
 			}
 
-			done := s.State == state && len(s.Containers) == 2 && !slices.ContainsFunc(s.Containers, func(c containerView) bool {
-				return c.State != containers
-			})
-
-			return done, s.String()
+			return done(s), s.String()
 		})
 
 		return s
+	}
+
+	// waitFor waits until the stack is in state with its containers in
+	// theirs, and ends the test when it fails on the way.
+	waitFor := func(t *testing.T, state, containers string) stackView {
+		t.Helper()
+
+		return waitUntil(t, func(s stackView) bool {
+			return s.State == state && len(s.Containers) == 2 && !slices.ContainsFunc(s.Containers, func(c containerView) bool {
+				return c.State != containers
+			})
+		})
 	}
 
 	timings.step(t, "running with two containers, in the vm made for it", func(t *testing.T) {
@@ -256,6 +269,11 @@ func TestStacks(t *testing.T) {
 		waitFor(t, "running", "running")
 	})
 
+	timings.step(t, "restart", func(t *testing.T) {
+		user.call(t, http.MethodPost, path+"/restart", nil, http.StatusAccepted, nil)
+		waitFor(t, "running", "running")
+	})
+
 	timings.step(t, "a file it does not take is refused, naming what of it", func(t *testing.T) {
 		status, body := user.status(t, http.MethodPost, "/api/dashboard/workload/stacks", map[string]any{
 			"name":    "e2e refused stack",
@@ -278,8 +296,15 @@ func TestStacks(t *testing.T) {
 		}
 	})
 
-	timings.step(t, "its vm, deleted without cascade, is answered with the stack, comes back under its uuid, and the stack runs again", func(t *testing.T) {
+	timings.step(t, "its vm, deleted without cascade, is answered with the stack, comes back under its uuid, and the stack runs again, in containers made again", func(t *testing.T) {
 		before := getVM(t, vmUUID)
+
+		// the containers it runs in now, each by its service, which go with
+		// the vm's disk.
+		ran := make(map[string]string)
+		for _, c := range waitFor(t, "running", "running").Containers {
+			ran[c.Service] = c.ID
+		}
 
 		var deleted needs
 		user.call(t, http.MethodDelete, vmPath(vmUUID), nil, http.StatusAccepted, &deleted)
@@ -307,10 +332,32 @@ func TestStacks(t *testing.T) {
 			t.Fatalf("the vm came back as %s, and was %s", again.Slug, before.Slug)
 		}
 
-		waitFor(t, "running", "running")
+		// a new disk holds none of what the old one did: each container it
+		// runs in again is one its graph made again, under an id of its own.
+		waitUntil(t, func(s stackView) bool {
+			return s.State == "running" && len(s.Containers) == 2 && !slices.ContainsFunc(s.Containers, func(c containerView) bool {
+				return c.State != "running" || c.ID == ran[c.Service]
+			})
+		})
 	})
 
 	timings.step(t, "delete, its containers gone, and its volume and its vm kept", func(t *testing.T) {
+		// its containers, as its vm lists them while it is there: those
+		// listed as its own, and those named under its slug.
+		var listed page[containerView]
+		user.call(t, http.MethodGet, dockerPath(vmUUID, "/containers"), nil, http.StatusOK, &listed)
+
+		var its []containerView
+		for _, c := range listed.Items {
+			if c.StackUUID == created.Stack.UUID || strings.HasPrefix(c.Name, slug+"_") {
+				its = append(its, c)
+			}
+		}
+
+		if len(its) != 2 {
+			t.Fatalf("the stack's containers are listed as %+v while it is there", listed.Items)
+		}
+
 		user.call(t, http.MethodDelete, path, nil, http.StatusAccepted, nil)
 
 		eventually(t, "stack "+slug, 5*time.Minute, func() (bool, string) {
@@ -319,11 +366,13 @@ func TestStacks(t *testing.T) {
 			return status == http.StatusNotFound, fmt.Sprint(status)
 		})
 
-		// its record goes last of all, once its containers have.
-		var containers page[containerView]
-		user.call(t, http.MethodGet, dockerPath(vmUUID, "/containers"), nil, http.StatusOK, &containers)
-		for _, c := range containers.Items {
-			if c.StackUUID == created.Stack.UUID || strings.HasPrefix(c.Name, slug+"_") {
+		// its record goes last of all, once its containers have: none of
+		// them is listed any more, by its id or by its name, though nothing
+		// names a stack that is gone as theirs.
+		var left page[containerView]
+		user.call(t, http.MethodGet, dockerPath(vmUUID, "/containers"), nil, http.StatusOK, &left)
+		for _, c := range left.Items {
+			if slices.ContainsFunc(its, func(gone containerView) bool { return c.ID == gone.ID || c.Name == gone.Name }) {
 				t.Fatalf("the stack's container %s outlived it", c.Name)
 			}
 		}
