@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -29,6 +30,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -1141,7 +1143,10 @@ func (h *holding) removeVolume(rw http.ResponseWriter, name string) bool {
 	return true
 }
 
-// Holds is what the dockerd of the VM id names holds now.
+// Holds is what the dockerd of the VM id names holds now: nothing, when the
+// engine holds no instance of the VM. A wait reads it from a goroutine of its
+// own, which may not end the test, so what cannot be read fails the test
+// without ending it, and is nothing held.
 func (d *dockerd) Holds(t *testing.T, id string) holding {
 	t.Helper()
 
@@ -1149,8 +1154,16 @@ func (d *dockerd) Holds(t *testing.T, id string) holding {
 	defer d.lock.Unlock()
 
 	h, err := d.load(id)
-	if err != nil {
-		t.Fatalf("what the dockerd of %s holds cannot be read: %v", id, err)
+
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		// a vm the engine holds no instance of, gone or not made yet, has no
+		// dockerd to hold anything.
+		return holding{Configs: make(map[string]created)}
+	case err != nil:
+		t.Errorf("what the dockerd of %s holds cannot be read: %v", id, err)
+
+		return holding{Configs: make(map[string]created)}
 	}
 
 	return h
