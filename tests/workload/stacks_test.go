@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1245,4 +1246,95 @@ func TestAStackBeforeItsRestoredVMIsLookedInto(t *testing.T) {
 
 		assert.False(t, slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") }), "nothing of it is made again: %v", w.dockerd.Did(vmUUID)[did:])
 	})
+}
+
+// TestAStackWhoseVMIsRestoredTwiceInARow restores a stack's Docker VM to a
+// snapshot taken before the stack was made, and, before that restore's disk
+// is looked into, its dockerd still coming up, to one taken while the stack
+// ran: the stack is never forgotten in between, nothing of it is made, and
+// once the second restore's disk is looked into, the stack runs with what
+// that disk holds of it, its own again under the uuids it had, nothing of it
+// made again.
+func TestAStackWhoseVMIsRestoredTwiceInARow(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID := w.dockerVM(t, "builds")
+	before := w.snapshot(t, vmUUID, "before the stack")
+
+	deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+		Name:      "store",
+		Compose:   storeCompose,
+		VMUUID:    vmUUID,
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, deployed.ValidationErrors)
+	require.NotNil(t, deployed.Stack)
+
+	stackUUID := deployed.Stack.UUID
+
+	w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+	// the containers the control plane keeps in the vm, by uuid.
+	containers := func() map[string]string {
+		kept := map[string]string{}
+
+		for _, c := range w.containerRecords(t, vmUUID) {
+			kept[c.Metadata.UUID] = c.Spec.Name
+		}
+
+		return kept
+	}
+
+	snapshotted := containers()
+	require.Len(t, snapshotted, 2)
+
+	with := w.snapshot(t, vmUUID, "with the stack")
+
+	// whether the stack's record went at any moment from here on.
+	var forgotten atomic.Bool
+
+	watching, cancel := context.WithCancel(ctx)
+	watched := make(chan struct{})
+
+	go func() {
+		defer close(watched)
+
+		for watching.Err() == nil {
+			if _, err := w.resources.GetOne(watching, stackKind.Name, stackUUID); errors.Is(err, domain.ErrNotExists) {
+				forgotten.Store(true)
+			}
+
+			time.Sleep(beat / 5)
+		}
+	}()
+
+	w.dockerd.Hide(vmUUID)
+	w.restore(t, vmUUID, before)
+	w.restore(t, vmUUID, with)
+	did := len(w.dockerd.Did(vmUUID))
+
+	assert.Never(t, func() bool {
+		return slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") })
+	}, 2*patience.ResourceSilentAfter, beat, "something of it was made before the second restore's disk was looked into")
+
+	w.dockerd.Show(vmUUID)
+
+	w.stack(t, stackUUID, "running again", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+	cancel()
+	<-watched
+
+	assert.False(t, forgotten.Load(), "the stack was forgotten in between")
+
+	assert.Equal(t, snapshotted, containers(), "what the second restore's disk holds is its own again, under the uuids it had")
+
+	for _, c := range w.containerRecords(t, vmUUID) {
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: stackUUID}}, c.Metadata.Owners, "%s is the stack's", c.Spec.Name)
+	}
+
+	assert.False(t, slices.ContainsFunc(w.dockerd.Did(vmUUID)[did:], func(done string) bool { return strings.HasPrefix(done, "create ") }), "nothing of it is made again: %v", w.dockerd.Did(vmUUID)[did:])
 }
