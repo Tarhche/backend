@@ -552,12 +552,37 @@ func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instan
 	case err == nil:
 		b.Logger.InfoContext(ctx, "took in what a restored vm holds labelled as the platform's", "kind", b.descriptor.Name, "uuid", instance.UUID, "vm", v.Metadata.UUID, "owners", adoption.Owners)
 
-		return true, nil
+		return true, b.orphaned(ctx, instance.UUID, adoption.Owners)
 	case errors.Is(err, domain.ErrAlreadyExists):
 		return true, nil
 	}
 
 	return false, err
+}
+
+// orphaned forgets the record of what was just taken in, by its uuid, as
+// owned by owners, once one of them is gone meanwhile: a stack forgotten as
+// its restored VM's disk was found not to hold it, which forgets what it owns,
+// read as there before it went, and its record gone before what was taken in
+// for it was kept. What is taken in for it is forgotten as what it owned was,
+// and is what nobody keeps a record of from then on, shown as nobody's once
+// its node goes on saying it, rather than kept owned by what is gone, which
+// would have it removed from its VM.
+func (b *Blocks) orphaned(ctx context.Context, uuid string, owners []kind.Reference) error {
+	for _, owner := range owners {
+		_, err := b.Resources.GetOne(ctx, owner.Kind, owner.UUID)
+
+		switch {
+		case errors.Is(err, domain.ErrNotExists):
+			b.Logger.InfoContext(ctx, "forgot what was taken in from a restored vm for what went meanwhile, as what it owned was", "kind", b.descriptor.Name, "uuid", uuid, "owner", owner.Kind+"/"+owner.UUID)
+
+			return b.Resources.Delete(ctx, b.descriptor.Name, uuid)
+		case err != nil:
+			return err
+		}
+	}
+
+	return nil
 }
 
 // keepers are what keeps what of the kind on a node has no record of its own,

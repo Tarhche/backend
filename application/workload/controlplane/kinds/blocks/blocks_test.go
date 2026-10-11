@@ -11,6 +11,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
+	controlPlaneContainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/container"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -21,6 +22,7 @@ import (
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
 // seen is a container as a node reports it in vm-1: the resource uuid names,
@@ -265,6 +267,56 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, adopted.Metadata.Refs, "living in its vm, which does not own it")
 	})
 
+	t.Run("but one taken in for a stack forgotten meanwhile, as its vm's restored disk was found not to hold it, is forgotten too, as what the stack owned was, and is nobody's once its node goes on saying it", func(t *testing.T) {
+		t.Parallel()
+
+		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
+		w := blockstest.New(vmtest.WithVMs(restored))
+
+		shop, err := kind.Encode(stackKind.Stack{
+			Kind:     stackKind.Name,
+			Metadata: kind.Metadata{UUID: "stack-uuid", Name: "shop", Slug: "shop-abcde", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+			Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+			Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running}},
+		})
+		require.NoError(t, err)
+
+		w.Keep(shop)
+
+		// the stack's forget, which read nothing of the container yet, done
+		// once the stack was read as there, before the container's record
+		// is kept.
+		forgetting := &creating{Repository: w.Resources, before: func(ctx context.Context, r resource.Record) {
+			if r.Kind == containerKind.Name {
+				require.NoError(t, w.Resources.Delete(ctx, stackKind.Name, "stack-uuid"))
+			}
+		}}
+
+		containers := controlPlaneContainers.New(blocks.Dependencies{Resources: forgetting, VMs: w.Records, Chooser: w.Chooser, Requester: w.Requester, Sightings: w.Sightings})
+
+		labels := labelled(t, "from-the-snapshot")
+		labels[stackKind.LabelStack] = "stack-uuid"
+		labels[stackKind.LabelService] = "web"
+
+		web := seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "shop-abcde_web", State: "running", Labels: labels})
+
+		require.NoError(t, containers.Witnessed(ctx, vmtest.Node, web, false, at))
+
+		_, kept := w.Kept(containerKind.Name, "from-the-snapshot")
+		assert.False(t, kept, "not kept owned by what is gone, which would have it removed from its vm")
+
+		// said for as long since, from the next beat on.
+		for beat := time.Second; beat <= blockstest.SureAfter+time.Second; beat += time.Second {
+			require.NoError(t, containers.Witnessed(ctx, vmtest.Node, web, false, at.Add(beat)))
+		}
+
+		extras, err := containers.All(ctx)
+		require.NoError(t, err)
+		require.Len(t, extras, 1)
+		assert.Equal(t, "from-the-snapshot", extras[0].Metadata.UUID, "it is nobody's")
+		assert.Equal(t, blockKinds.ManagedByNobody, extras[0].Metadata.Labels[blockKinds.LabelManagedBy])
+	})
+
 	t.Run("the first look into a vm since its disk was restored is kept on its record, and no look before its restore, nor one after the first", func(t *testing.T) {
 		t.Parallel()
 
@@ -347,6 +399,20 @@ func TestBlocks_Witnessed(t *testing.T) {
 			assert.Empty(t, extras, name)
 		}
 	})
+}
+
+// creating keeps records as the repository it wraps does, but for doing what
+// before says just before each record is created.
+type creating struct {
+	resource.Repository
+
+	before func(ctx context.Context, r resource.Record)
+}
+
+func (c *creating) Create(ctx context.Context, r resource.Record) (resource.Record, error) {
+	c.before(ctx, r)
+
+	return c.Repository.Create(ctx, r)
 }
 
 // labelled are the labels a container the platform made as uuid has, its
