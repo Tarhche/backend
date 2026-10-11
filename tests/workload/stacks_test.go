@@ -648,10 +648,18 @@ func TestAStacksGraph(t *testing.T) {
 
 		assert.Equal(t, containerKind.Stopped, again.Status.Expected, "admitted expected stopped, as its stack is")
 
-		s := w.stack(t, stackUUID, "stopped with it", func(s presenter.StackDetail) bool {
-			return w.servedBy(ctx, stackUUID, "web") == again.Metadata.UUID
+		// a run of its graph may wait a moment, on web being made, before the
+		// stack is stopped with it: what is waited for is that, and that it
+		// stays so, never degraded, nor running.
+		w.stack(t, stackUUID, "stopped with it", func(s presenter.StackDetail) bool {
+			return s.State == "stopped" && w.servedBy(ctx, stackUUID, "web") == again.Metadata.UUID
 		})
-		assert.Equal(t, "stopped", s.State, "and not degraded")
+
+		assert.Never(t, func() bool {
+			s, err := w.readStack(ctx, stackUUID)
+
+			return err == nil && s.State != "stopped"
+		}, patience.ResourceSilentAfter, beat, "the stack left stopped once it was stopped with web made again")
 
 		c, there := w.dockerd.Holds(t, vmUUID).Container(named("web"))
 		require.True(t, there)
