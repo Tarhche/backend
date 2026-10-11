@@ -173,9 +173,12 @@ func TestAContainersGraph(t *testing.T) {
 			return there && c.State == container.StateRunning && networked && held.Volume("data")
 		}, settle, beat, "what lives in it, and it, were never made again")
 
-		kept := w.containerRecord(t, vmUUID, "web")
+		// its record says it runs once its node has said so, which may be a
+		// beat after its vm's dockerd runs it.
+		kept := w.containerKept(t, vmUUID, "web", "running again", func(c containerKind.Container) bool {
+			return c.Status.Status.State == containerKind.Running
+		})
 		assert.Equal(t, root.UUID, kept.Metadata.UUID, "it is what it was")
-		assert.Equal(t, containerKind.Running, kept.Status.Status.State)
 	})
 
 	t.Run("deleted, it takes the network it owned with it, and leaves its volume and its vm", func(t *testing.T) {

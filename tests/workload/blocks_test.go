@@ -330,6 +330,11 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 
 		c, _ := w.dockerd.Holds(t, vmUUID).Container("api")
 		assert.Equal(t, []string{"backend-api"}, c.NetworkSettings.Networks["backend"].Aliases, "under the names it was put on it with")
+
+		// and its record says so once its node has, which may be a beat after
+		// its vm's dockerd put it back: what it is taken off next is held to
+		// what its record says it is on.
+		w.container(t, vmUUID, "api", "back on the network, as its record says", func(c presenter.Container) bool { return slices.Contains(c.Networks, "backend") })
 	})
 
 	t.Run("taken off it, it stays off it, and the network is removed", func(t *testing.T) {
