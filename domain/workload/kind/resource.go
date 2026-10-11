@@ -86,6 +86,20 @@ func (s *Status) Common() *Status {
 	return s
 }
 
+// Restore is what a resource one of whose commands restores it from a
+// snapshot (Action.Restores) says of its last restore, among its status: when
+// its node carried it out, by the node's own clock, every restore of it later
+// than the one before. A kind whose commands restore its resources embeds it
+// in its status beside Status, as a VM's does, so that the framework reads it,
+// and takes it onto a record, without knowing the rest: what lives in the
+// resource is reset as of that moment, and a record that says an earlier one
+// is yet to take that restore.
+type Restore struct {
+	// RestoredAt is when it was last restored, as its node says it when it
+	// restores it: nothing else says it.
+	RestoredAt time.Time `json:"restored_at,omitzero"`
+}
+
 // Reference names one resource of some kind.
 type Reference struct {
 	Kind string `json:"kind"`

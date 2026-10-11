@@ -148,6 +148,35 @@ func WithCommon(status json.RawMessage, common kind.Status) (json.RawMessage, er
 	return json.Marshal(fields)
 }
 
+// RestoreOf reads what a status says of the last restore of its resource
+// (kind.Restore), which is the same whatever the kind: a status that says
+// nothing of one, a kind none of whose commands restores it, is the zero
+// restore.
+func RestoreOf(status json.RawMessage) (kind.Restore, error) {
+	var restore kind.Restore
+
+	if absent(status) {
+		return restore, nil
+	}
+
+	if err := json.Unmarshal(status, &restore); err != nil {
+		return kind.Restore{}, fmt.Errorf("the status cannot be read: %w", err)
+	}
+
+	return restore, nil
+}
+
+// WithRestore is status saying of the last restore of its resource what
+// restore says, and everything else as it said.
+func WithRestore(status json.RawMessage, restore kind.Restore) (json.RawMessage, error) {
+	written, err := json.Marshal(restore)
+	if err != nil {
+		return nil, err
+	}
+
+	return Merge(status, written)
+}
+
 // Merge is recorded with the kind's own fields that observed says, each in
 // place of what recorded said of it. The fields every kind shares are
 // recorded's: what they become is the framework's to decide, by the kind's

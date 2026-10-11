@@ -64,6 +64,14 @@ type Record struct {
 	// of, a stack, is found there as its kind says (graph.ResetKind), and
 	// nothing is made for it until it is.
 	Reset bool
+
+	// ResetAt is the restore of its parent it was last reset for, by the
+	// moment the parent's node says it carried that restore out
+	// (kind.Restore): what the parent's record says of a restore before it
+	// says nothing of what the restored parent holds, and a reset as of it,
+	// or of a later one, is not reset again. It outlives the reset, kept once
+	// the resource is found where it lives. None is a reset that said none.
+	ResetAt time.Time
 }
 
 // Pending is a command a resource is waiting on.

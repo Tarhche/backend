@@ -31,7 +31,7 @@ func (r *Reconciler) restored(ctx context.Context, root graph.Ref, resetting gra
 	parent := r.parentOf(root.Kind)
 
 	for try := 1; ; try++ {
-		restoration, err := resetting.Restored(ctx, rec.Raw)
+		restoration, err := resetting.Restored(ctx, rec.Raw, rec.ResetAt)
 		if err != nil {
 			ended, gone, err := r.failed(fmt.Errorf("%w: what its restored %s holds of it cannot be told: %w", errRecords, parent, err))
 

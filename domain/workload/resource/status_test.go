@@ -48,6 +48,57 @@ func TestCommon(t *testing.T) {
 	}
 }
 
+func TestRestoreOf(t *testing.T) {
+	t.Parallel()
+
+	restoredAt := time.Date(2026, 10, 6, 12, 0, 0, 123456789, time.UTC)
+
+	for name, tt := range map[string]struct {
+		status string
+		want   kind.Restore
+		err    bool
+	}{
+		"a status says when its resource was last restored, to the nanosecond its node said it": {
+			status: `{"state":"running","restored_at":"2026-10-06T12:00:00.123456789Z","looked_at":"2026-10-06T12:01:00Z"}`,
+			want:   kind.Restore{RestoredAt: restoredAt},
+		},
+		"one that says nothing of a restore is the zero restore": {status: `{"state":"running"}`},
+		"and so is no status": {status: ``},
+		"what is not a status is an error": {
+			status: `["running"]`,
+			err:    true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := RestoreOf(json.RawMessage(tt.status))
+			if tt.err {
+				assert.Error(t, err)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.True(t, tt.want.RestoredAt.Equal(got.RestoredAt), "%s", got.RestoredAt)
+		})
+	}
+}
+
+func TestWithRestore(t *testing.T) {
+	t.Parallel()
+
+	restoredAt := time.Date(2026, 10, 6, 12, 0, 0, 123456789, time.UTC)
+
+	written, err := WithRestore(json.RawMessage(`{"state":"failed","reason":"node_lost","restored_at":"2026-10-06T11:00:00Z","speed":2}`), kind.Restore{RestoredAt: restoredAt})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"state":"failed","reason":"node_lost","restored_at":"2026-10-06T12:00:00.123456789Z","speed":2}`, string(written), "what it says of the restore, and everything else as it was")
+
+	unchanged, err := WithRestore(json.RawMessage(`{"state":"running"}`), kind.Restore{})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"state":"running"}`, string(unchanged), "a restore that says nothing changes nothing")
+}
+
 func TestWithCommon(t *testing.T) {
 	t.Parallel()
 

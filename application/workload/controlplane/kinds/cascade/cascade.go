@@ -150,7 +150,10 @@ func (c *Cascade) Deleted(ctx context.Context, parent kind.Reference) error {
 // marked to be, as of that moment, so that the next look inside the parent
 // taken since keeps each as it is found, or takes its record away when it is
 // not there, and one taken before says nothing of them; and those of a kind
-// that outlives it are kept as they are.
+// that outlives it are kept as they are. The moment is the restore's own, as
+// the restored parent says it (kind.Restore), and each record reset is
+// stamped with it (resource.Record.ResetAt): a parent's record that says an
+// earlier restore is yet to take the one they were reset for.
 func (c *Cascade) Restored(ctx context.Context, parent kind.Reference, at time.Time) error {
 	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Restore }, at, func(ctx context.Context, _ kind.ControlPlaneBinding, r resource.Record) error {
 		return c.forget(ctx, r)
@@ -397,21 +400,28 @@ func (c *Cascade) forget(ctx context.Context, r resource.Record) error {
 }
 
 // reset marks a resource to be reset to what its parent holds as of a
-// moment, reading it again when something else wrote it first: it is taken to
-// have been observed then, so that what was seen of it before is older than
-// what is known of it.
+// moment, the parent's restore's, reading it again when something else wrote
+// it first: it is taken to have been observed then, so that what was seen of
+// it before is older than what is known of it, and stamped with that restore,
+// to the millisecond the records keep a moment to. One reset as of that
+// restore already, or a later one, is left as it is, whether it is reset
+// still or was found since: a result heard again resets nothing found since
+// it was first heard.
 func (c *Cascade) reset(ctx context.Context, r resource.Record, at time.Time) error {
+	stamp := at.Truncate(time.Millisecond)
+
 	for try := 1; ; try++ {
 		common, err := r.Common()
 		if err != nil {
 			return err
 		}
 
-		if r.Reset && !common.ObservedAt.Before(at) {
+		if !r.ResetAt.Before(stamp) {
 			return nil
 		}
 
 		r.Reset = true
+		r.ResetAt = stamp
 
 		if common.ObservedAt.Before(at) {
 			common.ObservedAt = at

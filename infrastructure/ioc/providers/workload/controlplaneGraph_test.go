@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
+	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -206,7 +208,10 @@ func TestNewControlPlaneWorkload_graphs(t *testing.T) {
 // nothing of a stack its Docker VM's restore reset before that restore is
 // taken onto the VM's record: what lives in the VM is reset first, so that a
 // result heard again resets it again, and a run of the stack's graph in
-// between reads the VM's record as the restore before left it, or none did.
+// between reads the VM's record as the restore before left it, or none did;
+// whether the record says it is restoring still, or, its node gone quiet in
+// between, failed as lost, it waits on the restore no more, which is taken
+// onto it all the same.
 func TestNewControlPlaneWorkload_restored(t *testing.T) {
 	t.Parallel()
 
@@ -215,11 +220,34 @@ func TestNewControlPlaneWorkload_restored(t *testing.T) {
 	restoredAt := time.Now()
 	before := restoredAt.Add(-2 * time.Hour)
 
-	for name, earlier := range map[string]func(v *vmKind.VM){
-		"its vm's first restore, which its vm's record says nothing of until it is taken onto it": func(*vmKind.VM) {},
-		"a restore after one looked into long ago, which its vm's record says until then": func(v *vmKind.VM) {
-			v.Status.RestoredAt = before
-			v.Status.LookedAt = before.Add(time.Second)
+	for name, tt := range map[string]struct {
+		// earlier is what the vm's record says of a restore before.
+		earlier func(v *vmKind.VM)
+
+		// window is what is written of the vm's record once what lives in
+		// it is reset, before the stack's run.
+		window func(t *testing.T, ctx context.Context, stored *resourcesMemory.Repository)
+
+		// state is what the vm's record says it is doing in the end.
+		state kind.State
+	}{
+		"its vm's first restore, which its vm's record says nothing of until it is taken onto it": {
+			earlier: func(*vmKind.VM) {},
+			state:   vmKind.Running,
+		},
+		"a restore after one looked into long ago, which its vm's record says until then": {
+			earlier: lookedLongAgo(before),
+			state:   vmKind.Running,
+		},
+		"its vm's first restore, its record failed as lost meanwhile, its node gone quiet, waiting on the restore no more": {
+			earlier: func(*vmKind.VM) {},
+			window:  lost,
+			state:   kind.Failed,
+		},
+		"a restore after one looked into long ago, its record failed as lost meanwhile": {
+			earlier: lookedLongAgo(before),
+			window:  lost,
+			state:   kind.Failed,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -255,6 +283,10 @@ func TestNewControlPlaneWorkload_restored(t *testing.T) {
 					return r.Kind == vmKind.Name && r.Metadata.UUID == "vm-1"
 				},
 				do: func(ctx context.Context) {
+					if tt.window != nil {
+						tt.window(t, ctx, stored)
+					}
+
 					ran = run(ctx)
 
 					r, err := stored.GetOne(ctx, stackKind.Name, "s-1")
@@ -275,7 +307,7 @@ func TestNewControlPlaneWorkload_restored(t *testing.T) {
 			// stack, running, and the container of its service.
 			restoring := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
 				v.Status.State = vmKind.Restoring
-				earlier(v)
+				tt.earlier(v)
 			})
 
 			raw, err := kind.Encode(restoring)
@@ -303,10 +335,11 @@ func TestNewControlPlaneWorkload_restored(t *testing.T) {
 			})})
 			require.NoError(t, err)
 
+			// its node said so a moment after it carried it out.
 			status, err := json.Marshal(vmKind.Status{Status: kind.Status{State: vmKind.Running}, RestoredAt: restoredAt})
 			require.NoError(t, err)
 
-			result, err := json.Marshal(kind.ResourceActedOn{ID: "restore-1", Kind: vmKind.Name, UUID: "vm-1", Action: vmKind.ActionRestore, Node: vmtest.Node, OK: true, Status: status, At: restoredAt})
+			result, err := json.Marshal(kind.ResourceActedOn{ID: "restore-1", Kind: vmKind.Name, UUID: "vm-1", Action: vmKind.ActionRestore, Node: vmtest.Node, OK: true, Status: status, At: restoredAt.Add(time.Second)})
 			require.NoError(t, err)
 
 			require.NoError(t, workload.Subscribers[kind.ResourceActedOnName].Handle(ctx, result))
@@ -321,7 +354,7 @@ func TestNewControlPlaneWorkload_restored(t *testing.T) {
 
 			taken, err := kind.Decode[vmKind.Spec, vmKind.Status](v.Raw)
 			require.NoError(t, err)
-			assert.Equal(t, vmKind.Running, taken.Status.State)
+			assert.Equal(t, tt.state, taken.Status.State)
 			assert.True(t, taken.Status.RestoredAt.Equal(restoredAt), "the restore is taken onto it once what lives in it is reset")
 
 			require.NoError(t, run(ctx))
@@ -329,8 +362,40 @@ func TestNewControlPlaneWorkload_restored(t *testing.T) {
 			s, err := stored.GetOne(ctx, stackKind.Name, "s-1")
 			require.NoError(t, err)
 			assert.True(t, s.Reset, "and the stack waits for its restored vm to be looked into")
+			assert.True(t, s.ResetAt.Equal(restoredAt.Truncate(time.Millisecond)), "reset for that restore: %s", s.ResetAt)
 
 			assert.Empty(t, produced.Subjects(), "nothing of it is asked of its node")
 		})
 	}
+}
+
+// lookedLongAgo has a vm's record say its disk was restored at a moment, and
+// looked into a second after.
+func lookedLongAgo(at time.Time) func(v *vmKind.VM) {
+	return func(v *vmKind.VM) {
+		v.Status.RestoredAt = at
+		v.Status.LookedAt = at.Add(time.Second)
+	}
+}
+
+// lost has the record of vm-1 failed as its node's going quiet fails it,
+// waiting on no command any more, as the reconcile loop writes it.
+func lost(t *testing.T, ctx context.Context, stored *resourcesMemory.Repository) {
+	t.Helper()
+
+	r, err := stored.GetOne(ctx, vmKind.Name, "vm-1")
+	require.NoError(t, err)
+
+	require.NoError(t, observe.Fail(&r, kindsReconcileResources.ReasonNodeLost, time.Now()))
+
+	// its node went on beating meanwhile, and was heard of long after the
+	// look a restore before had.
+	common, err := r.Common()
+	require.NoError(t, err)
+
+	common.ObservedAt = time.Now()
+	require.NoError(t, r.SetCommon(common))
+
+	_, err = stored.Update(ctx, r)
+	require.NoError(t, err)
 }

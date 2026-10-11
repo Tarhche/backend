@@ -272,12 +272,12 @@ type Status struct {
 	// VM that was never made, whose instance has its spec once it is.
 	Applied *Config `json:"applied,omitempty"`
 
-	// RestoredAt is when its disk was last replaced from a snapshot, which
-	// its node says when it restores it and nothing else does: what lives in
-	// it is what that disk holds from then on, and what is first found there
-	// labelled as the platform's is taken in again rather than taken for
-	// somebody's own.
-	RestoredAt time.Time `json:"restored_at,omitzero"`
+	// Restore says when its disk was last replaced from a snapshot
+	// (RestoredAt), which its node says when it restores it and nothing else
+	// does: what lives in it is what that disk holds from then on, and what is
+	// first found there labelled as the platform's is taken in again rather
+	// than taken for somebody's own.
+	kind.Restore
 
 	// LookedAt is when what lives in it was first looked at since its disk
 	// was last restored: the beat a node first said what it holds as of,

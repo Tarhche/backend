@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
@@ -272,19 +273,21 @@ func TestResourceActedOnHandler_Handle(t *testing.T) {
 	})
 }
 
-// restorer records the parents it was told were restored, and fails as it is
-// told to.
+// restorer records the parents it was told were restored, and as of when,
+// and fails as it is told to.
 type restorer struct {
 	restored []kind.Reference
+	at       []time.Time
 	failure  error
 }
 
-func (r *restorer) Restored(_ context.Context, parent kind.Reference, _ time.Time) error {
+func (r *restorer) Restored(_ context.Context, parent kind.Reference, at time.Time) error {
 	if r.failure != nil {
 		return r.failure
 	}
 
 	r.restored = append(r.restored, parent)
+	r.at = append(r.at, at)
 
 	return nil
 }
@@ -355,6 +358,128 @@ func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 		require.NoError(t, f.handler.Handle(ctx, message(t, restored)))
 
 		assert.Empty(t, told.restored)
+	})
+
+	// the fan's start as a VM's restore is answered: saying when its node
+	// carried it out, by its own clock.
+	restoredAt := kindstest.Moment.Add(time.Minute)
+
+	saying := func(t *testing.T, restoredAt time.Time) kind.ResourceActedOn {
+		t.Helper()
+
+		status, err := json.Marshal(struct {
+			kindstest.Status
+			kind.Restore
+		}{Status: kindstest.Status{Status: kind.Status{State: kindstest.Running}}, Restore: kind.Restore{RestoredAt: restoredAt}})
+		require.NoError(t, err)
+
+		said := restored
+		said.Status = status
+		said.At = restoredAt.Add(time.Second)
+
+		return said
+	}
+
+	// restoreOf is what a record says of its resource's last restore.
+	restoreOf := func(t *testing.T, r resource.Record) time.Time {
+		t.Helper()
+
+		restore, err := resource.RestoreOf(r.Status)
+		require.NoError(t, err)
+
+		return restore.RestoredAt
+	}
+
+	t.Run("what lives in it is reset as of when the restore was carried out, as its result says, and the record says that restore once it is taken", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{}
+		f := restoring(t, told, waiting(kindstest.Starting, kindstest.Running, "start"))
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, saying(t, restoredAt))))
+
+		require.Len(t, told.at, 1)
+		assert.True(t, told.at[0].Equal(restoredAt), "as of the restore, not of when its result was said: %s", told.at[0])
+
+		r, _ := f.stored(t, "fan-uuid")
+		assert.True(t, restoreOf(t, r).Equal(restoredAt))
+	})
+
+	t.Run("and as of when its result was said, when it says nothing of when it was carried out", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{}
+		f := restoring(t, told, waiting(kindstest.Starting, kindstest.Running, "start"))
+
+		said := restored
+		said.At = restoredAt
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, said)))
+
+		require.Len(t, told.at, 1)
+		assert.True(t, told.at[0].Equal(restoredAt))
+	})
+
+	t.Run("one its resource waits on no more, failed as its node went quiet once what lives in it was reset and before the restore was taken onto it, is taken all the same, and only what it says of the restore", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{}
+		f := restoring(t, told, waiting(kindstest.Starting, kindstest.Running, "start"))
+
+		// the reconcile loop fails it, its node gone quiet, between the
+		// reset and the restore's write.
+		f.racing.Cross(kindstest.Rewrite(f.memory, func(r *resource.Record) {
+			require.NoError(t, observe.Fail(r, "node_lost", kindstest.Moment))
+		}))
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, saying(t, restoredAt))))
+
+		r, _ := f.stored(t, "fan-uuid")
+		assert.True(t, restoreOf(t, r).Equal(restoredAt), "the restore that reset what lives in it is taken onto it")
+
+		fan := kindstest.Typed(r)
+		assert.Equal(t, kind.Failed, fan.Status.State, "and what it is doing is its node's to say next")
+		assert.Equal(t, "node_lost", fan.Status.Reason)
+		assert.Nil(t, r.Answer, "nor is it answered, which nothing waits on")
+
+		assert.Len(t, told.restored, 2, "what lives in it reset again, as of the same restore")
+	})
+
+	t.Run("and so is one heard once its resource was asked something else", func(t *testing.T) {
+		t.Parallel()
+
+		deleting := kindstest.AFan("fan-uuid", kindstest.Deleting, kind.Deleted)
+		deleting.Pending = &resource.Pending{Action: "delete", IDs: []string{"delete-1"}, SentAt: kindstest.Moment}
+
+		told := &restorer{}
+		f := restoring(t, told, deleting)
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, saying(t, restoredAt))))
+
+		r, _ := f.stored(t, "fan-uuid")
+		assert.True(t, restoreOf(t, r).Equal(restoredAt))
+		assert.Equal(t, kindstest.Deleting, kindstest.Typed(r).Status.State, "what it was asked since is as it was")
+		require.NotNil(t, r.Pending)
+		assert.Equal(t, "delete", r.Pending.Action)
+		assert.Len(t, told.restored, 1)
+	})
+
+	t.Run("but one heard again once it was taken takes nothing, and resets nothing, nor does one of a restore before the last one taken", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{}
+		f := restoring(t, told, waiting(kindstest.Starting, kindstest.Running, "start"))
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, saying(t, restoredAt))))
+
+		taken, _ := f.stored(t, "fan-uuid")
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, saying(t, restoredAt))))
+		require.NoError(t, f.handler.Handle(ctx, message(t, saying(t, restoredAt.Add(-time.Hour)))))
+
+		after, _ := f.stored(t, "fan-uuid")
+		assert.Equal(t, taken.Version, after.Version)
+		assert.Len(t, told.restored, 1)
 	})
 
 	t.Run("what could not be reset is asked for again, and the result is not taken until it is", func(t *testing.T) {

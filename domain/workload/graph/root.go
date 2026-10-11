@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"sync/atomic"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
@@ -35,10 +36,14 @@ type ResetKind interface {
 	RootKind
 
 	// Restored is what the restored parent of the root the record r is was
-	// found to hold of it, as the records kept say now. A record that is
-	// not of the kind is kind.ErrUnknownKind, and what reading the records
-	// fails with is an error.
-	Restored(ctx context.Context, r kind.Raw) (Restoration, error)
+	// found to hold of it, as the records kept say now, after the restore
+	// it was reset for, by the moment the parent's node carried that restore
+	// out (resource.Record.ResetAt): nothing is known of it while what the
+	// parent's record says is of a restore before that one, and none says
+	// nothing of which restore it was. A record that is not of the kind is
+	// kind.ErrUnknownKind, and what reading the records fails with is an
+	// error.
+	Restored(ctx context.Context, r kind.Raw, resetAt time.Time) (Restoration, error)
 }
 
 // Restoration is what a restored parent was found to hold of a root its

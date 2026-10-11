@@ -513,7 +513,7 @@ func (f *fixture) resetting(found graph.Restoration) *resetting {
 	return k
 }
 
-func (k *resetting) Restored(ctx context.Context, _ kind.Raw) (graph.Restoration, error) {
+func (k *resetting) Restored(ctx context.Context, _ kind.Raw, _ time.Time) (graph.Restoration, error) {
 	k.lock.Lock()
 	k.asked++
 	found, fails, first := k.found, k.fails, k.first

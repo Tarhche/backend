@@ -172,6 +172,56 @@ func TestCascade_Restored(t *testing.T) {
 		assert.Equal(t, fan.Version, again.Version, "one marked already is not written again")
 	})
 
+	t.Run("what is reset is stamped with the restore it was reset for, to the millisecond, again by a later restore, and not by an earlier one heard late", func(t *testing.T) {
+		t.Parallel()
+
+		c, resources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+		)
+
+		at := restoredAt.Add(123456789 * time.Nanosecond)
+
+		require.NoError(t, c.Restored(ctx, house, at))
+
+		fan, _ := held(t, resources, "in-it")
+		assert.True(t, fan.ResetAt.Equal(at.Truncate(time.Millisecond)), "stamped with the restore: %s", fan.ResetAt)
+
+		later := at.Add(time.Hour)
+		require.NoError(t, c.Restored(ctx, house, later))
+
+		fan, _ = held(t, resources, "in-it")
+		assert.True(t, fan.ResetAt.Equal(later.Truncate(time.Millisecond)), "and with a later one")
+		assert.Equal(t, later, kindstest.Typed(fan).Status.ObservedAt)
+
+		require.NoError(t, c.Restored(ctx, house, at))
+
+		again, _ := held(t, resources, "in-it")
+		assert.Equal(t, fan.Version, again.Version, "an earlier one, heard late, changes nothing")
+	})
+
+	t.Run("one found since the restore it was reset for is not reset again by that restore heard again", func(t *testing.T) {
+		t.Parallel()
+
+		c, resources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+		)
+
+		require.NoError(t, c.Restored(ctx, house, restoredAt))
+
+		fan, _ := held(t, resources, "in-it")
+		fan.Reset = false
+
+		found, err := resources.Update(ctx, fan)
+		require.NoError(t, err)
+
+		require.NoError(t, c.Restored(ctx, house, restoredAt))
+
+		again, _ := held(t, resources, "in-it")
+		assert.False(t, again.Reset, "it is as it was found")
+		assert.Equal(t, found.Version, again.Version)
+		assert.True(t, again.ResetAt.Equal(restoredAt), "and says which restore it was found since")
+	})
+
 	t.Run("what goes with its parent goes with a restore too, and what outlives it stays", func(t *testing.T) {
 		t.Parallel()
 

@@ -258,6 +258,7 @@ func kept(record resource.Record) resource.Record {
 	record.Metadata.CreatedAt = millisecond(record.Metadata.CreatedAt)
 	record.Metadata.UpdatedAt = millisecond(record.Metadata.UpdatedAt)
 	record.TriedAt = millisecond(record.TriedAt)
+	record.ResetAt = millisecond(record.ResetAt)
 
 	if record.Pending != nil {
 		record.Pending.SentAt = millisecond(record.Pending.SentAt)
