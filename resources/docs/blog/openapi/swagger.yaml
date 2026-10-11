@@ -6717,12 +6717,17 @@ paths:
         (service_started), volumes (named ones the file declares, or binds of absolute
         paths), networks, pids_limit, user, runtime and resources.limits.cpus and
         .memory. Anything else, build, healthcheck, deploy, profiles, extends, configs,
-        secrets, x- keys, anchors and aliases, and a top-level version or name among
-        it, is refused, and so is everything else wrong with it, field by field under
-        its path in the file, as compose.<path>: compose.services.web.build. It goes
-        in the Docker VM vm_uuid names, in a new one vm describes, or with neither
-        in a new one made with the defaults. Its graph makes it after the answer,
-        which says which VM it goes into and whether that is made for it'
+        secrets, x- keys, anchors and aliases, tags but !!str, and a top-level version
+        or name among it, is refused, and so is everything else wrong with it, field
+        by field under its path in the file, as compose.<path>: compose.services.web.build.
+        A key is a string, quoted when YAML would read it as anything else, of 1024
+        characters at most; a name, of a service, a volume or a network, is 63 characters
+        at most; its services name 1000 of what it declares at most, each network
+        a service joins, each named volume it mounts and each service it depends on;
+        and nothing in it nests deeper than 16 levels. It goes in the Docker VM vm_uuid
+        names, in a new one vm describes, or with neither in a new one made with the
+        defaults. Its graph makes it after the answer, which says which VM it goes
+        into and whether that is made for it'
       parameters:
       - description: Stack
         in: body
