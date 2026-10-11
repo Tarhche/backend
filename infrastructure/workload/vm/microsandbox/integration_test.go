@@ -45,10 +45,13 @@ func TestMachineLifecycle(t *testing.T) {
 	ctx := t.Context()
 
 	spec := machine("it-machine", withPorts(8000))
+
+	asked := time.Now()
 	instance := created(t, e, spec)
 
 	assert.Equal(t, vm.InstanceRunning, instance.State)
 	assert.Equal(t, spec.Labels, instance.Labels)
+	assert.WithinRange(t, instance.CreatedAt, asked, time.Now(), "it says when it was made, by the host's clock")
 	require.Len(t, instance.Endpoints, 1)
 	assert.Equal(t, port.Port(8000), instance.Endpoints[0].Port)
 
@@ -124,6 +127,14 @@ func TestMachineLifecycle(t *testing.T) {
 
 		_, err = msb.GetSandbox(ctx, spec.ID)
 		assert.True(t, msb.IsKind(err, msb.ErrSandboxNotFound), "its sandbox is gone too: %v", err)
+	})
+
+	t.Run("one made again under its id was made anew", func(t *testing.T) {
+		asked := time.Now()
+		again := created(t, e, spec)
+
+		assert.WithinRange(t, again.CreatedAt, asked, time.Now())
+		assert.True(t, again.CreatedAt.After(instance.CreatedAt), "after the one deleted")
 	})
 }
 
@@ -653,10 +664,13 @@ func TestSnapshotAndRestore(t *testing.T) {
 			spec.Resources.Memory = 512 << 20
 		})
 
+		asked := time.Now()
+
 		instance := restored(t, e, copied, archive)
 		assert.Equal(t, vm.InstanceRunning, instance.State)
 		assert.Equal(t, copied.Labels, instance.Labels)
 		assert.Len(t, instance.Endpoints, 2)
+		assert.WithinRange(t, instance.CreatedAt, asked, time.Now(), "made by the restore, with nothing to replace")
 
 		assert.Equal(t, "v1", runOK(t, e, copied.ID, "cat /root/v"))
 		assert.Equal(t, "2", runOK(t, e, copied.ID, "nproc"))
@@ -675,6 +689,7 @@ func TestSnapshotAndRestore(t *testing.T) {
 
 		assert.Equal(t, original.Endpoints, after.Endpoints)
 		assert.Equal(t, "v1", runOK(t, e, spec.ID, "cat /root/v"))
+		assert.True(t, original.CreatedAt.Equal(after.CreatedAt), "and when it was made: %s, %s", original.CreatedAt, after.CreatedAt)
 	})
 
 	t.Run("onto a vm that is stopped, which boots", func(t *testing.T) {
@@ -1055,6 +1070,7 @@ func TestReadoptionChild(t *testing.T) {
 	// this vmhost started, which has to outlive the vmhost.
 	fmt.Printf("CHILD-SUPERVISOR=%s\n", runOK(t, e, dockerSpec.ID, "cat /run/vminit.pid"))
 	fmt.Printf("CHILD-ENDPOINT=%s\n", endpoint(t, machineVM, 8000))
+	fmt.Printf("CHILD-CREATED=%s\n", machineVM.CreatedAt.Format(time.RFC3339Nano))
 	fmt.Println("CHILD-DONE")
 
 	// gone, as a vmhost that is killed goes: nothing is stopped, and nothing
@@ -1073,7 +1089,7 @@ func TestReadoption(t *testing.T) {
 	require.NoError(t, err, "%s", output)
 	require.Contains(t, string(output), "CHILD-DONE", "%s", output)
 
-	var address, supervisor string
+	var address, supervisor, made string
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
 		if value, ok := strings.CutPrefix(scanner.Text(), "CHILD-ENDPOINT="); ok {
@@ -1082,6 +1098,10 @@ func TestReadoption(t *testing.T) {
 
 		if value, ok := strings.CutPrefix(scanner.Text(), "CHILD-SUPERVISOR="); ok {
 			supervisor = value
+		}
+
+		if value, ok := strings.CutPrefix(scanner.Text(), "CHILD-CREATED="); ok {
+			made = value
 		}
 	}
 
@@ -1100,6 +1120,10 @@ func TestReadoption(t *testing.T) {
 		assert.Equal(t, vm.InstanceRunning, instance.State)
 		assert.Equal(t, itOwner, instance.Labels[vm.LabelOwner])
 		assert.Equal(t, address, endpoint(t, instance, 8000), "with the ports it had")
+
+		createdAt, err := time.Parse(time.RFC3339Nano, made)
+		require.NoError(t, err, "the last vmhost said when it made it: %q", made)
+		assert.True(t, createdAt.Equal(instance.CreatedAt), "and when it was made, as the last vmhost said it: %s, %s", createdAt, instance.CreatedAt)
 
 		assert.Equal(t, "adopted", runOK(t, adopted, "it-adopt-machine", "cat /root/adopted"))
 

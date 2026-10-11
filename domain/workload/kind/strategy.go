@@ -201,7 +201,11 @@ type Attacher interface {
 // (ActOnResource.Orphaned) is refused of what it made later than its node
 // first said it: that is another, made under its uuid since, a VM its graph
 // made again once its record went, whatever reached its node first. A
-// strategy that is not one deletes whatever it holds under the uuid.
+// strategy that is not one deletes whatever it holds under the uuid. The
+// guard relies on what makes the instances and the node sharing the host's
+// clock, as processes beside each other on it do, a VM's vmhost and the
+// orchestrator: the one says when it made an instance, and the other when it
+// first said the orphan.
 type Maker interface {
 	// Made is when the instance uuid names was made on this node, and false
 	// when the node holds none, or does not know when it made it.
