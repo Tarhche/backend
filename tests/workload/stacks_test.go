@@ -680,12 +680,9 @@ func TestAStacksGraph(t *testing.T) {
 // stack's. Once the image can be pulled, the run after makes it by its
 // create, still expected stopped, what docker starts as it makes it stopped,
 // and nothing asks it to run: the stack is stopped again, and not degraded.
-//
-// It runs alone, not in parallel: the second it takes, its registry down and
-// its stack backed off, moves when the tests beside it wait on what a node
-// says, and some of those read a record as soon as a dockerd holds what it is
-// to say, before the node has said it.
 func TestAStoppedStacksContainerWhoseMakingFails(t *testing.T) {
+	t.Parallel()
+
 	w := start(t)
 	ctx := t.Context()
 
