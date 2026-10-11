@@ -39,7 +39,8 @@ import (
 // being looked at. Once it finds a node otherwise, ended in another state,
 // for another reason or as another record, or is to make one, it saves all
 // it would have saved so far, in order, and goes on as any run does; one cut
-// short meanwhile changes nothing, and saves nothing.
+// short meanwhile changes nothing, and saves nothing, however soon: what is
+// kept is read whatever becomes of its context, as what it saves is saved.
 //
 // A plan with a node of a kind the executor is not given is carried out not
 // at all, and is kind.ErrUnknownKind. What fails to be saved is an error,
@@ -136,9 +137,12 @@ func (r *run) create(ctx context.Context, node graph.Node) (graph.Ref, string, e
 // quietly has a run of root's plan at generation save nothing (quiet) while
 // it finds each node as a run before left it, when every node of the plan's
 // levels is kept, at this generation, as a create at its level. A run that
-// cannot tell saves everything, as any run does.
+// cannot tell saves everything, as any run does. What is kept is read
+// whatever becomes of the run's context: a run cut short as it starts, its
+// control plane stopping, would otherwise not tell, and save every node
+// pending over a plan a run before carried out.
 func (r *run) quietly(ctx context.Context, root graph.Ref, generation int64, levels [][]graph.NodeID) {
-	kept, err := r.executor.executions.GetByRoot(ctx, root.UUID)
+	kept, err := r.executor.executions.GetByRoot(context.WithoutCancel(ctx), root.UUID)
 	if err != nil {
 		return
 	}

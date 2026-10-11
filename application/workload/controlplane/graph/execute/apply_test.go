@@ -479,6 +479,29 @@ func TestExecutor_Apply_again(t *testing.T) {
 		assert.Equal(t, before, f.kept(t, plan))
 	})
 
+	t.Run("and so does one cut short before it reads what is kept, which it reads all the same", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container(false)
+		f, plan, saved := applied(t, kinds)
+		before := f.kept(t, plan)
+
+		// what is kept is read as MongoDB reads it: not at all once the
+		// read's context is done.
+		executor, err := execute.New(kinds.Kinds(every...), f.ownership, honouring{f.executions}, f.clock.Now)
+		require.NoError(t, err)
+
+		cutShort, cancel := context.WithCancel(ctx)
+		cancel()
+
+		outcome, err := executor.Apply(cutShort, graphtest.Ref(web), 1, plan)
+		require.NoError(t, err)
+		assert.Equal(t, execute.Interrupted, outcome.State)
+
+		assert.Equal(t, saved, f.executions.Saved(), "every node pending is not saved over the plan the run before carried out")
+		assert.Equal(t, before, f.kept(t, plan))
+	})
+
 	t.Run("one that finds a node to make saves all a run saves from its start, and makes it once that is saved", func(t *testing.T) {
 		t.Parallel()
 
@@ -565,6 +588,20 @@ func TestExecutor_Apply_again(t *testing.T) {
 		assert.Equal(t, execute.Interrupted, outcome.State)
 		assert.Equal(t, graph.StatePending, byNode(outcome.Nodes)[network].State)
 	})
+}
+
+// honouring reads what is kept as MongoDB does: not at all once the read's
+// context is done.
+type honouring struct {
+	*recorder
+}
+
+func (h honouring) GetByRoot(ctx context.Context, rootUUID string) ([]graph.Execution, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	return h.recorder.GetByRoot(ctx, rootUUID)
 }
 
 func TestExecutor_Apply_concurrency(t *testing.T) {
