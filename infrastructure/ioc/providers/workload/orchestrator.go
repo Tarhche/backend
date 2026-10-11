@@ -43,8 +43,8 @@ const (
 
 	// commandConcurrency is how many of the control plane's commands of one
 	// kind an orchestrator carries out at once. Restoring a VM or pulling a
-	// stack's images takes minutes, and should not hold up every other VM's
-	// commands meanwhile.
+	// container's image takes minutes, and should not hold up every other
+	// VM's commands meanwhile.
 	commandConcurrency = 4
 
 	// commandProgress is how often JetStream is told that a command still
@@ -249,8 +249,8 @@ func orchestratorConsoleCommand(
 	subscribers := map[string]domain.MessageHandler{}
 
 	// what is asked of every kind this node runs, VMs, their snapshots, the
-	// stacks in them and the code runner's tasks, and the answers to what the
-	// control plane asks and waits for.
+	// building blocks of Docker VMs and the code runner's tasks, and the
+	// answers to what the control plane asks and waits for.
 	workload, err := bindOrchestratorWorkload(iocContainer, OrchestratorDependencies{
 		NATS:     natsConnection,
 		Engine:   engine,

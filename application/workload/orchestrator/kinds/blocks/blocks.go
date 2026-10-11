@@ -30,8 +30,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
-	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
-	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -340,37 +338,4 @@ func Refused(err error) error {
 // before it may have left: none.
 func Cleared() *noderequest.Error {
 	return &noderequest.Error{}
-}
-
-// Stacks are the stacks a Docker VM's containers say they belong to, by
-// their compose projects: what a network or a volume compose made for a
-// stack, which carries its project alone, belongs to.
-func Stacks(inventory docker.Inventory) map[string]string {
-	stacks := make(map[string]string)
-
-	for _, c := range inventory.Containers {
-		project, stack := c.Labels[docker.LabelComposeProject], c.Labels[stackKind.LabelStack]
-		if len(project) > 0 && len(stack) > 0 {
-			stacks[project] = stack
-		}
-	}
-
-	return stacks
-}
-
-// Owners are what an object in a Docker VM belongs to: the VM, and the stack
-// it is part of, which its labels name, or which the containers of its
-// compose project name.
-func Owners(vmUUID string, labels map[string]string, stacks map[string]string) []kind.Reference {
-	owners := blockKinds.Owners(vmUUID, labels)
-
-	if len(labels[stackKind.LabelStack]) > 0 {
-		return owners
-	}
-
-	if stack := stacks[labels[docker.LabelComposeProject]]; len(stack) > 0 {
-		owners = append(owners, kind.Reference{Kind: stackKind.Name, UUID: stack})
-	}
-
-	return owners
 }

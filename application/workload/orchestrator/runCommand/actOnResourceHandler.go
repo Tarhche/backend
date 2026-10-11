@@ -13,7 +13,8 @@ import (
 // every kind it runs.
 //
 // Every node hears every command and carries out only those addressed to it,
-// as it does the commands about VMs, snapshots and stacks.
+// as it does the commands about VMs, snapshots and the building blocks of
+// Docker VMs.
 type ActOnResourceHandler struct {
 	useCase  *UseCase
 	nodeName string

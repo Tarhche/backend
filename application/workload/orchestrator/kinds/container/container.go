@@ -8,9 +8,9 @@
 //
 // Its state is every container of every running Docker VM on the node, read
 // with the other building blocks in one listing of each sort of object per VM
-// (blocks.Reader): the platform's by the resource each is, in the kind's words
-// as their restart policies say them, and the rest, a stack's or nobody's, as
-// they are, for the control plane to show beside its records.
+// (blocks.Reader): the platform's by the resource each is, a stack's among
+// them, in the kind's words as their restart policies say them, and the rest,
+// nobody's, as they are, for the control plane to show beside its records.
 package container
 
 import (

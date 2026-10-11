@@ -229,23 +229,3 @@ func TestReader_Reach(t *testing.T) {
 		assert.Equal(t, []string{"vm-old"}, read.Unseen, "once a command named it, it is looked into")
 	})
 }
-
-func TestOwners(t *testing.T) {
-	t.Parallel()
-
-	stacks := blocks.Stacks(docker.Inventory{Containers: []docker.Container{
-		{Labels: map[string]string{docker.LabelComposeProject: "shop-abcde", "workload.stack": "stack-uuid"}},
-		{Labels: map[string]string{docker.LabelComposeProject: "elsewhere"}},
-	}})
-
-	assert.Equal(t, map[string]string{"shop-abcde": "stack-uuid"}, stacks)
-
-	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}, {Kind: "stack", UUID: "stack-uuid"}},
-		blocks.Owners("vm-1", map[string]string{docker.LabelComposeProject: "shop-abcde"}, stacks),
-		"a network or a volume of a stack's project is the stack's")
-	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}},
-		blocks.Owners("vm-1", map[string]string{docker.LabelComposeProject: "elsewhere"}, stacks),
-		"and one of a project no stack is known by is the vm's alone")
-	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}, {Kind: "stack", UUID: "labelled"}},
-		blocks.Owners("vm-1", map[string]string{"workload.stack": "labelled"}, stacks))
-}

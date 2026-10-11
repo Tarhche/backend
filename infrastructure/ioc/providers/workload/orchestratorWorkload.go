@@ -55,10 +55,10 @@ type OrchestratorDependencies struct {
 
 // OrchestratorWorkload is what an orchestrator does for what it holds: the
 // handler that carries out the control plane's commands of every kind it
-// runs, VMs, their snapshots, stacks and tasks among them; the responder that
-// answers the control plane's requests, every kind's queries among them; and
-// the kinds it runs, which its heartbeat asks what they hold and its API
-// routes the streams and the ports of.
+// runs, VMs, their snapshots, the building blocks of Docker VMs and tasks
+// among them; the responder that answers the control plane's requests, every
+// kind's queries among them; and the kinds it runs, which its heartbeat asks
+// what they hold and its API routes the streams and the ports of.
 type OrchestratorWorkload struct {
 	Subscribers map[string]domain.MessageHandler
 	Responder   *request.Responder
@@ -87,8 +87,9 @@ func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload,
 		tasks = vmruntime.New(d.Engine, d.Logger)
 	}
 
-	// a stack's command waits for its VM's dockerd, and may then pull images;
-	// a snapshot is taken under its VM's lock.
+	// a building block's command waits for its VM's dockerd, and a
+	// container's may then pull its image; a snapshot is taken under its VM's
+	// lock.
 	kinds, err := nodeKinds(NodeKindDependencies{
 		Engine:         d.Engine,
 		Tasks:          tasks,

@@ -73,8 +73,8 @@ func (d *Dockerd) Calls(method string) int {
 	return d.calls[method]
 }
 
-// Hold has it hold a container as it is, made from its VM's terminal or by a
-// stack.
+// Hold has it hold a container as it is, as one made from its VM's terminal
+// is held.
 func (d *Dockerd) Hold(c docker.Container) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -173,10 +173,6 @@ func (d *Dockerd) Containers(_ context.Context, filter docker.ContainerFilter) (
 
 	for _, c := range d.containers {
 		if !filter.All && c.State != "running" {
-			continue
-		}
-
-		if len(filter.Stack) > 0 && c.Labels[docker.LabelComposeProject] != filter.Stack {
 			continue
 		}
 

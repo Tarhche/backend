@@ -43,10 +43,10 @@ func TestDescriptor(t *testing.T) {
 			assert.Empty(t, a.Timeout, "%s", a.Name)
 		}
 
-		_, deploys := d.Action(stack.ActionCreate)
+		_, deploys := d.Action("create")
 		assert.False(t, deploys, "nothing deploys a stack but its graph")
 
-		_, applies := d.Action(stack.ActionApply)
+		_, applies := d.Action("apply")
 		assert.False(t, applies)
 	})
 

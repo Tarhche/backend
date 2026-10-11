@@ -27,8 +27,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/domain"
 	dockerdomain "github.com/khanzadimahdi/testproject/domain/workload/docker"
-	"github.com/khanzadimahdi/testproject/domain/workload/kind"
-	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
@@ -503,57 +501,6 @@ func TestDockerVM(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, containers, 1)
 		assert.Equal(t, "web", containers[0].Name)
-	})
-
-	t.Run("a compose stack comes up, stops, starts, restarts and goes", func(t *testing.T) {
-		compose := docker.NewCompose(e)
-
-		demo := stackKind.Stack{
-			Metadata: kind.Metadata{UUID: "it-stack-demo", Slug: "demo"},
-			Spec: stackKind.Spec{
-				VM: stackKind.VMChoice{UUID: spec.ID},
-				Compose: `services:
-  app:
-    image: busybox:latest
-    command: ["sh", "-c", "echo up; sleep 3600"]
-    restart: unless-stopped
-`,
-			},
-		}
-
-		stack := func() []dockerdomain.Container {
-			containers, err := daemon.Containers(ctx, dockerdomain.ContainerFilter{All: true, Stack: "demo"})
-			require.NoError(t, err)
-
-			return containers
-		}
-
-		_, err := compose.Up(ctx, demo)
-		require.NoError(t, err)
-		require.Len(t, stack(), 1)
-		assert.Equal(t, "running", stack()[0].State)
-
-		_, err = compose.Stop(ctx, demo)
-		require.NoError(t, err)
-		assert.Equal(t, "exited", stack()[0].State)
-
-		_, err = compose.Start(ctx, demo)
-		require.NoError(t, err)
-		assert.Equal(t, "running", stack()[0].State)
-
-		_, err = compose.Restart(ctx, demo)
-		require.NoError(t, err)
-		assert.Equal(t, "running", stack()[0].State)
-
-		_, err = compose.Down(ctx, demo)
-		require.NoError(t, err)
-		assert.Empty(t, stack())
-
-		invalid := demo
-		invalid.Spec.Compose = "services: [not valid"
-
-		_, err = compose.Up(ctx, invalid)
-		assert.Error(t, err, "a compose file that cannot be read is an error")
 	})
 
 	t.Run("a stop stops dockerd gracefully, and a start brings its containers back", func(t *testing.T) {

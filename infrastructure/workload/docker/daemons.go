@@ -1,10 +1,9 @@
-// Package docker reaches the dockerd of each of a node's Docker VMs, and runs
-// docker compose in them for the stacks they hold, through the VMs' engine.
+// Package docker reaches the dockerd of each of a node's Docker VMs, through
+// the VMs' engine.
 //
 // dockerd is never exposed on a network: the Docker client's connections are
-// `docker system dial-stdio` commands exec'd into the VM, and compose is a
-// command exec'd the same way. So a Docker VM is reachable whatever its
-// network allows, by this node alone.
+// `docker system dial-stdio` commands exec'd into the VM. So a Docker VM is
+// reachable whatever its network allows, by this node alone.
 package docker
 
 import (

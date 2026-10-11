@@ -124,8 +124,9 @@ func TestNode_State(t *testing.T) {
 	_, err := strategy.Execute(t.Context(), aNetwork("n-uuid", "backend"), networkKind.ActionCreate, nil)
 	require.NoError(t, err)
 
-	dockerd.HoldNetwork(docker.Network{ID: "s1", Name: "shop_default", Labels: map[string]string{docker.LabelComposeProject: "shop"}})
-	dockerd.Hold(docker.Container{ID: "c1", Name: "shop-web-1", State: "running", Networks: []string{"shop_default"}, Labels: map[string]string{docker.LabelComposeProject: "shop", "workload.stack": "stack-uuid"}})
+	dockerd.HoldNetwork(docker.Network{ID: "s1", Name: "shop_default", Labels: map[string]string{"workload.managed": "true", "workload.network": "shop-network-uuid"}})
+	dockerd.Hold(docker.Container{ID: "c1", Name: "shop_web", State: "running", Networks: []string{"shop_default"}, Labels: map[string]string{"workload.stack": "stack-uuid"}})
+	dockerd.HoldNetwork(docker.Network{ID: "h1", Name: "made-by-hand"})
 
 	report, err := strategy.State(t.Context())
 	require.NoError(t, err)
@@ -136,8 +137,10 @@ func TestNode_State(t *testing.T) {
 	}
 
 	assert.Equal(t, "n-uuid", byName["backend"].UUID)
-	assert.Empty(t, byName["shop_default"].UUID)
-	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}, {Kind: "stack", UUID: "stack-uuid"}}, byName["shop_default"].Owners, "the stack its project's containers name")
-	assert.Equal(t, []string{"shop-web-1"}, byName["shop_default"].Status.Docker.Containers)
-	assert.Empty(t, byName["bridge"].UUID, "and the networks every dockerd has are nobody's")
+	assert.Equal(t, "shop-network-uuid", byName["shop_default"].UUID, "a stack's is the resource it is, as anything the platform made")
+	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, byName["shop_default"].Owners, "living in its vm, whatever owns its record")
+	assert.Equal(t, []string{"shop_web"}, byName["shop_default"].Status.Docker.Containers)
+	assert.Empty(t, byName["made-by-hand"].UUID, "one made from its vm's terminal is nobody's")
+	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, byName["made-by-hand"].Owners)
+	assert.Empty(t, byName["bridge"].UUID, "and so are the networks every dockerd has")
 }

@@ -22,8 +22,8 @@ type Locks interface {
 	Lock(ctx context.Context, uuid string) (release func(), err error)
 }
 
-// UseCase answers node requests whose op is a kind's query, "stack.state",
-// with that kind's node strategy.
+// UseCase answers node requests whose op is a kind's query,
+// "container.logs", with that kind's node strategy.
 //
 // A kind answers the ops named after it once it is registered on this node,
 // and not before: "vm.logs" is the vm kind's, which every node runs. An op

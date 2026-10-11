@@ -26,8 +26,8 @@ const sessionCloseWait = 5 * time.Second
 
 // Exec runs a command inside a running instance.
 //
-// Its input is always a pipe, which is what a terminal, a compose file or a
-// connection to dockerd is written through. The command runs with the
+// Its input is always a pipe, which is what a terminal or a connection to
+// dockerd is written through. The command runs with the
 // instance's environment, given again every time since a restore drops it
 // (#1676), and in the instance's working directory unless it names its own.
 // An instance with a main process lets nothing in before that process is

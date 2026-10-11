@@ -27,8 +27,6 @@
 package stack
 
 import (
-	"context"
-
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
@@ -95,11 +93,6 @@ const (
 
 	// ActionState is what a stack is doing, as its record says.
 	ActionState = "state"
-
-	// ActionCreate and ActionApply had a node deploy a stack with compose,
-	// which nothing asks any more: compose's path, which goes with it.
-	ActionCreate = "create"
-	ActionApply  = "apply"
 )
 
 // The labels the platform puts on what a stack's graph makes of its file, so
@@ -107,11 +100,6 @@ const (
 const (
 	// LabelStack is the uuid of the stack a container belongs to.
 	LabelStack = "workload.stack"
-
-	// LabelServices are the services compose ran a stack's containers of,
-	// comma separated, which compose's path labelled them with, and nothing
-	// reads but it.
-	LabelServices = "workload.stack.services"
 
 	// LabelService is the service of a stack's file a container is, which
 	// the stack's graph made of it: the record of a container a stack owns
@@ -282,17 +270,6 @@ func VMOf(s Stack) string {
 	return s.Spec.VM.UUID
 }
 
-// Applier brought the containers of a stack to what its compose file said,
-// inside the Docker VM it lived in, with compose: compose's path, which no
-// stack takes any more, and which goes with it.
-type Applier interface {
-	Up(ctx context.Context, s Stack) (output string, err error)
-	Start(ctx context.Context, s Stack) (output string, err error)
-	Stop(ctx context.Context, s Stack) (output string, err error)
-	Restart(ctx context.Context, s Stack) (output string, err error)
-	Down(ctx context.Context, s Stack) (output string, err error)
-}
-
 // Descriptor is the stack kind, a new one every time.
 //
 // Every action of a stack is the control plane's: started, stopped,
@@ -375,24 +352,4 @@ func Machine() kind.Machine {
 		Terminal:    []kind.State{Stopped, Failed, Deleted},
 		InFlight:    []kind.State{Deploying, Starting, Stopping, Restarting, Removing},
 	}
-}
-
-// InFlightOf is the state a node said a stack was in while compose carried
-// action out on it, which nothing asks of a node any more: compose's path,
-// which goes with it.
-func InFlightOf(action string) kind.State {
-	switch action {
-	case ActionCreate, ActionApply:
-		return Deploying
-	case ActionStart:
-		return Starting
-	case ActionStop:
-		return Stopping
-	case ActionRestart:
-		return Restarting
-	case ActionDelete:
-		return Removing
-	}
-
-	return ""
 }

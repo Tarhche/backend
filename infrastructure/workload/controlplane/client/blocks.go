@@ -871,10 +871,6 @@ func passes(c docker.Container, filter docker.ContainerFilter) bool {
 		return false
 	}
 
-	if len(filter.Stack) > 0 && c.Labels[docker.LabelComposeProject] != filter.Stack {
-		return false
-	}
-
 	if len(filter.Label) > 0 {
 		key, value, valued := strings.Cut(filter.Label, "=")
 

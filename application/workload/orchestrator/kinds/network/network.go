@@ -1,10 +1,10 @@
 // Package network is the network kind's node strategy: what a node does to
 // the docker networks in its Docker VMs, and what it says they are.
 //
-// A network the platform made is labelled as the resource it is, and found by
-// that label, or by its Docker id; one a stack's compose made, or a VM's
-// terminal, is reported as it is, for the control plane to show beside its
-// records.
+// A network the platform made is labelled as the resource it is, a stack's
+// among them, and found by that label, or by its Docker id; one a VM's
+// terminal made is reported as it is, for the control plane to show beside
+// its records.
 package network
 
 import (
@@ -119,12 +119,11 @@ func (n *Node) State(ctx context.Context) (kind.Report[networkKind.Status], erro
 
 	for _, vmUUID := range read.VMs() {
 		inventory := read.Inventories[vmUUID]
-		stacks := blocks.Stacks(inventory)
 
 		for _, held := range inventory.Networks {
 			report.Instances = append(report.Instances, kind.Observed[networkKind.Status]{
 				UUID:   blockKinds.Identity(networkKind.Name, held.Labels),
-				Owners: blocks.Owners(vmUUID, held.Labels, stacks),
+				Owners: blockKinds.Owners(vmUUID, held.Labels),
 				Status: networkKind.Status{Status: kind.Status{State: networkKind.Present}, Docker: networkKind.DockerOf(held)},
 			})
 		}

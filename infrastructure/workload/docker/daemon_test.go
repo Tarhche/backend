@@ -543,10 +543,10 @@ func TestDaemon_Containers(t *testing.T) {
 	fake := newFakeDocker()
 	daemons, _ := dockerVM(t, fake, nil, time.Minute)
 
-	containers, err := daemons.Daemon("vm-1").Containers(t.Context(), docker.ContainerFilter{All: true, Stack: "shop-abcde"})
+	containers, err := daemons.Daemon("vm-1").Containers(t.Context(), docker.ContainerFilter{All: true, Label: "workload.stack=s-uuid"})
 	require.NoError(t, err)
 
-	assert.Contains(t, fake.listFilter, docker.LabelComposeProject+"=shop-abcde", "a stack's containers are the ones compose labelled with its project")
+	assert.Contains(t, fake.listFilter, `"workload.stack=s-uuid":true`, "a stack's containers are the ones labelled as its own")
 
 	require.Len(t, containers, 1)
 	assert.Equal(t, docker.Container{
@@ -578,7 +578,6 @@ func TestDaemon_Containers_label(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, fake.listFilter, `"workload.stack":true`, "the containers carrying a label, whatever its value")
-	assert.NotContains(t, fake.listFilter, docker.LabelComposeProject)
 
 	_, err = daemons.Daemon("vm-1").Containers(t.Context(), docker.ContainerFilter{})
 	require.NoError(t, err)

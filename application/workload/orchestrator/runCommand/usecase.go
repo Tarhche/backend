@@ -44,7 +44,7 @@ type Locks interface {
 //
 // A command is given as long as its kind's strategy takes. Each kind bounds
 // its own commands, as the engine bounds a VM's, since only it knows how long
-// restoring a disk or pulling a stack's images may take.
+// restoring a disk or pulling a container's image may take.
 type UseCase struct {
 	kinds    *kind.Registry[kind.NodeBinding]
 	locks    Locks

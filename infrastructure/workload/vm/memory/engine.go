@@ -7,9 +7,7 @@
 // exec'd into, a restore of an archive another engine wrote is refused, and a
 // node asked for more than its budget has no capacity. What would run inside
 // an instance is the test's to say: Exec runs a function the test gives it, so
-// `docker system dial-stdio` can be a connection to an httptest Docker API, or
-// `docker compose` a function that reads the YAML and prints what compose
-// would.
+// `docker system dial-stdio` can be a connection to an httptest Docker API.
 package memory
 
 import (

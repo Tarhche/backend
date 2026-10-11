@@ -19,8 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"go.yaml.in/yaml/v3"
-
 	"github.com/docker/docker/api"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -31,7 +29,6 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
-	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -59,10 +56,9 @@ var (
 )
 
 // dockerd is the dockerd of every Docker VM here: as much of one as the
-// workload asks of it. It answers a ping; keeps containers, images, networks
-// and volumes as docker does, refusing what docker refuses in docker's words;
-// and is what docker compose deploys a project into, as compose labels what
-// it makes.
+// workload asks of it. It answers a ping, and keeps containers, images,
+// networks and volumes as docker does, refusing what docker refuses in
+// docker's words.
 //
 // It is reached the way a node reaches a real one: `docker system
 // dial-stdio`, exec'd into the VM, carries the connection. Here that command
@@ -82,11 +78,6 @@ type dockerd struct {
 	// addresses are where each VM's dockerd answers, by the VM's id.
 	addresses map[string]string
 	servers   []*httptest.Server
-
-	// composed is the compose file each project was last brought up with,
-	// and ran every compose command run on each, in order.
-	composed map[string]string
-	ran      map[string][]string
 
 	// did is what each VM's dockerd did to its containers, in order: each
 	// made, started, stopped, restarted and removed, by its name.
@@ -132,8 +123,6 @@ func newDockerd(t *testing.T) *dockerd {
 
 	d := &dockerd{
 		addresses: make(map[string]string),
-		composed:  make(map[string]string),
-		ran:       make(map[string][]string),
 		did:       make(map[string][]string),
 		refused:   make(map[string]bool),
 	}
@@ -1257,91 +1246,14 @@ func (d *dockerd) Did(id string) []string {
 	return slices.Clone(d.did[id])
 }
 
-// Composed is the compose file a project was last brought up with.
-func (d *dockerd) Composed(project string) (string, bool) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	compose, ok := d.composed[project]
-
-	return compose, ok
-}
-
-// Ran is every compose command run on a project, in order: its action and
-// its flags.
-func (d *dockerd) Ran(project string) []string {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	return slices.Clone(d.ran[project])
-}
-
-// theirs reports whether a container is one of a project's.
-func theirs(project string) func(c held) bool {
-	return func(c held) bool { return c.Labels[docker.LabelComposeProject] == project }
-}
-
-// Kill has the container of a project's service exit, as one falls over.
-func (d *dockerd) Kill(project string, service string) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	for _, id := range d.vms() {
-		_ = d.change(id, func(h *holding) {
-			for i := range h.Containers {
-				if c := h.Containers[i]; theirs(project)(c) && c.Labels[docker.LabelComposeService] == service {
-					h.Containers[i].State = container.StateExited
-					h.Containers[i].Status = "Exited (137) Less than a second ago"
-					h.Containers[i].ExitCode = 137
-				}
-			}
-		})
-	}
-}
-
-// States are what the containers of a project are doing, by service.
-func (d *dockerd) States(project string) map[string]string {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	states := make(map[string]string)
-
-	for _, id := range d.vms() {
-		h, err := d.load(id)
-		if err != nil {
-			continue
-		}
-
-		for _, c := range h.Containers {
-			if theirs(project)(c) {
-				states[c.Labels[docker.LabelComposeService]] = string(c.State)
-			}
-		}
-	}
-
-	return states
-}
-
 // exec is what runs inside a Docker VM: dial-stdio, which carries a
-// connection to its dockerd, and docker compose, which deploys a project.
+// connection to its dockerd, and nothing else.
 func (d *dockerd) exec(ctx context.Context, id string, options vm.ExecOptions, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	command := options.Command
 
 	switch {
 	case slices.Equal(command, dialStdio):
 		return d.dialStdio(ctx, d.address(id), stdin, stdout, stderr)
-
-	case len(command) > 4 && slices.Equal(command[:3], []string{"docker", "compose", "-p"}):
-		project, action := command[3], command[4:]
-
-		// the project's file is read from the input when compose is told to,
-		// and the project is found by its labels when it is not.
-		withFile := len(action) > 2 && slices.Equal(action[:2], []string{"-f", "-"})
-		if withFile {
-			action = action[2:]
-		}
-
-		return d.compose(id, project, withFile, action, stdin, stdout, stderr)
 
 	default:
 		_, _ = fmt.Fprintf(stderr, "sh: %s: not found\n", strings.Join(command, " "))
@@ -1379,202 +1291,4 @@ func (d *dockerd) dialStdio(ctx context.Context, address string, stdin io.Reader
 	}
 
 	return 0
-}
-
-// compose is docker compose run on a project in the VM id names, as compose
-// does it. Given the project's file, on stdin, it reads it before anything
-// else, whatever it was asked, and refuses one that is not YAML or that has a
-// top-level key compose does not know: up pulls every service's image, makes
-// the project's network, and a container on it for every service the file
-// has, but for those behind a profile, labelled as compose labels them and
-// with the labels the file gives them, and takes away the project's others;
-// start, stop and restart do that to the project's containers; and down
-// takes them away and the project's network. Given no file, it finds the
-// project by its labels, which is all down needs, and does nothing else.
-func (d *dockerd) compose(id string, project string, withFile bool, action []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
-	var (
-		read []byte
-		err  error
-		file struct {
-			Services map[string]struct {
-				Image    string    `yaml:"image"`
-				Labels   yaml.Node `yaml:"labels"`
-				Profiles []string  `yaml:"profiles"`
-			} `yaml:"services"`
-		}
-	)
-
-	switch {
-	case withFile:
-		if read, err = io.ReadAll(stdin); err != nil || len(read) == 0 {
-			_, _ = fmt.Fprintln(stderr, "no configuration file provided")
-
-			return 14
-		}
-
-		if err := yaml.Unmarshal(read, &file); err != nil {
-			_, _ = fmt.Fprintf(stderr, "yaml: %v\n", err)
-
-			return 15
-		}
-
-		if key, unknown := unknownComposeKey(read); unknown {
-			_, _ = fmt.Fprintf(stderr, "validating -: additional properties '%s' not allowed\n", key)
-
-			return 1
-		}
-
-	case action[0] != "down":
-		_, _ = fmt.Fprintln(stderr, "no configuration file provided: not found")
-
-		return 14
-	}
-
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	d.ran[project] = append(d.ran[project], strings.Join(action, " "))
-
-	h, err := d.load(id)
-	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-
-		return 1
-	}
-
-	each := func(do func(c *held, name string)) {
-		for i := range h.Containers {
-			if theirs(project)(h.Containers[i]) {
-				do(&h.Containers[i], strings.TrimPrefix(h.Containers[i].Names[0], "/"))
-			}
-		}
-	}
-
-	ownNetwork := project + "_default"
-
-	switch action[0] {
-	case "up":
-		d.composed[project] = string(read)
-
-		h.Containers = slices.DeleteFunc(h.Containers, func(c held) bool {
-			_, kept := file.Services[c.Labels[docker.LabelComposeService]]
-
-			return theirs(project)(c) && !kept
-		})
-
-		if h.networkAt(ownNetwork) < 0 {
-			h.Networks = append(h.Networks, network.Summary{
-				Name:    ownNetwork,
-				ID:      h.made("network"),
-				Created: time.Now().UTC(),
-				Scope:   "local",
-				Driver:  "bridge",
-				Labels:  map[string]string{docker.LabelComposeProject: project, "com.docker.compose.network": "default"},
-			})
-		}
-
-		on := h.Networks[h.networkAt(ownNetwork)]
-
-		for _, service := range slices.Sorted(maps.Keys(file.Services)) {
-			if len(file.Services[service].Profiles) > 0 {
-				continue
-			}
-
-			reference := normalized(file.Services[service].Image)
-			if h.imageAt(reference) < 0 {
-				h.Images = append(h.Images, imageOf(reference))
-			}
-
-			name := project + "-" + service + "-1"
-
-			labels := map[string]string{docker.LabelComposeProject: project, docker.LabelComposeService: service}
-			if node := file.Services[service].Labels; node.Kind == yaml.MappingNode {
-				var given map[string]string
-				_ = node.Decode(&given)
-				maps.Copy(labels, given)
-			}
-
-			i := slices.IndexFunc(h.Containers, func(c held) bool {
-				return theirs(project)(c) && c.Labels[docker.LabelComposeService] == service
-			})
-			if i < 0 {
-				h.Containers = append(h.Containers, held{Summary: container.Summary{
-					ID:      h.made("container"),
-					Names:   []string{"/" + name},
-					Image:   file.Services[service].Image,
-					ImageID: h.Images[h.imageAt(reference)].ID,
-					Created: time.Now().Unix(),
-				}})
-				i = len(h.Containers) - 1
-			}
-
-			h.Containers[i].Labels = labels
-			h.Containers[i].State = container.StateRunning
-			h.Containers[i].Status = "Up Less than a second"
-			h.Containers[i].ExitCode = 0
-			h.Containers[i].NetworkSettings = &container.NetworkSettingsSummary{Networks: map[string]*network.EndpointSettings{ownNetwork: {NetworkID: on.ID, Aliases: []string{service}}}}
-			h.Containers[i].HostConfig.NetworkMode = ownNetwork
-
-			_, _ = fmt.Fprintf(stdout, " Container %s  Started\n", name)
-		}
-
-	case "start", "restart":
-		said := map[string]string{"start": "Started", "restart": "Restarted"}[action[0]]
-
-		each(func(c *held, name string) {
-			c.State, c.Status, c.ExitCode = container.StateRunning, "Up Less than a second", 0
-
-			_, _ = fmt.Fprintf(stdout, " Container %s  %s\n", name, said)
-		})
-
-	case "stop":
-		each(func(c *held, name string) {
-			c.State, c.Status, c.ExitCode = container.StateExited, "Exited (0) Less than a second ago", 0
-
-			_, _ = fmt.Fprintf(stdout, " Container %s  Stopped\n", name)
-		})
-
-	case "down":
-		each(func(_ *held, name string) {
-			_, _ = fmt.Fprintf(stdout, " Container %s  Removed\n", name)
-		})
-
-		delete(d.composed, project)
-		h.Containers = slices.DeleteFunc(h.Containers, theirs(project))
-		h.Networks = slices.DeleteFunc(h.Networks, func(n network.Summary) bool { return n.Labels[docker.LabelComposeProject] == project })
-
-	default:
-		_, _ = fmt.Fprintf(stderr, "unknown docker command: %q\n", action[0])
-
-		return 1
-	}
-
-	if err := d.save(id, h); err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-
-		return 1
-	}
-
-	return 0
-}
-
-// composeKeys are the top-level keys a compose file may have beside its
-// extensions, which start with x-.
-var composeKeys = []string{"version", "name", "include", "services", "networks", "volumes", "secrets", "configs", "models"}
-
-// unknownComposeKey is the first top-level key of a compose file that compose
-// does not know, if it has one.
-func unknownComposeKey(read []byte) (string, bool) {
-	var top map[string]any
-	if err := yaml.Unmarshal(read, &top); err != nil {
-		return "", false
-	}
-
-	for _, key := range slices.Sorted(maps.Keys(top)) {
-		if !slices.Contains(composeKeys, key) && !strings.HasPrefix(key, "x-") {
-			return key, true
-		}
-	}
-
-	return "", false
 }

@@ -134,9 +134,6 @@ type ContainerFilter struct {
 	// All includes the containers that are not running.
 	All bool
 
-	// Stack keeps only the containers of one compose project.
-	Stack string
-
 	// Label keeps only the containers that carry a label, written as its
 	// key, whatever its value, or as key=value.
 	Label string

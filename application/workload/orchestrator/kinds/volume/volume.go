@@ -1,9 +1,9 @@
 // Package volume is the volume kind's node strategy: what a node does to the
 // docker volumes in its Docker VMs, and what it says they are.
 //
-// A volume the platform made is labelled as the resource it is, and found by
-// that label; one a stack's compose made, or a VM's terminal, is reported as
-// it is, for the control plane to show beside its records. A volume made
+// A volume the platform made is labelled as the resource it is, a stack's
+// among them, and found by that label; one a VM's terminal made is reported
+// as it is, for the control plane to show beside its records. A volume made
 // again after it went missing is labelled with when it was, and says that
 // what was in it is gone for as long as it is there.
 package volume
@@ -143,12 +143,11 @@ func (n *Node) State(ctx context.Context) (kind.Report[volumeKind.Status], error
 
 	for _, vmUUID := range read.VMs() {
 		inventory := read.Inventories[vmUUID]
-		stacks := blocks.Stacks(inventory)
 
 		for _, held := range inventory.Volumes {
 			report.Instances = append(report.Instances, kind.Observed[volumeKind.Status]{
 				UUID:   blockKinds.Identity(volumeKind.Name, held.Labels),
-				Owners: blocks.Owners(vmUUID, held.Labels, stacks),
+				Owners: blockKinds.Owners(vmUUID, held.Labels),
 				Status: volumeKind.Status{
 					Status: kind.Status{State: volumeKind.Present, Reason: volumeKind.ReasonOf(held.Labels)},
 					Docker: volumeKind.DockerOf(held),
