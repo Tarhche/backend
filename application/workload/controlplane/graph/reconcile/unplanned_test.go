@@ -225,11 +225,12 @@ func TestReconciler_Reconcile_unplanned(t *testing.T) {
 			require.Fail(t, "the removal never stopped")
 		}
 
-		require.ErrorIs(t, err, graph.ErrLost, "how it ended is not kept on what it does not hold")
 		assert.ErrorContains(t, err, "cut short")
 		assert.NotContains(t, kinds.Asked(graphtest.Delete), network, "and nothing after it is removed")
 
-		assert.Equal(t, "another", f.lease(t, store).Holder)
+		lease := f.lease(t, store)
+		assert.Equal(t, "another", lease.Holder, "the lease is another's")
+		assert.Zero(t, lease.Failures, "and how it ended is not kept on what it does not hold")
 
 		_, err = f.records.GetOne(ctx, stackKind.Name, store.Name())
 		require.NoError(t, err, "its record is kept, for the run that holds its lease")
@@ -290,9 +291,12 @@ func TestReconciler_Reconcile_unplanned(t *testing.T) {
 				require.Fail(t, "the removal never stopped")
 			}
 
-			require.ErrorIs(t, err, graph.ErrLost, "how it ended is not kept on what it does not hold")
 			assert.ErrorContains(t, err, "cut short", "a lease lost is no failure of its removal")
 			assert.Equal(t, tt.deleted, kinds.Asked(graphtest.Delete))
+
+			lease := f.lease(t, store)
+			assert.Equal(t, "another", lease.Holder, "the lease is another's")
+			assert.Zero(t, lease.Failures, "and how it ended is not kept on what it does not hold")
 
 			_, err = f.records.GetOne(ctx, stackKind.Name, store.Name())
 			require.NoError(t, err, "its record is kept, for the run that holds its lease")
