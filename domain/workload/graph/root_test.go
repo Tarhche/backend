@@ -33,7 +33,6 @@ func TestRoots_Root(t *testing.T) {
 		root       bool
 	}{
 		"one of a kind of root that nothing owns":                   {roots: roots, descriptor: containers, metadata: in(), root: true},
-		"and one kept before refs, which lives among its owners":    {roots: roots, descriptor: containers, metadata: in(kind.Reference{Kind: "vm", UUID: "vm-1"}), root: true},
 		"and one of a kind that lives in nothing, owned by nothing": {roots: roots, descriptor: stacks, metadata: kind.Metadata{}, root: true},
 		"not one something owns":                                    {roots: roots, descriptor: containers, metadata: in(kind.Reference{Kind: "stack", UUID: "stack-1"})},
 		"nor one of a kind that is no root":                         {roots: roots, descriptor: networks, metadata: in()},

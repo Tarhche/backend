@@ -78,10 +78,10 @@ const (
 type Roots []string
 
 // Root reports whether a record of the kind d describes, whose metadata m
-// is, is a root: of a kind among them, and owned by nothing but the resource
-// it lives in (kind.Metadata.Owning).
+// is, is a root: of a kind among them, and owned by nothing
+// (kind.Metadata.Owning).
 func (r Roots) Root(d kind.Descriptor, m kind.Metadata) bool {
-	return slices.Contains(r, d.Name) && len(m.Owning(d.Parent)) == 0
+	return slices.Contains(r, d.Name) && len(m.Owning()) == 0
 }
 
 // Notifier is told that a record a graph's node is changed: it went missing,

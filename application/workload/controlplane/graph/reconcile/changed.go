@@ -16,11 +16,10 @@ import (
 // it went missing, was deleted, was made or failed (graph.Notifier).
 //
 // What needs a record is what depends on it: what owns it, among its owners,
-// and what uses it, which holds it among its refs, or, kept before refs, lives
-// in it, which holds it among its owners. Each is looked for of every kind a
-// graph is made of, through what belongs to the record (resource.Filter's
-// Parent), which is what it lives in and what owns it alike, and is told
-// apart by its refs. From ref up, what depends on each record reached is
+// and what uses it, which holds it among its refs. Each is looked for of
+// every kind a graph is made of, through what belongs to the record
+// (resource.Filter's Parent), which is what it lives in and what owns it
+// alike, and is told apart by its refs. From ref up, what depends on each record reached is
 // reached in turn, each once, up to the roots: a record of a kind of root
 // that nothing owns, which is queued, and depends on nothing itself. A root
 // that changed is queued itself, and so is a record of a kind of root that is
@@ -194,7 +193,7 @@ func (r *Reconciler) dependents(ctx context.Context, ref graph.Ref) ([]graph.Ref
 		rooted     bool
 	)
 
-	switch owners := rec.Metadata.Owning(r.parentOf(ref.Kind)); {
+	switch owners := rec.Metadata.Owning(); {
 	case there && isRootKind && len(owners) == 0:
 		return nil, true, nil
 	case there:
@@ -219,12 +218,11 @@ func (r *Reconciler) dependents(ctx context.Context, ref graph.Ref) ([]graph.Ref
 	return dependents, rooted, nil
 }
 
-// uses reports whether d uses the record ref names: holds it among its refs,
-// or, kept before refs, lives in it, which it holds among its owners. A
-// record ref owns holds it among its owners too, and is what ref needs, not
+// uses reports whether d uses the record ref names: holds it among its refs.
+// A record ref owns holds it among its owners, and is what ref needs, not
 // what needs it.
 func (r *Reconciler) uses(d resource.Record, ref graph.Ref) bool {
-	return slices.Contains(d.Metadata.Refs, ref) || (ref.Kind == r.parentOf(d.Kind) && slices.Contains(d.Metadata.Owners, ref))
+	return slices.Contains(d.Metadata.Refs, ref)
 }
 
 // going reports whether rec was asked to go: expected deleted, or asked to

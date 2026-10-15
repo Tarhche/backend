@@ -199,8 +199,9 @@ func TestMetadata_Owner(t *testing.T) {
 		Owners: []Reference{{Kind: "stack", UUID: "stack-uuid"}, {Kind: "vm", UUID: "another-vm-uuid"}},
 	}
 
-	// kept before refs: the vm it lives in is among its owners.
-	kept := Metadata{Owners: []Reference{{Kind: "vm", UUID: "vm-uuid"}, {Kind: "stack", UUID: "stack-uuid"}}}
+	// what nobody keeps a record of: its node names the vm it lives in
+	// among its owners.
+	seen := Metadata{Owners: []Reference{{Kind: "vm", UUID: "vm-uuid"}}}
 
 	for name, tt := range map[string]struct {
 		metadata Metadata
@@ -209,9 +210,9 @@ func TestMetadata_Owner(t *testing.T) {
 		found    bool
 	}{
 		"the vm it lives in, among its refs before its owners": {metadata: metadata, kind: "vm", want: Reference{Kind: "vm", UUID: "vm-uuid"}, found: true},
-		"what it uses":                                  {metadata: metadata, kind: "volume", want: Reference{Kind: "volume", UUID: "volume-uuid"}, found: true},
-		"the stack that owns it":                        {metadata: metadata, kind: "stack", want: Reference{Kind: "stack", UUID: "stack-uuid"}, found: true},
-		"the vm one kept before refs lives in":          {metadata: kept, kind: "vm", want: Reference{Kind: "vm", UUID: "vm-uuid"}, found: true},
+		"what it uses":           {metadata: metadata, kind: "volume", want: Reference{Kind: "volume", UUID: "volume-uuid"}, found: true},
+		"the stack that owns it": {metadata: metadata, kind: "stack", want: Reference{Kind: "stack", UUID: "stack-uuid"}, found: true},
+		"the vm what nobody keeps a record of lives in": {metadata: seen, kind: "vm", want: Reference{Kind: "vm", UUID: "vm-uuid"}, found: true},
 		"nothing of a kind it is not in":                {metadata: metadata, kind: "task"},
 		"nothing of no kind at all":                     {metadata: metadata, kind: ""},
 		"nor anything of a resource that names nothing": {kind: "vm"},
@@ -243,7 +244,7 @@ func TestMetadata_BelongsTo(t *testing.T) {
 		"the vm it lives in, among its refs":            {metadata: metadata, to: Reference{Kind: "vm", UUID: "vm-uuid"}, want: true},
 		"the stack among its owners":                    {metadata: metadata, to: Reference{Kind: "stack", UUID: "stack-uuid"}, want: true},
 		"anything of a uuid it names, of no kind given": {metadata: metadata, to: Reference{UUID: "shared-uuid"}, want: true},
-		"the vm one kept before refs lives in":          {metadata: Metadata{Owners: []Reference{{Kind: "vm", UUID: "vm-uuid"}}}, to: Reference{Kind: "vm", UUID: "vm-uuid"}, want: true},
+		"the vm what nobody keeps a record of lives in": {metadata: Metadata{Owners: []Reference{{Kind: "vm", UUID: "vm-uuid"}}}, to: Reference{Kind: "vm", UUID: "vm-uuid"}, want: true},
 		"but not one of another kind":                   {metadata: metadata, to: Reference{Kind: "house", UUID: "shared-uuid"}},
 		"nor one it does not name":                      {metadata: metadata, to: Reference{Kind: "vm", UUID: "another-uuid"}},
 		"nor anything, naming nothing":                  {to: Reference{UUID: "vm-uuid"}},
@@ -265,20 +266,16 @@ func TestMetadata_Owning(t *testing.T) {
 
 	for name, tt := range map[string]struct {
 		metadata Metadata
-		parent   string
 		want     []Reference
 	}{
-		"what owns it, in the order it names them": {metadata: Metadata{Refs: []Reference{vm}, Owners: []Reference{stack, web}}, parent: "vm", want: []Reference{stack, web}},
-		"each once": {metadata: Metadata{Owners: []Reference{stack, web, stack}}, parent: "vm", want: []Reference{stack, web}},
-		"never what it lives in, which a record kept before refs has among its owners": {metadata: Metadata{Owners: []Reference{vm, stack}}, parent: "vm", want: []Reference{stack}},
-		"so one kept before refs, owned by nothing else, is owned by nothing":          {metadata: Metadata{Owners: []Reference{vm}}, parent: "vm"},
-		"and one that lives in nothing is owned by every owner it names":               {metadata: Metadata{Owners: []Reference{vm, stack}}, want: []Reference{vm, stack}},
-		"one that names none is owned by nothing":                                      {metadata: Metadata{Refs: []Reference{vm}}, parent: "vm"},
+		"what owns it, in the order it names them": {metadata: Metadata{Refs: []Reference{vm}, Owners: []Reference{stack, web}}, want: []Reference{stack, web}},
+		"each once": {metadata: Metadata{Owners: []Reference{stack, web, stack}}, want: []Reference{stack, web}},
+		"one that names no owner is owned by nothing, whatever it uses": {metadata: Metadata{Refs: []Reference{vm}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, tt.metadata.Owning(tt.parent))
+			assert.Equal(t, tt.want, tt.metadata.Owning())
 		})
 	}
 }

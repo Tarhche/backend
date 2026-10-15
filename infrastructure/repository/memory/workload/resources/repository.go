@@ -263,8 +263,8 @@ func (r *Repository) slugTaken(record resource.Record) bool {
 	return false
 }
 
-// passes reports whether a record is one filter lets through: what it lives
-// in among its refs or, kept before refs, among its owners.
+// passes reports whether a record is one filter lets through: what it
+// belongs to among its refs or its owners.
 func passes(record resource.Record, filter resource.Filter) bool {
 	return filter.Passes(record.Metadata)
 }

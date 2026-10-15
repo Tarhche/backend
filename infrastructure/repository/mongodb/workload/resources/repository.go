@@ -41,9 +41,8 @@
 //     owners, which is how what lives in a resource is found, a Docker VM's
 //     building blocks among it, and what uses or owns one.
 //
-// What lives in a resource names it among its refs, or, kept before refs,
-// among its owners: a listing of what lives in one looks in both, so that a
-// record kept before refs is found where it lives too.
+// What lives in a resource names it among its refs, and what a resource owns
+// names it among its owners: a listing of what belongs to one looks in both.
 //
 // A resource read by its uuid or its slug needs nothing led by its kind: each
 // names one document at most.
@@ -382,8 +381,8 @@ func filterOf(kindName string, filter resource.Filter) bson.D {
 		query = append(query, bson.E{Key: "metadata.node", Value: filter.Node})
 	}
 
-	// what belongs to a resource names it among its refs, or, kept before
-	// refs, among its owners.
+	// what belongs to a resource names it among its refs, or among its
+	// owners.
 	switch parent := filter.Parent; {
 	case len(parent.UUID) == 0:
 	case len(parent.Kind) == 0:
@@ -403,16 +402,9 @@ func filterOf(kindName string, filter resource.Filter) bson.D {
 		}})
 	}
 
-	// what nothing owns names no owner, or none but of the kind it lives in,
-	// which a record kept before refs has among its owners.
-	switch unowned := filter.Unowned; {
-	case unowned == nil:
-	case len(unowned.Parent) == 0:
+	// what nothing owns names no owner.
+	if filter.Unowned {
 		query = append(query, bson.E{Key: "metadata.owners.0", Value: bson.D{{Key: "$exists", Value: false}}})
-	default:
-		query = append(query, bson.E{Key: "metadata.owners", Value: bson.D{{Key: "$not", Value: bson.D{
-			{Key: "$elemMatch", Value: bson.D{{Key: "kind", Value: bson.D{{Key: "$ne", Value: unowned.Parent}}}}},
-		}}}})
 	}
 
 	// a label's key has dots in it, workload.managed-by, which a path would

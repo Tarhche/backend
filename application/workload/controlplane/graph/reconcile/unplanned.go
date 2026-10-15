@@ -180,10 +180,9 @@ func (o *owned) stays(ctx context.Context, d resource.Record) (bool, error) {
 	return false, nil
 }
 
-// owners are what d's record says owns it, but the resource it lives in,
-// which owns nothing.
+// owners are what d's record says owns it.
 func (o *owned) owners(d resource.Record) []graph.Ref {
-	return d.Metadata.Owning(o.reconciler.parentOf(d.Kind))
+	return d.Metadata.Owning()
 }
 
 // levels are what goes, a level at a time, in the order it is removed in:

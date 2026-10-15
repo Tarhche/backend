@@ -11,8 +11,7 @@ import (
 )
 
 // Resync queues every root of every kind of root, as each kind's records
-// say, a batch at a time: what nothing owns, but what it lives in (a record
-// kept before refs has it among its owners). It catches up with whatever no
+// say, a batch at a time: what nothing owns. It catches up with whatever no
 // change was told of, as a safety net, every so often.
 //
 // Then it removes what was owned by records that are all gone (collect): the
@@ -36,7 +35,7 @@ func (r *Reconciler) Resync(ctx context.Context) error {
 
 // queueRoots queues every root of the named kind, a batch at a time.
 func (r *Reconciler) queueRoots(ctx context.Context, kindName string) error {
-	unowned := resource.Filter{Unowned: &resource.Unowned{Parent: r.parentOf(kindName)}}
+	unowned := resource.Filter{Unowned: true}
 
 	for offset := uint(0); ; offset += r.config.Batch {
 		roots, total, err := r.resources.GetAll(ctx, kindName, unowned, offset, r.config.Batch)
@@ -57,12 +56,10 @@ func (r *Reconciler) queueRoots(ctx context.Context, kindName string) error {
 // collect removes, through its kind (graph.Kind.Delete), each record of a
 // kind a graph is made of that something owned, as its metadata says, and
 // every one of whose owners is gone: what its owners' plans never got to
-// remove, or what a root that went left. What it lives in owns nothing, so a
-// record kept before refs, which has it among its owners, is never removed
-// for its sake. One something still owns is kept, until a later collect finds
-// what owns it gone: a network a container that is going owns goes once the
-// container has. One whose kind cannot remove it now waits for a later
-// collect too.
+// remove, or what a root that went left. One something still owns is kept,
+// until a later collect finds what owns it gone: a network a container that
+// is going owns goes once the container has. One whose kind cannot remove it
+// now waits for a later collect too.
 //
 // What fails is logged, and is what it fails with, once every kind is done.
 func (r *Reconciler) collect(ctx context.Context) error {
@@ -79,8 +76,6 @@ func (r *Reconciler) collect(ctx context.Context) error {
 // gone: those found, once its records are read, so that what is removed
 // shifts nothing that is yet to be read.
 func (r *Reconciler) collectKind(ctx context.Context, kindName string) error {
-	parent := r.parentOf(kindName)
-
 	var (
 		orphans []graph.Ref
 		failed  error
@@ -93,7 +88,7 @@ func (r *Reconciler) collectKind(ctx context.Context, kindName string) error {
 		}
 
 		for _, rec := range records {
-			owners := rec.Metadata.Owning(parent)
+			owners := rec.Metadata.Owning()
 			if len(owners) == 0 {
 				continue
 			}

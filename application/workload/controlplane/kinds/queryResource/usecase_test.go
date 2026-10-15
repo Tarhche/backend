@@ -152,14 +152,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		}
 
-		// one in its house, which a switch owns, and one kept before refs,
-		// its house among its owners.
+		// one in its house, which a switch owns.
 		f := newFixture(t, d,
 			kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped, func(fan *kindstest.Fan) {
 				fan.Metadata.Owners = []kind.Reference{{Kind: "switch", UUID: "switch-uuid"}}
-			}),
-			kindstest.AFan("kept-uuid", kindstest.Stopped, kindstest.Stopped, func(fan *kindstest.Fan) {
-				fan.Metadata.Owners, fan.Metadata.Refs = fan.Metadata.Refs, nil
 			}),
 		)
 
@@ -174,12 +170,6 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, kindstest.Stopped, observed.Status.State)
 		assert.Equal(t, []kind.Reference{{Kind: kindstest.Parent, UUID: kindstest.House}, {Kind: "switch", UUID: "switch-uuid"}}, observed.Owners, "what it belongs to: where it lives, and what owns it")
 		assert.Empty(t, f.requester.Asked(), "no node is asked")
-
-		response, err = f.useCase.Execute(ctx, &queryResource.Request{Kind: kindstest.Kind, UUID: "kept-uuid", Action: "state"})
-		require.NoError(t, err)
-
-		require.NoError(t, json.Unmarshal(response.Result, &observed))
-		assert.Equal(t, []kind.Reference{{Kind: kindstest.Parent, UUID: kindstest.House}}, observed.Owners, "and where one kept before refs lives")
 	})
 
 	for name, tt := range map[string]struct {

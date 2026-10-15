@@ -72,9 +72,9 @@ func Extra(ctx context.Context, binding kind.ControlPlaneBinding, ownerUUID stri
 }
 
 // Lives reports whether what m describes lives in parent, a resource of d's
-// parent kind, as one of its refs, or, kept before refs, as one of its
-// owners. A request that names no parent is about whatever it names, wherever
-// it lives.
+// parent kind, as one of its refs, or, what nobody keeps a record of, as one
+// of its owners, as its node names it. A request that names no parent is
+// about whatever it names, wherever it lives.
 func Lives(m kind.Metadata, d kind.Descriptor, parent string) bool {
 	if len(parent) == 0 {
 		return true

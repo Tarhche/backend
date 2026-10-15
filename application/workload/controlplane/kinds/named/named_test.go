@@ -32,7 +32,7 @@ func TestLives(t *testing.T) {
 			parent:   "house-1",
 			want:     true,
 		},
-		"and one kept before refs in the house among its owners": {
+		"and what nobody keeps a record of in the house among its owners, as its node names it": {
 			metadata: kind.Metadata{Owners: house("house-1")},
 			parent:   "house-1",
 			want:     true,

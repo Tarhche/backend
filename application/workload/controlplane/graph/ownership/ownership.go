@@ -5,10 +5,8 @@
 //
 // It reads and writes the control plane's records through its resource
 // repository, and its kinds through its registry, which say what each kind
-// lives in (kind.Descriptor.Parent). A resource of that kind never owns what
-// lives in it: a VM requires nothing, so it owns nothing, and one among a
-// record's owners is where a record kept before refs lives. That is what
-// keeps such a record owned by what owns it alone.
+// lives in (kind.Descriptor.Parent): what a record lives in stays among what
+// it uses, whatever links it.
 //
 // What it writes, it writes over the version it read, and reads again and
 // writes again when something else wrote the record in the meantime, a
@@ -59,10 +57,9 @@ func New(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.R
 }
 
 // Owners are the records that own ref's record and are still there, in the
-// order of their kinds and their uuids, each once: never one of the kind its
-// kind lives in, which a record kept before refs has among its owners as
-// where it lives. A record that is gone is owned by nothing. A record of a
-// kind the registry does not hold is kind.ErrUnknownKind.
+// order of their kinds and their uuids, each once. A record that is gone is
+// owned by nothing. A record of a kind the registry does not hold is
+// kind.ErrUnknownKind.
 func (o *Ownership) Owners(ctx context.Context, ref graph.Ref) ([]graph.Ref, error) {
 	r, there, err := o.read(ctx, ref)
 	if err != nil || !there {
@@ -158,18 +155,18 @@ func (o *Ownership) Forget(ctx context.Context, root graph.Ref) error {
 }
 
 // owning are the records that own r and are still there, in the order of
-// their kinds and their uuids, each once, but one of the kind r's kind lives
-// in. What owns it that cannot be looked for is an error naming it.
+// their kinds and their uuids, each once. What owns it that cannot be looked
+// for is an error naming it, and so is r of a kind the registry does not
+// hold.
 func (o *Ownership) owning(ctx context.Context, r resource.Record) ([]graph.Ref, error) {
-	d, err := o.descriptor(r.Kind)
-	if err != nil {
+	if _, err := o.descriptor(r.Kind); err != nil {
 		return nil, err
 	}
 
 	var owning []graph.Ref
 
 	for _, owner := range r.Metadata.Owners {
-		if owner.Kind == d.Parent || slices.Contains(owning, owner) {
+		if slices.Contains(owning, owner) {
 			continue
 		}
 

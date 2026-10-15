@@ -522,21 +522,6 @@ func TestReconciler_Reconcile(t *testing.T) {
 		assert.Empty(t, kinds.Calls())
 	})
 
-	t.Run("but the vm a record kept before refs has among its owners owns nothing, and it is a root all the same", func(t *testing.T) {
-		t.Parallel()
-
-		kinds := container()
-		kinds.Hold(vm, network, volume, web)
-
-		f := newFixture(t, kinds, record(refOf(web), nil, []graph.Ref{refOf(vm)}))
-		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
-
-		require.NoError(t, r.Reconcile(ctx, refOf(web)))
-
-		assert.Contains(t, kinds.Asked(graphtest.Exists), web, "its graph is carried out")
-		assert.Empty(t, f.lease(t, web).Holder)
-	})
-
 	t.Run("what is not of a kind of root here is not reconciled", func(t *testing.T) {
 		t.Parallel()
 

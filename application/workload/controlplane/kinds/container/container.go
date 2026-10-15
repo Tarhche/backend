@@ -130,7 +130,7 @@ func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (
 
 	// a root keeps what was there before it as not its own, which its graph
 	// never makes or removes: nothing is in a VM still to be made.
-	if len(asked.Metadata.Owning(containerKind.Parent)) == 0 {
+	if len(asked.Metadata.Owning()) == 0 {
 		admitted.Spec.External = nil
 
 		if there {

@@ -24,9 +24,8 @@ import (
 // the records of a workload whose changes reach its roots: in one vm, two
 // containers nobody owns, one using a volume, on a network both own and a
 // network one of them owns; a stack, its service, and the network both own;
-// a container kept before refs, the vm among its owners; and a container
-// using a network that is gone. In another vm, a container nobody owns, and
-// the network it owns.
+// and a container using a network that is gone. In another vm, a container
+// nobody owns, and the network it owns.
 var (
 	theVM    = graph.Ref{Kind: vmKind.Name, UUID: "v-uuid"}
 	otherVM  = graph.Ref{Kind: vmKind.Name, UUID: "w-uuid"}
@@ -38,7 +37,6 @@ var (
 	shop     = graph.Ref{Kind: stackKind.Name, UUID: "shop"}
 	service  = graph.Ref{Kind: containerKind.Name, UUID: "shop-web"}
 	shopNet  = graph.Ref{Kind: networkKind.Name, UUID: "shop-default"}
-	legacy   = graph.Ref{Kind: containerKind.Name, UUID: "legacy"}
 	stranded = graph.Ref{Kind: containerKind.Name, UUID: "stranded"}
 	goneNet  = graph.Ref{Kind: networkKind.Name, UUID: "gone-net"}
 	c3       = graph.Ref{Kind: containerKind.Name, UUID: "c3"}
@@ -57,7 +55,6 @@ func workload() []resource.Record {
 		record(shop, []graph.Ref{theVM}, nil),
 		record(service, []graph.Ref{theVM}, []graph.Ref{shop}),
 		record(shopNet, []graph.Ref{theVM}, []graph.Ref{shop, service}),
-		record(legacy, nil, []graph.Ref{theVM}),
 		record(stranded, []graph.Ref{theVM, goneNet}, nil),
 		record(otherVM, nil, nil),
 		record(c3, []graph.Ref{otherVM}, nil),
@@ -84,9 +81,9 @@ func TestReconciler_Changed(t *testing.T) {
 		"but not when stacks are not roots here":                       {changed: service, roots: []string{containerKind.Name}},
 		"a network that is gone reaches what uses it, as its refs say": {changed: goneNet, want: []graph.Ref{stranded}},
 		"a root that is gone reaches itself, to forget its lease":      {changed: graph.Ref{Kind: containerKind.Name, UUID: "gone"}, want: []graph.Ref{{Kind: containerKind.Name, UUID: "gone"}}},
-		"a vm reaches every root in it, kept before refs or not, and nothing in another": {
+		"a vm reaches every root in it, and nothing in another": {
 			changed: theVM,
-			want:    []graph.Ref{c1, c2, shop, legacy, stranded},
+			want:    []graph.Ref{c1, c2, shop, stranded},
 		},
 		"another vm reaches its own":                 {changed: otherVM, want: []graph.Ref{c3}},
 		"what is of no graph's kind reaches nothing": {changed: graph.Ref{Kind: taskKind.Name, UUID: "t-uuid"}},

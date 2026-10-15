@@ -384,7 +384,7 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 
 		return resource.Record{}, graph.Ended{}, true, nil
 	case !r.unowned(rec):
-		r.logger.InfoContext(ctx, "forgetting the lease of what something owns now, which is a root no more", "kind", root.Kind, "uuid", root.UUID, "owners", rec.Metadata.Owning(r.parentOf(rec.Kind)))
+		r.logger.InfoContext(ctx, "forgetting the lease of what something owns now, which is a root no more", "kind", root.Kind, "uuid", root.UUID, "owners", rec.Metadata.Owning())
 
 		return rec, graph.Ended{}, true, nil
 	}
@@ -950,7 +950,7 @@ func (r *Reconciler) read(ctx context.Context, ref graph.Ref) (resource.Record, 
 // unowned reports whether nothing owns rec, as its metadata says: whether it
 // is a root, being of a kind of root.
 func (r *Reconciler) unowned(rec resource.Record) bool {
-	return len(rec.Metadata.Owning(r.parentOf(rec.Kind))) == 0
+	return len(rec.Metadata.Owning()) == 0
 }
 
 // parentOf is the kind a resource of the named kind lives in, or nothing.

@@ -160,9 +160,8 @@ type Filter struct {
 
 	// Parent is a resource they belong to (kind.Metadata.BelongsTo): one of
 	// their metadata's refs, the resource they live in among them, or of
-	// their owners, where a record kept before refs has the resource it lives
-	// in. Its kind may be left out, and then a resource of any kind with that
-	// uuid is.
+	// their owners, a container's stack say. Its kind may be left out, and
+	// then a resource of any kind with that uuid is.
 	Parent kind.Reference
 
 	// Labels are labels they carry, each with the value given: the code
@@ -170,19 +169,10 @@ type Filter struct {
 	// workload.managed-by=code-runner.
 	Labels map[string]string
 
-	// Unowned, when it is there, narrows them to what nothing owns, the
-	// roots of their graphs: as their metadata says, whatever is there of
-	// what it names (kind.Metadata.Owning).
-	Unowned *Unowned
-}
-
-// Unowned narrows a listing to what nothing owns (Filter.Unowned). What a
-// resource lives in owns nothing, and a record kept before refs has it among
-// its owners all the same: an owner of the kind Parent names is no owner.
-type Unowned struct {
-	// Parent is the kind what is listed lives in, or nothing for a kind that
-	// lives in nothing, every owner of which is one.
-	Parent string
+	// Unowned narrows them to what nothing owns, the roots of their graphs:
+	// as their metadata says, whatever is there of what it names
+	// (kind.Metadata.Owning).
+	Unowned bool
 }
 
 // Passes reports whether a resource's metadata is what filter lets through,
@@ -201,7 +191,7 @@ func (f Filter) Passes(m kind.Metadata) bool {
 		return false
 	}
 
-	if f.Unowned != nil && len(m.Owning(f.Unowned.Parent)) > 0 {
+	if f.Unowned && len(m.Owning()) > 0 {
 		return false
 	}
 

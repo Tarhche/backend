@@ -124,8 +124,7 @@ type Metadata struct {
 
 	// Owners are the resources that own it, those that need it through an
 	// owned edge of a graph: a network's stack and the containers on it. It
-	// goes with the last of them. A record kept before refs has the resource
-	// it lives in among them instead.
+	// goes with the last of them.
 	Owners []Reference `json:"owners,omitempty"`
 
 	// Refs are the resources it uses and does not own, which outlive it:
@@ -168,9 +167,10 @@ func (m Metadata) Expired(now time.Time) bool {
 }
 
 // Owner is the resource of the named kind this one belongs to, if it belongs
-// to one: its parent, given its kind's Parent. It is looked for among its
-// refs first, and then among its owners, where a record kept before refs has
-// its parent.
+// to one: its parent, given its kind's Parent, or what owns it, a container's
+// stack. It is looked for among its refs first, and then among its owners,
+// where what nobody keeps a record of has its parent, as its node names it
+// (Observation.Owners).
 func (m Metadata) Owner(kindName string) (Reference, bool) {
 	for _, belongs := range [][]Reference{m.Refs, m.Owners} {
 		for _, r := range belongs {
@@ -185,8 +185,9 @@ func (m Metadata) Owner(kindName string) (Reference, bool) {
 
 // BelongsTo reports whether this one belongs to the resource r names: as one
 // of its refs, the resource it lives in among them, or as one of its owners,
-// where a record kept before refs has the resource it lives in. A reference
-// whose kind is left out is to a resource of any kind with its uuid.
+// where what nobody keeps a record of has the resource it lives in, as its
+// node names it. A reference whose kind is left out is to a resource of any
+// kind with its uuid.
 func (m Metadata) BelongsTo(r Reference) bool {
 	belongs := func(to Reference) bool {
 		return to.UUID == r.UUID && (len(r.Kind) == 0 || to.Kind == r.Kind)
@@ -196,15 +197,12 @@ func (m Metadata) BelongsTo(r Reference) bool {
 }
 
 // Owning are the resources that own this one, each once, in the order its
-// owners name them, but one of the kind it lives in, parent: a record kept
-// before refs has where it lives among its owners, and what a resource lives
-// in owns nothing. A resource none owns is the root of its graph. With no
-// parent given, every owner owns it.
-func (m Metadata) Owning(parent string) []Reference {
+// owners name them. A resource none owns is the root of its graph.
+func (m Metadata) Owning() []Reference {
 	var owning []Reference
 
 	for _, r := range m.Owners {
-		if (len(parent) > 0 && r.Kind == parent) || slices.Contains(owning, r) {
+		if slices.Contains(owning, r) {
 			continue
 		}
 

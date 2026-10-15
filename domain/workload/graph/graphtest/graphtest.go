@@ -453,7 +453,7 @@ func (o *Ownership) RefsOf(id graph.NodeID) []graph.NodeID {
 
 // Parent has a record of the named kind live in a record of parent's kind,
 // as a container lives in a VM: one of parent's kind stays among what it uses
-// whatever links it, and never owns it.
+// whatever links it.
 func (o *Ownership) Parent(kindName string, parent string) {
 	o.kind.lock.Lock()
 	defer o.kind.lock.Unlock()
@@ -571,8 +571,8 @@ func (o *Ownership) Forget(ctx context.Context, root graph.Ref) error {
 }
 
 // owning are the records that own the record of the node id that the kind
-// holds, in the order of their kinds and their uuids, but one of the kind it
-// lives in: none when it holds no record of the node. The lock is held.
+// holds, in the order of their kinds and their uuids: none when it holds no
+// record of the node. The lock is held.
 func (o *Ownership) owning(id graph.NodeID) []graph.Ref {
 	if _, recorded := o.kind.records[id]; !recorded {
 		return nil
@@ -580,7 +580,7 @@ func (o *Ownership) owning(id graph.NodeID) []graph.Ref {
 
 	var owning []graph.Ref
 	for _, owner := range o.kind.owners[id] {
-		if _, there := o.kind.records[owner]; there && owner.Kind() != o.kind.parents[id.Kind()] {
+		if _, there := o.kind.records[owner]; there {
 			owning = append(owning, Ref(owner))
 		}
 	}

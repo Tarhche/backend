@@ -322,14 +322,6 @@ func TestObserver_Unheard(t *testing.T) {
 		return func(f *kindstest.Fan) { f.Metadata.Refs = []kind.Reference{{Kind: kindstest.Parent, UUID: house}} }
 	}
 
-	// keptInHouse is a fan kept before refs: the house it is in is among its
-	// owners.
-	keptInHouse := func(house string) func(f *kindstest.Fan) {
-		return func(f *kindstest.Fan) {
-			f.Metadata.Owners, f.Metadata.Refs = []kind.Reference{{Kind: kindstest.Parent, UUID: house}}, nil
-		}
-	}
-
 	for name, tt := range map[string]struct {
 		record resource.Record
 		houses parents
@@ -361,11 +353,6 @@ func TestObserver_Unheard(t *testing.T) {
 		},
 		"whatever it was doing, rather than missing": {
 			record: kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped, heardAt(later), inHouse("house-3")),
-			houses: parents{"house-3": "closed"},
-			state:  kind.Waiting, reason: "its house is closed", since: silence,
-		},
-		"and so does one kept before refs, its house among its owners": {
-			record: kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later), keptInHouse("house-3")),
 			houses: parents{"house-3": "closed"},
 			state:  kind.Waiting, reason: "its house is closed", since: silence,
 		},

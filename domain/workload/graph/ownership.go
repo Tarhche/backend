@@ -12,9 +12,7 @@ import "context"
 type Ownership interface {
 	// Owners are the records that own ref's record and are still there: one
 	// whose record is gone owns nothing, so that an owner left dangling
-	// keeps nothing. The resource a record lives in never owns it, whatever
-	// a record kept before refs says. A record that is gone is owned by
-	// nothing.
+	// keeps nothing. A record that is gone is owned by nothing.
 	Owners(ctx context.Context, ref Ref) ([]Ref, error)
 
 	// Disown takes owners out of what owns ref's record, and is what owns it

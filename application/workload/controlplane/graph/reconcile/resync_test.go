@@ -13,7 +13,6 @@ import (
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
-	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 )
 
@@ -30,13 +29,13 @@ func TestReconciler_Resync(t *testing.T) {
 		roots []string
 		want  []graph.Ref
 	}{
-		"every root of the kinds of root, kept before refs or not, and nothing any root owns": {
+		"every root of the kinds of root, and nothing any root owns": {
 			roots: []string{containerKind.Name},
-			want:  []graph.Ref{c1, c2, legacy, stranded, c3},
+			want:  []graph.Ref{c1, c2, stranded, c3},
 		},
 		"and the stacks too, when they are roots": {
 			roots: []string{containerKind.Name, stackKind.Name},
-			want:  []graph.Ref{c1, c2, legacy, stranded, c3, shop},
+			want:  []graph.Ref{c1, c2, stranded, c3, shop},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -92,10 +91,8 @@ func TestReconciler_Resync_collect(t *testing.T) {
 			record(graph.Ref{Kind: networkKind.Name, UUID: "owned"}, []graph.Ref{theVM}, []graph.Ref{c1}),
 			record(graph.Ref{Kind: networkKind.Name, UUID: "half-owned"}, []graph.Ref{theVM}, []graph.Ref{gone(containerKind.Name, "gone-1"), c1}),
 
-			// what nothing ever owned, and what was kept before refs, in
-			// a vm that is gone, which owns nothing.
+			// what nothing ever owned.
 			record(graph.Ref{Kind: volumeKind.Name, UUID: "free"}, []graph.Ref{theVM}, nil),
-			record(graph.Ref{Kind: networkKind.Name, UUID: "kept-before-refs"}, nil, []graph.Ref{gone(vmKind.Name, "gone-vm")}),
 		)
 
 		config := reconcile.DefaultConfig()

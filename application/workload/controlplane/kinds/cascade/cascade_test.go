@@ -30,12 +30,6 @@ var (
 	elsewhere  = func(f *kindstest.Fan) {
 		f.Metadata.Refs = []kind.Reference{{Kind: kindstest.Parent, UUID: "house-2"}}
 	}
-
-	// keptBeforeRefs is a fan kept before refs: the house it is in is among
-	// its owners.
-	keptBeforeRefs = func(f *kindstest.Fan) {
-		f.Metadata.Owners, f.Metadata.Refs = f.Metadata.Refs, nil
-	}
 )
 
 // fans is a cascade over fans whose rules on their house are rules.
@@ -81,7 +75,6 @@ func TestCascade_Deleted(t *testing.T) {
 		c, resources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeKeep},
 			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
 			kindstest.AFan("also-in-it", kindstest.Stopped, kindstest.Stopped),
-			kindstest.AFan("kept-in-it-before-refs", kindstest.Running, kindstest.Running, keptBeforeRefs),
 			kindstest.AFan("in-another", kindstest.Running, kindstest.Running, elsewhere),
 		)
 
@@ -92,9 +85,6 @@ func TestCascade_Deleted(t *testing.T) {
 
 		_, kept = held(t, resources, "also-in-it")
 		assert.False(t, kept)
-
-		_, kept = held(t, resources, "kept-in-it-before-refs")
-		assert.False(t, kept, "its house among its owners")
 
 		_, kept = held(t, resources, "in-another")
 		assert.True(t, kept)
@@ -148,7 +138,6 @@ func TestCascade_Restored(t *testing.T) {
 
 		c, resources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
 			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
-			kindstest.AFan("kept-in-it-before-refs", kindstest.Running, kindstest.Running, keptBeforeRefs),
 			kindstest.AFan("in-another", kindstest.Running, kindstest.Running, elsewhere),
 		)
 
@@ -159,9 +148,6 @@ func TestCascade_Restored(t *testing.T) {
 		assert.True(t, fan.Reset)
 		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State, "and is as it was until then")
 		assert.Equal(t, restoredAt, kindstest.Typed(fan).Status.ObservedAt, "what was seen of it before the restore is older than what is known of it")
-
-		before, _ := held(t, resources, "kept-in-it-before-refs")
-		assert.True(t, before.Reset, "its house among its owners")
 
 		other, _ := held(t, resources, "in-another")
 		assert.False(t, other.Reset)
@@ -554,7 +540,6 @@ func TestRepository_Delete_graphs(t *testing.T) {
 		kindstest.AFan("owned-by-what-is-gone", kindstest.Running, kindstest.Running, owned(kind.Reference{Kind: kindstest.Kind, UUID: "gone"})),
 		kindstest.AFan("root-asked-to-go", kindstest.Running, kind.Deleted, func(f *kindstest.Fan) { f.Metadata.DeletionRequestedAt = kindstest.Moment }),
 		kindstest.AFan("owned-and-asked-to-go", kindstest.Deleting, kind.Deleted, owned(kind.Reference{Kind: kindstest.Kind, UUID: "root"})),
-		kindstest.AFan("root-kept-before-refs", kindstest.Stopped, kindstest.Stopped, keptBeforeRefs),
 		kindstest.AFan("in-another", kindstest.Running, kindstest.Running, elsewhere),
 		kindstest.AFan("going-elsewhere", kindstest.Running, kind.Deleted, elsewhere, func(f *kindstest.Fan) { f.Metadata.DeletionRequestedAt = kindstest.Moment }),
 		kindstest.AFan("owned-by-what-is-going", kindstest.Running, kindstest.Running, owned(kind.Reference{Kind: kindstest.Kind, UUID: "going-elsewhere"})),
@@ -584,11 +569,6 @@ func TestRepository_Delete_graphs(t *testing.T) {
 		assert.Nil(t, root.Pending, "nothing is waited on")
 		assert.Zero(t, root.Attempts, "nor was it tried for yet")
 		assert.False(t, root.Reset)
-
-		before, kept := held(t, memory, "root-kept-before-refs")
-		require.True(t, kept, "a root kept before refs, its house among its owners, which own nothing")
-		assert.Equal(t, kind.Missing, kindstest.Typed(before).Status.State)
-		assert.Equal(t, kindstest.Stopped, kindstest.Typed(before).Status.Expected)
 	})
 
 	t.Run("and so is what something that is there still owns", func(t *testing.T) {
@@ -621,7 +601,7 @@ func TestRepository_Delete_graphs(t *testing.T) {
 			changed = append(changed, ref.UUID)
 		}
 
-		assert.ElementsMatch(t, []string{"root", "owned", "owned-by-what-is-gone", "root-asked-to-go", "owned-and-asked-to-go", "root-kept-before-refs", "owned-by-what-is-going"}, changed)
+		assert.ElementsMatch(t, []string{"root", "owned", "owned-by-what-is-gone", "root-asked-to-go", "owned-and-asked-to-go", "owned-by-what-is-going"}, changed)
 
 		told.lock.Lock()
 		defer told.lock.Unlock()

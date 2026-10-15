@@ -106,7 +106,7 @@ func TestStacks_Admit(t *testing.T) {
 		assert.Equal(t, "its vm is starting", admitted.Status.Reason)
 	})
 
-	t.Run("into the vm it names as its parent, among its refs or, as a manifest written before refs does, among its owners", func(t *testing.T) {
+	t.Run("into the vm it names as its parent, among its refs", func(t *testing.T) {
 		t.Parallel()
 
 		g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner")))
@@ -119,15 +119,6 @@ func TestStacks_Admit(t *testing.T) {
 		require.Empty(t, invalid)
 		assert.Equal(t, "02", admitted.Spec.VM.UUID)
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "02"}}, admitted.Metadata.Refs)
-
-		owners := asked("web", stackKind.VMChoice{})
-		owners.Metadata.Owners = []kind.Reference{{Kind: "vm", UUID: "02"}}
-
-		admitted, invalid, err = g.strategy.Admit(ctx, owners)
-		require.NoError(t, err)
-		require.Empty(t, invalid)
-		assert.Equal(t, "02", admitted.Spec.VM.UUID)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "02"}}, admitted.Metadata.Owners, "kept as they are given")
 	})
 
 	t.Run("given a slug nothing else holds", func(t *testing.T) {

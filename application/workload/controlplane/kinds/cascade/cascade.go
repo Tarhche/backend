@@ -328,8 +328,8 @@ func (c *Cascade) goes(ctx context.Context, b kind.ControlPlaneBinding, r resour
 // kept reports whether a resource of d's kind whose parent is deleted is
 // kept, which it is only where the roots of graphs are kept made, and some
 // kind's resources are roots: a root that was not asked to go, and what
-// something still there owns (kind.Metadata.Owning: what it lives in owns
-// nothing), whose graph makes it again. What was asked to go never is, and
+// something still there owns (kind.Metadata.Owning), whose graph makes it
+// again. What was asked to go never is, and
 // an owner that was asked to go is not still there: what a root being
 // removed owns goes, wherever the root is in its own removal.
 func (c *Cascade) kept(ctx context.Context, d kind.Descriptor, r resource.Record) (bool, error) {
@@ -346,7 +346,7 @@ func (c *Cascade) kept(ctx context.Context, d kind.Descriptor, r resource.Record
 		return true, nil
 	}
 
-	for _, owner := range r.Metadata.Owning(d.Parent) {
+	for _, owner := range r.Metadata.Owning() {
 		owning, err := c.resources.GetOne(ctx, owner.Kind, owner.UUID)
 		switch {
 		case errors.Is(err, domain.ErrNotExists):

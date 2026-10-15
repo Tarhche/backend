@@ -190,11 +190,6 @@ func TestOwnership_Owners(t *testing.T) {
 			of:      network,
 			want:    []graph.Ref{api, web, shop},
 		},
-		"never the vm it lives in, which a record kept before refs has among its owners": {
-			records: []resource.Record{record(network, nil, []graph.Ref{vm, shop}), record(vm, nil, nil), in(shop)},
-			of:      network,
-			want:    []graph.Ref{shop},
-		},
 		"each once, however often its record names it": {
 			records: []resource.Record{owned(network, shop, shop), in(shop)},
 			of:      network,
@@ -255,16 +250,15 @@ func TestOwnership_Disown(t *testing.T) {
 	t.Run("owners are taken out of what owns it, which is what owns it still, as Owners says it", func(t *testing.T) {
 		t.Parallel()
 
-		// kept before refs: the vm it lives in among its owners.
-		f := newFixture(t, record(network, nil, []graph.Ref{vm, shop, web, api}), record(vm, nil, nil), in(shop), in(web), in(api))
+		f := newFixture(t, owned(network, shop, web, api), in(shop), in(web), in(api))
 		f.clock.Advance(time.Minute)
 
 		owners, err := f.ownership.Disown(ctx, network, web, api, volume)
 		require.NoError(t, err)
-		assert.Equal(t, []graph.Ref{shop}, owners, "what does not own it is taken out of nothing, and the vm owns nothing")
+		assert.Equal(t, []graph.Ref{shop}, owners, "what does not own it is taken out of nothing")
 
 		stored := f.stored(t, network)
-		assert.Equal(t, []kind.Reference{vm, shop}, stored.Metadata.Owners, "what its record says is otherwise as it was")
+		assert.Equal(t, []kind.Reference{shop}, stored.Metadata.Owners, "what its record says is otherwise as it was")
 		assert.Equal(t, int64(2), stored.Version, "in one write")
 		assert.Equal(t, f.clock.Now(), stored.Metadata.UpdatedAt)
 	})

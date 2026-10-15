@@ -300,25 +300,6 @@ func TestClient_Stacks(t *testing.T) {
 		}, p.requests())
 	})
 
-	t.Run("and one kept before refs, its vm among its owners, is read in its vm all the same", func(t *testing.T) {
-		t.Parallel()
-
-		c, p := newStacksPlane(t)
-
-		kept := shopIn("vm-uuid", stackKind.Running)
-		kept.Metadata.Owners, kept.Metadata.Refs = kept.Metadata.Refs, nil
-		kept.Spec.VM = stackKind.VMChoice{}
-
-		p.holding(kept, dockerVM("vm-uuid", vmKind.Running, vmKind.Running))
-
-		listed, err := c.Stacks(ctx, "owner-uuid", "vm-uuid", 1)
-		require.NoError(t, err)
-
-		require.Len(t, listed.Items, 1)
-		assert.Equal(t, "vm-uuid", listed.Items[0].VMUUID)
-		assert.Equal(t, "docker-1", listed.Items[0].VMName)
-	})
-
 	t.Run("one whose vm is gone is named by nothing", func(t *testing.T) {
 		t.Parallel()
 

@@ -611,27 +611,6 @@ func TestOwnership(t *testing.T) {
 		assert.Empty(t, ownership.RefsOf(stack), "and the stack, which it does not hold, uses nothing")
 	})
 
-	t.Run("what lives in a record of another's kind is never owned by it", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := context.Background()
-		kinds := graphtest.NewKind()
-		ownership := kinds.Ownership()
-
-		kinds.Hold(vm, web, stack)
-		ownership.Parent("container", "vm")
-		ownership.Own(web, vm, stack)
-
-		owners, err := ownership.Owners(ctx, ref(web))
-		require.NoError(t, err)
-		assert.Equal(t, []graph.Ref{ref(stack)}, owners, "whatever its record says, as one kept before refs does")
-
-		owners, err = ownership.Disown(ctx, ref(web), ref(stack))
-		require.NoError(t, err)
-		assert.Empty(t, owners)
-		assert.Equal(t, []graph.NodeID{vm}, ownership.OwnersOf(web))
-	})
-
 	t.Run("what a record uses goes with it", func(t *testing.T) {
 		t.Parallel()
 
