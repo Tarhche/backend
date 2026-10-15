@@ -69,10 +69,13 @@ func New(baseURL string, dockerImage string) (*Client, error) {
 	}
 
 	// each call is bounded by its own timeout, since the slowest of them takes
-	// minutes and the fastest should not.
+	// minutes and the fastest should not. Its connections are its own, over a
+	// transport as the default one is set, so that what closes the default
+	// transport's idle connections elsewhere in the process, a test server
+	// closed say, breaks none of its requests on its way.
 	return &Client{
 		baseURL:     parsed,
-		httpClient:  &http.Client{},
+		httpClient:  &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()},
 		dockerImage: dockerImage,
 	}, nil
 }

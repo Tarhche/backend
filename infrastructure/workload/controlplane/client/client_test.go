@@ -56,6 +56,28 @@ func controlPlane(t *testing.T, status int, body string) (*Client, *answering) {
 	return c, asked
 }
 
+// TestNew holds a client to connections of its own: a transport of its own,
+// as the default one is set, rather than the default one, whose idle
+// connections what else is in the process closes, a test server closed in
+// another test at once breaking a request of this one's on its way.
+func TestNew(t *testing.T) {
+	t.Parallel()
+
+	c, err := New("http://workload-controlplane:80", "docker:29-dind")
+	require.NoError(t, err)
+
+	transport, own := c.httpClient.Transport.(*http.Transport)
+	require.True(t, own, "a transport of its own")
+	assert.NotSame(t, http.DefaultTransport, transport, "not the default one")
+
+	defaults := http.DefaultTransport.(*http.Transport)
+	assert.Equal(t, defaults.MaxIdleConns, transport.MaxIdleConns, "set as the default one is")
+	assert.Equal(t, defaults.IdleConnTimeout, transport.IdleConnTimeout)
+	assert.Equal(t, defaults.TLSHandshakeTimeout, transport.TLSHandshakeTimeout)
+	assert.Equal(t, defaults.ForceAttemptHTTP2, transport.ForceAttemptHTTP2)
+	assert.NotNil(t, transport.Proxy, "through the environment's proxy, as the default one is")
+}
+
 func TestClient_errors(t *testing.T) {
 	t.Parallel()
 
