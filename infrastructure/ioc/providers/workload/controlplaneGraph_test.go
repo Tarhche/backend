@@ -1261,3 +1261,172 @@ func TestNewControlPlaneWorkload_networkDeletedAMomentBefore(t *testing.T) {
 
 	assert.True(t, slices.ContainsFunc(networks, func(r resource.Record) bool { return r.Metadata.UUID != "n-1" && r.Metadata.Name == "shared" }), "its graph makes the network: %v", networks)
 }
+
+// TestNewControlPlaneWorkload_stoppedRightAfterTheLook holds the control
+// plane to keeping the record of a container a Docker VM's restore reset,
+// which the restored disk holds under its uuid, when the VM is stopped right
+// after the first look into it, before the look's heartbeat of the container
+// is taken: whether that heartbeat is heard late, as the VM is stopped, or
+// lost, the VM started again with a dockerd slow to come up. The look into
+// the run before says nothing of what its dockerd says in this one, which
+// is looked into again; and waiting on a VM that is down is no word of what
+// lives in it, which a heartbeat of the look heard late still is. The stack
+// is kept, its web server found in the restored disk.
+func TestNewControlPlaneWorkload_stoppedRightAfterTheLook(t *testing.T) {
+	t.Parallel()
+
+	for name, lost := range map[string]bool{
+		"the look's heartbeat of its web server heard late, as its vm was stopped":    false,
+		"the look's heartbeat of its web server lost, and its vm started again since": true,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+
+			stored := resourcesMemory.NewRepository()
+			nodes := nodesMemory.NewRepository(vmtest.Alive(vmtest.Node))
+
+			stores := storesOf(stored)
+			stores.Nodes = nodes
+
+			workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), stores, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+			require.NoError(t, err)
+
+			now := time.Now()
+			restoredAt := now.Add(-10 * time.Minute)
+			resetAt := restoredAt.Truncate(time.Millisecond)
+
+			// looked into at the look, by its bridge network, and stopped
+			// before the look's heartbeat of its web server was taken.
+			looked := now.Add(-5 * time.Second)
+			if lost {
+				looked = restoredAt.Add(time.Minute)
+			}
+
+			v := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+				v.Status.State = vmKind.Stopped
+				v.Status.Expected = vmKind.Stopped
+				v.Status.RestoredAt = restoredAt
+				v.Status.StartedAt = restoredAt.Add(-time.Second)
+				v.Status.LookedAt = looked
+				v.Status.ObservedAt = now
+			})
+			raw, err := kind.Encode(v)
+			require.NoError(t, err)
+
+			_, err = stored.Create(ctx, resource.Record{Raw: raw})
+			require.NoError(t, err)
+
+			raw, err = kind.Encode(stackKind.Stack{
+				Kind:     stackKind.Name,
+				Metadata: kind.Metadata{UUID: "s-1", Name: "shop", Slug: "shop", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, CreatedAt: restoredAt.Add(-time.Hour)},
+				Spec:     stackKind.Spec{VM: stackKind.VMChoice{UUID: "vm-1"}, Compose: "services:\n  web:\n    image: nginx:1.27\n"},
+				Status:   stackKind.Status{Status: kind.Status{State: stackKind.Running, Expected: stackKind.Running, Since: restoredAt.Add(-time.Hour)}},
+			})
+			require.NoError(t, err)
+
+			_, err = stored.Create(ctx, resource.Record{Raw: raw, Reset: true, ResetAt: resetAt})
+			require.NoError(t, err)
+
+			_, err = stored.Create(ctx, resource.Record{Raw: blockstest.AContainer("c-web", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+				c.Metadata.Name = "shop_web"
+				c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "s-1"}}
+				c.Metadata.Labels = map[string]string{stackKind.LabelStack: "s-1", stackKind.LabelService: "web"}
+				c.Spec.Name = "shop_web"
+				c.Status.ObservedAt = restoredAt
+			}), Reset: true, ResetAt: resetAt})
+			require.NoError(t, err)
+
+			beat := func(at time.Time, observed kind.Observation) {
+				t.Helper()
+
+				data, err := json.Marshal(kind.Heartbeat{Node: vmtest.Node, At: at, Observed: observed})
+				require.NoError(t, err)
+				require.NoError(t, workload.Subscribers[kind.HeartbeatName(observed.Kind)].Handle(ctx, data))
+			}
+
+			// the web server as the restored disk holds it, under its uuid.
+			spec, err := containerKind.SpecLabel(containerKind.Spec{Name: "shop_web", Image: "nginx:1.27"})
+			require.NoError(t, err)
+
+			labels := blockKinds.Labels(containerKind.Name, "c-web")
+			labels[containerKind.LabelSpec] = spec
+			labels[stackKind.LabelStack] = "s-1"
+			labels[stackKind.LabelService] = "web"
+
+			status, err := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Running}, Docker: &containerKind.Docker{ID: "d-web", Name: "shop_web", State: "running", Labels: labels}})
+			require.NoError(t, err)
+
+			web := kind.Observation{Kind: containerKind.Name, UUID: "c-web", Owners: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, Status: status}
+
+			// a pass of the loop while its vm is stopped: the web server
+			// waits on it.
+			require.NoError(t, workload.Reconcile.Execute(ctx))
+
+			if !lost {
+				// the look's own heartbeat of the web server, heard late.
+				beat(looked, web)
+
+				c, err := stored.GetOne(ctx, containerKind.Name, "c-web")
+				require.NoError(t, err)
+				assert.False(t, c.Reset, "found in the restored disk, as the look's heartbeat of it says, though its vm is stopped")
+			}
+
+			// started again a moment later, its node beating on with nothing
+			// of what it holds for longer than what lives in it may go
+			// unheard: its dockerd is slow to come up.
+			r, err := stored.GetOne(ctx, vmKind.Name, "vm-1")
+			require.NoError(t, err)
+
+			starting, err := kind.Decode[vmKind.Spec, vmKind.Status](r.Raw)
+			require.NoError(t, err)
+
+			starting.Status.Expected = vmKind.Running
+			r.Raw, err = kind.Encode(starting)
+			require.NoError(t, err)
+
+			_, err = stored.Update(ctx, r)
+			require.NoError(t, err)
+
+			startedAt := now.Add(10 * time.Second)
+			later := startedAt.Add(time.Minute)
+
+			running, err := json.Marshal(vmKind.Status{Status: kind.Status{State: vmKind.Running}, StartedAt: startedAt})
+			require.NoError(t, err)
+
+			for at := startedAt.Add(time.Second); !at.After(later); at = at.Add(15 * time.Second) {
+				beat(at, kind.Observation{Kind: vmKind.Name, UUID: "vm-1", Status: running})
+			}
+
+			n := vmtest.Alive(vmtest.Node)
+			n.LastHeartbeatAt = later
+			_, err = nodes.Save(ctx, &n)
+			require.NoError(t, err)
+
+			require.NoError(t, workload.Reconcile.Execute(ctx))
+
+			bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
+			defer cancel()
+
+			_ = workload.Graphs.Reconcile(bounded, graph.Ref{Kind: stackKind.Name, UUID: "s-1"})
+
+			_, err = stored.GetOne(ctx, containerKind.Name, "c-web")
+			require.NoError(t, err, "the record of a container the restored disk holds is kept while its dockerd comes up again")
+
+			_, err = stored.GetOne(ctx, stackKind.Name, "s-1")
+			require.NoError(t, err, "and so is its stack")
+
+			// its dockerd up at last, and looked into again.
+			bridge, err := json.Marshal(map[string]any{"state": "present", "docker": map[string]any{"id": "n-bridge", "name": "bridge", "driver": "bridge"}})
+			require.NoError(t, err)
+
+			beat(later, kind.Observation{Kind: networkKind.Name, Owners: []kind.Reference{{Kind: vmKind.Name, UUID: "vm-1"}}, Status: bridge})
+			beat(later, web)
+
+			c, err := stored.GetOne(ctx, containerKind.Name, "c-web")
+			require.NoError(t, err)
+			assert.False(t, c.Reset, "the web server is found in the restored disk, under its uuid")
+		})
+	}
+}

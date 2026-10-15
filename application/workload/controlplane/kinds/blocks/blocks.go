@@ -343,8 +343,8 @@ func (b *Blocks) request(ctx context.Context, r kind.Raw, action string, payload
 // once its node has gone on as long saying what else its VMs hold, as every
 // heartbeat tells (Sightings.Heard). What it found labelled as the platform's
 // with no record, in the first look into a VM whose disk was just restored,
-// is taken in again instead; and that look is kept on the VM's record
-// (looked).
+// is taken in again instead; and that look is kept on the VM's record, as is
+// the first look into each run of it since (looked).
 func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.Observation, kept bool, at time.Time) error {
 	parent, in := ownerOf(instance.Owners, blockKinds.Parent)
 	if in {
@@ -433,19 +433,21 @@ func (b *Blocks) labelled(instance kind.Observation, sighted kind.Raw) bool {
 // platform's with no record is taken in again (adoptable). Every look into a
 // Docker VM says something of it that nobody keeps a record of, the networks
 // every dockerd has of its own among it, so that every first look is heard
-// of here. It is v as its record is once that is kept, the look another
-// control plane kept first among it. One written in the meantime is read
-// again, and one that is gone is let be.
+// of here.
+//
+// It keeps the first look into the run it is in, once it came up again since
+// it was first looked at after its restore (vmKind.Status.LookedAgainAt), the
+// same way: what its restore reset of what lives in it, and its stacks, are
+// judged by a look into the run it is in (vmKind.Status.Looked), which the
+// look into a run before, stopped right after it, says nothing of. Nothing is
+// taken in again by a look into a run after the first look's.
+//
+// It is v as its record is once that is kept, the look another control plane
+// kept first among it. One written in the meantime is read again, and one
+// that is gone is let be.
 func (b *Blocks) looked(ctx context.Context, v vmKind.VM, at time.Time) (vmKind.VM, error) {
-	if !unlooked(v, at) {
+	if len(lookOf(v, at)) == 0 {
 		return v, nil
-	}
-
-	look, err := json.Marshal(struct {
-		LookedAt time.Time `json:"looked_at"`
-	}{LookedAt: at})
-	if err != nil {
-		return v, err
 	}
 
 	for try := 1; ; try++ {
@@ -463,8 +465,14 @@ func (b *Blocks) looked(ctx context.Context, v vmKind.VM, at time.Time) (vmKind.
 
 		v = read
 
-		if !unlooked(v, at) {
+		field := lookOf(v, at)
+		if len(field) == 0 {
 			return v, nil
+		}
+
+		look, err := json.Marshal(map[string]time.Time{field: at})
+		if err != nil {
+			return v, err
 		}
 
 		if r.Status, err = resource.Merge(r.Status, look); err != nil {
@@ -475,9 +483,15 @@ func (b *Blocks) looked(ctx context.Context, v vmKind.VM, at time.Time) (vmKind.
 
 		switch {
 		case err == nil:
-			b.Logger.InfoContext(ctx, "looked into a vm whose disk was restored, since its restore", "vm", v.Metadata.UUID, "restored_at", v.Status.RestoredAt, "looked_at", at)
+			if field == lookedAt {
+				b.Logger.InfoContext(ctx, "looked into a vm whose disk was restored, since its restore", "vm", v.Metadata.UUID, "restored_at", v.Status.RestoredAt, "looked_at", at)
 
-			v.Status.LookedAt = at
+				v.Status.LookedAt = at
+			} else {
+				b.Logger.InfoContext(ctx, "looked into a vm whose disk was restored again, since it came up again", "vm", v.Metadata.UUID, "restored_at", v.Status.RestoredAt, "started_at", v.Status.StartedAt, "looked_again_at", at)
+
+				v.Status.LookedAgainAt = at
+			}
 
 			return v, nil
 		case errors.Is(err, domain.ErrNotExists):
@@ -486,6 +500,28 @@ func (b *Blocks) looked(ctx context.Context, v vmKind.VM, at time.Time) (vmKind.
 			return v, err
 		}
 	}
+}
+
+// The fields of a VM's status a look into it is kept in.
+const (
+	lookedAt      = "looked_at"
+	lookedAgainAt = "looked_again_at"
+)
+
+// lookOf is the field of v's status a look into it at a moment is kept in,
+// or nothing when it is not one to keep: the first one since its disk was
+// last restored (unlooked), kept in LookedAt; or, that one kept, the first
+// one in the run it is in once it came up again since (StartedAt), kept in
+// LookedAgainAt.
+func lookOf(v vmKind.VM, at time.Time) string {
+	switch {
+	case unlooked(v, at):
+		return lookedAt
+	case !v.Status.RestoredAt.IsZero() && v.Status.Looked().IsZero() && !at.Before(v.Status.RestoredAt) && !at.Before(v.Status.StartedAt):
+		return lookedAgainAt
+	}
+
+	return ""
 }
 
 // unlooked reports whether a look into v at a moment is the first one since

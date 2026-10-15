@@ -39,10 +39,10 @@ type Parents interface {
 	Down(ctx context.Context, parent kind.Reference) (kind.State, error)
 
 	// Looked is when what lives in parent was first looked into since the
-	// parent was last restored from a snapshot, none when it was not since,
-	// and whether parent says so at all: a Docker VM does
-	// (vmKind.Status.LookedAt). What lives in a parent that says nothing of
-	// it is judged as anything else is.
+	// parent was last restored from a snapshot, in the run of it since it
+	// last came up, none when it was not since, and whether parent says so
+	// at all: a Docker VM does (vmKind.Status.Looked). What lives in a parent
+	// that says nothing of it is judged as anything else is.
 	Looked(ctx context.Context, parent kind.Reference) (time.Time, bool, error)
 }
 
@@ -224,16 +224,20 @@ func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time,
 //   - inside a parent that is down, which its node cannot look inside, it
 //     waits on the parent, as parents say the parent is, and is never taken
 //     to be missing. With nobody to say what parents are doing, a parent is
-//     taken to be up;
+//     taken to be up. One its parent's restore reset waits all the same, but
+//     its wait is no word of it, and moves nothing of when it was last heard
+//     of: what the look into the restored parent said of it, heard late, as
+//     the parent was stopped right after the look, is taken still;
 //   - one whose parent was restored since it was last heard of is not on the
 //     disk the parent was given back, and is not made again but forgotten
 //     (kind.CascadeReset), once the restored parent was looked into since it
-//     was reset for that restore (Parents.Looked), and its node went on as
-//     long without a word of it since that look: its silence counts from the
-//     look, which decides what of it the restored disk holds, found there and
-//     kept, or not; before the look, its silence says nothing, however long
-//     the parent's dockerd takes to come up, and silence from before the
-//     restore says nothing of it either way;
+//     was reset for that restore, in the run of it since it last came up
+//     (Parents.Looked), and its node went on as long without a word of it
+//     since that look: its silence counts from the look, which decides what
+//     of it the restored disk holds, found there and kept, or not; before the
+//     look, its silence says nothing, however long the parent's dockerd takes
+//     to come up, after the restore or after a stop and a start, and silence
+//     from before the restore says nothing of it either way;
 //   - and anything else is missing from its node, inside its parent or
 //     inside none, as its kind's machine takes that.
 //
@@ -254,7 +258,12 @@ func (o *Observer) Unheard(ctx context.Context, d kind.Descriptor, r resource.Re
 		}
 
 		if len(down) > 0 {
-			return o.take(ctx, d, r.Metadata.Node, r, waitingOn(parent, down), at, unsaid)
+			from := unsaid
+			if r.Reset {
+				from = waits
+			}
+
+			return o.take(ctx, d, r.Metadata.Node, r, waitingOn(parent, down), at, from)
 		}
 	}
 
@@ -343,6 +352,14 @@ const (
 	// unsaid is what its node's silence about it says, which a word of it
 	// heard at the same moment, or later, breaks.
 	unsaid
+
+	// waits is what its parent's being down says of one its parent's
+	// restore reset, as unsaid does, but for when it was last heard of,
+	// which it moves nothing of: its parent stopped right after the look
+	// into it since the restore, the look's heartbeat of it, heard late, is
+	// what the restored disk holds of it, and is taken all the same. Saying
+	// nothing new, it writes nothing.
+	waits
 )
 
 // take is Take, of what came from wherever from says.
@@ -357,13 +374,30 @@ func (o *Observer) take(ctx context.Context, d kind.Descriptor, nodeName string,
 		// asked: what a node saw before a command reached it says nothing
 		// about where the command is taking it. Silence is broken by a word
 		// as late as itself.
-		if at.Before(recorded.ObservedAt) || (from == unsaid && !at.After(recorded.ObservedAt)) || (d.Machine.IsInFlight(recorded.State) && at.Before(recorded.Since)) {
+		if at.Before(recorded.ObservedAt) || ((from == unsaid || from == waits) && !at.After(recorded.ObservedAt)) || (d.Machine.IsInFlight(recorded.State) && at.Before(recorded.Since)) {
 			return nil
 		}
 
 		change, err := Observe(d, &r, status, at)
 		if err != nil {
 			return err
+		}
+
+		if from == waits {
+			waiting, err := r.Common()
+			if err != nil {
+				return err
+			}
+
+			waiting.ObservedAt = recorded.ObservedAt
+
+			if err := r.SetCommon(waiting); err != nil {
+				return err
+			}
+
+			if !change.Changed {
+				return nil
+			}
 		}
 
 		if change.Gone {

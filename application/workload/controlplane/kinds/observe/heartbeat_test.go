@@ -440,6 +440,41 @@ func TestObserver_Unheard(t *testing.T) {
 		assert.False(t, there, "the restored house does not have it")
 	})
 
+	t.Run("one its parent's restore reset waits on its parent that is down, but its wait is no word of it: a look into the restored parent heard late is taken all the same, and waiting again writes nothing", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+
+		r := kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later))
+		r.Reset = true
+		create(t, repository, r)
+
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithParents(parents{kindstest.House: "closed"}))
+
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, silence))
+
+		waiting, _ := stored(t, repository, "fan-uuid")
+		fan := kindstest.Typed(waiting)
+		assert.Equal(t, kind.Waiting, fan.Status.State)
+		assert.Equal(t, "its house is closed", fan.Status.Reason)
+		assert.Equal(t, silence, fan.Status.Since)
+		assert.Equal(t, later, fan.Status.ObservedAt, "its wait says nothing of when it was last heard of")
+		assert.True(t, waiting.Reset)
+
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), waiting, silence.Add(time.Minute)))
+
+		again, _ := stored(t, repository, "fan-uuid")
+		assert.Equal(t, waiting.Version, again.Version, "waiting again says nothing new, and writes nothing")
+
+		// the look into the restored house, as of a moment before it closed,
+		// heard late.
+		require.NoError(t, observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Second), instance(t, "fan-uuid", observed(kindstest.Stopped, 0))))
+
+		found, _ := stored(t, repository, "fan-uuid")
+		assert.False(t, found.Reset, "found in the restored house, as the look says")
+		assert.Equal(t, kindstest.Stopped, kindstest.Typed(found).Status.State)
+	})
+
 	t.Run("one whose restored parent says when what lives in it was looked into is forgotten only once its node went on without a word of it since that look", func(t *testing.T) {
 		t.Parallel()
 

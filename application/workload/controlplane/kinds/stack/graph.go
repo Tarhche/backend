@@ -687,10 +687,10 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 // Restored is what the restored Docker VM of the stack the record r is was
 // found to hold of it, once the VM's restore reset it (graph.ResetKind): what
 // the restored disk holds of the stack's containers, which is known once the
-// VM, running, was looked into since its restore, and was heard of for longer
-// than what lives in it may go unheard since (silence), so that every
-// heartbeat of that look has been heard, and what it found, or took in, is
-// kept:
+// VM, running, was looked into since its restore, in the run it is in
+// (vmKind.Status.Looked), and was heard of for longer than what lives in it
+// may go unheard since (silence), so that every heartbeat of that look has
+// been heard, and what it found, or took in, is kept:
 //
 //   - held, when a container of one of the services of its file it owns is
 //     no longer reset: one that look found in the restored disk, or one
@@ -719,7 +719,10 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 // its VM's restore reset until this says, but for a create on its way as the
 // restore landed, below. Nor is it known while its VM does
 // not run, restoring, stopped or failed: nothing in it can be heard of then,
-// and what lives in it waits on it, unheard and kept.
+// and what lives in it waits on it, unheard and kept; nor, once it came up
+// again, before it is looked into in the run it is in, a look into the run
+// before, stopped right after it, saying nothing of what its dockerd says in
+// this one.
 //
 // Nor is it known while its VM's record says a restore before the one the
 // stack was reset for, resetAt, the moment the VM's node says it carried that
@@ -772,7 +775,7 @@ func (g *Graph) Restored(ctx context.Context, r kind.Raw, resetAt time.Time) (gr
 		return graph.RestorationUnknown, err
 	}
 
-	switch looked := v.Status.LookedAt; {
+	switch looked := v.Status.Looked(); {
 	case v.Status.RestoredAt.Before(resetAt):
 		// the restore it was reset for is yet to be taken onto its VM's
 		// record, which says the one before, if any.

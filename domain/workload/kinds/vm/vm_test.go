@@ -489,3 +489,55 @@ func TestEntity(t *testing.T) {
 	v.Spec.Image = "docker:28-dind"
 	assert.Equal(t, vm.KindDocker, vmKind.Entity(v, "docker:29-dind").Kind, "a docker vm is one as its image says")
 }
+
+func TestStatus_Looked(t *testing.T) {
+	t.Parallel()
+
+	restoredAt := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	booted := restoredAt.Add(-time.Second)
+	looked := restoredAt.Add(time.Minute)
+	startedAgain := looked.Add(time.Minute)
+
+	for name, tt := range map[string]struct {
+		status vmKind.Status
+		looked time.Time
+	}{
+		"a vm never restored was looked into since by nothing": {
+			status: vmKind.Status{StartedAt: booted},
+		},
+		"one restored and not looked into since, by nothing": {
+			status: vmKind.Status{Restore: kind.Restore{RestoredAt: restoredAt}, StartedAt: booted},
+		},
+		"nor one looked into only before its restore": {
+			status: vmKind.Status{Restore: kind.Restore{RestoredAt: restoredAt}, StartedAt: booted, LookedAt: restoredAt.Add(-time.Minute)},
+		},
+		"one looked into since, in the run its restore booted, at its first look": {
+			status: vmKind.Status{Restore: kind.Restore{RestoredAt: restoredAt}, StartedAt: booted, LookedAt: looked},
+			looked: looked,
+		},
+		"but not once it came up again since that look, before it is looked into again": {
+			status: vmKind.Status{Restore: kind.Restore{RestoredAt: restoredAt}, StartedAt: startedAgain, LookedAt: looked},
+		},
+		"nor at a look into the run before that": {
+			status: vmKind.Status{Restore: kind.Restore{RestoredAt: restoredAt}, StartedAt: startedAgain.Add(time.Hour), LookedAt: looked, LookedAgainAt: startedAgain.Add(time.Second)},
+		},
+		"and at the first look into the run it is in, once it is looked into again": {
+			status: vmKind.Status{Restore: kind.Restore{RestoredAt: restoredAt}, StartedAt: startedAgain, LookedAt: looked, LookedAgainAt: startedAgain.Add(time.Second)},
+			looked: startedAgain.Add(time.Second),
+		},
+		"and at its first look since its restore, when it came up again before it": {
+			status: vmKind.Status{Restore: kind.Restore{RestoredAt: restoredAt}, StartedAt: startedAgain, LookedAt: startedAgain.Add(time.Second)},
+			looked: startedAgain.Add(time.Second),
+		},
+		"a look again from before its last restore is none since": {
+			status: vmKind.Status{Restore: kind.Restore{RestoredAt: restoredAt}, StartedAt: booted, LookedAt: restoredAt.Add(-time.Hour), LookedAgainAt: restoredAt.Add(-time.Minute)},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tt.status.Looked()
+			assert.True(t, tt.looked.Equal(got), "%s", got)
+		})
+	}
+}

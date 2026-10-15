@@ -287,6 +287,35 @@ type Status struct {
 	// to be missing from the restored disk until it was looked into, a
 	// stack's containers among it, however long its dockerd takes to come up.
 	LookedAt time.Time `json:"looked_at,omitzero"`
+
+	// LookedAgainAt is when what lives in it was first looked at in the run
+	// it is in, once it came up again (StartedAt) since it was first looked
+	// at after its restore: set as LookedAt is, and only once the run it was
+	// looked at in is not the one it is in. A look into a run before says
+	// nothing of what its dockerd says in this one, which may take minutes to
+	// say anything once it is up again (Looked).
+	LookedAgainAt time.Time `json:"looked_again_at,omitzero"`
+}
+
+// Looked is when what lives in the VM was first looked at since its disk was
+// last restored, in the run it is in, as its record keeps it (LookedAt, and
+// LookedAgainAt once it came up again since), or none when it was not: a
+// look before its last restore says nothing of the disk it holds now, nor
+// one before it last came up of what its dockerd says since. What its
+// restore reset of what lives in it, which goes unheard, is not taken to be
+// missing from the restored disk until it was looked at in the run it is
+// in, however long its dockerd takes to come up after a stop and a start.
+func (s Status) Looked() time.Time {
+	looked := s.LookedAt
+	if s.LookedAgainAt.After(looked) {
+		looked = s.LookedAgainAt
+	}
+
+	if looked.Before(s.RestoredAt) || looked.Before(s.StartedAt) {
+		return time.Time{}
+	}
+
+	return looked
 }
 
 // Stats is one sample of what a VM uses.

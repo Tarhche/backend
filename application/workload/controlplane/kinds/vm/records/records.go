@@ -107,9 +107,11 @@ func (r *Records) Down(ctx context.Context, parent kind.Reference) (kind.State, 
 }
 
 // Looked is when what lives in a Docker VM was first looked into since its
-// disk was last restored, none when it was not since, as its record keeps it
-// (vmKind.Status.LookedAt): a look before its last restore is none. A VM that
-// is gone, and a parent that is not a VM, say nothing of it.
+// disk was last restored, in the run it is in, none when it was not since,
+// as its record keeps it (vmKind.Status.Looked): a look before its last
+// restore is none, and so is one before it last came up, its dockerd yet to
+// say anything in this run. A VM that is gone, and a parent that is not a
+// VM, say nothing of it.
 func (r *Records) Looked(ctx context.Context, parent kind.Reference) (time.Time, bool, error) {
 	if parent.Kind != vmKind.Name {
 		return time.Time{}, false, nil
@@ -121,11 +123,9 @@ func (r *Records) Looked(ctx context.Context, parent kind.Reference) (time.Time,
 		return time.Time{}, false, nil
 	case err != nil:
 		return time.Time{}, false, err
-	case v.Status.LookedAt.Before(v.Status.RestoredAt):
-		return time.Time{}, true, nil
 	}
 
-	return v.Status.LookedAt, true, nil
+	return v.Status.Looked(), true, nil
 }
 
 // Going reports whether a VM is on its way out: being deleted, or expected

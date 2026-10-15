@@ -160,6 +160,17 @@ func TestRecords_Looked(t *testing.T) {
 			v.Status.RestoredAt = restoredAt
 			v.Status.LookedAt = restoredAt.Add(-time.Minute)
 		}),
+		vmtest.In(vmtest.Docker("started-again", "owner"), func(v *vmKind.VM) {
+			v.Status.RestoredAt = restoredAt
+			v.Status.LookedAt = looked
+			v.Status.StartedAt = looked.Add(time.Minute)
+		}),
+		vmtest.In(vmtest.Docker("looked-into-again", "owner"), func(v *vmKind.VM) {
+			v.Status.RestoredAt = restoredAt
+			v.Status.LookedAt = looked
+			v.Status.StartedAt = looked.Add(time.Minute)
+			v.Status.LookedAgainAt = looked.Add(2 * time.Minute)
+		}),
 	)
 
 	for name, tt := range map[string]struct {
@@ -171,6 +182,8 @@ func TestRecords_Looked(t *testing.T) {
 		"and none when it was not since":                                          {parent: kind.Reference{Kind: vmKind.Name, UUID: "not-looked-into"}, says: true},
 		"nor when it was looked into only before its restore":                     {parent: kind.Reference{Kind: vmKind.Name, UUID: "looked-into-before"}, says: true},
 		"or when it was never restored":                                           {parent: kind.Reference{Kind: vmKind.Name, UUID: "never-restored"}, says: true},
+		"nor once it came up again since, before it is looked into again":         {parent: kind.Reference{Kind: vmKind.Name, UUID: "started-again"}, says: true},
+		"and at the look into the run it is in, once it is":                       {parent: kind.Reference{Kind: vmKind.Name, UUID: "looked-into-again"}, looked: looked.Add(2 * time.Minute), says: true},
 		"one that is gone says nothing: it is gone":                               {parent: kind.Reference{Kind: vmKind.Name, UUID: "gone"}},
 		"a parent that is not a vm is not for it to say":                          {parent: kind.Reference{Kind: stackKind.Name, UUID: "looked-into"}},
 	} {

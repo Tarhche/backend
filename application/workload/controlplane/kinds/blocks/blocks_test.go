@@ -554,6 +554,46 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.True(t, v.Status.LookedAt.Equal(at))
 	})
 
+	t.Run("one that came up again since it was first looked into is looked into again in the run it is in, which takes nothing in, nor does a heartbeat of the run before heard late", func(t *testing.T) {
+		t.Parallel()
+
+		// looked into a minute after its restore, stopped, and started again
+		// a minute before at, its dockerd yet to say anything since.
+		restoredAt := at.Add(-time.Hour)
+		looked := restoredAt.Add(time.Minute)
+		startedAgain := at.Add(-time.Minute)
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+			v.Status.RestoredAt = restoredAt
+			v.Status.LookedAt = looked
+			v.Status.StartedAt = startedAgain
+		})))
+
+		web := seen(t, "made-before-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "made-before-the-snapshot")})
+
+		// a heartbeat of the run before, heard late.
+		witnessed(t, w, startedAgain.Add(-time.Second), web)
+
+		v, _ := w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAgainAt.IsZero(), "what its dockerd said in the run before says nothing of this one")
+		assert.True(t, v.Status.Looked().IsZero())
+
+		witnessed(t, w, at, web)
+
+		v, _ = w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAgainAt.Equal(at), "looked into again as of the beat that first said what it holds in this run: %s", v.Status.LookedAgainAt)
+		assert.True(t, v.Status.LookedAt.Equal(looked), "its first look since its restore kept")
+		assert.True(t, v.Status.Looked().Equal(at))
+
+		witnessed(t, w, at.Add(time.Second), web)
+
+		v, _ = w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAgainAt.Equal(at), "the first look into the run is kept, and no later one")
+
+		_, kept := w.Kept(containerKind.Name, "made-before-the-snapshot")
+		assert.False(t, kept, "and nothing is taken in by a look but the first one since its restore")
+	})
+
 	t.Run("and a look into a vm never restored writes nothing of it", func(t *testing.T) {
 		t.Parallel()
 
