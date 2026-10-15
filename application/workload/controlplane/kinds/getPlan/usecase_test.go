@@ -125,7 +125,6 @@ func TestUseCase_Execute(t *testing.T) {
 
 		assert.Empty(t, response.Executions)
 		assert.Nil(t, response.Lease)
-		assert.Equal(t, int64(1), response.Generation, "a record kept before generations is at its first")
 	})
 
 	for name, tt := range map[string]struct {

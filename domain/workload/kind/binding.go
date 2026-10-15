@@ -289,8 +289,7 @@ func (b *controlPlaneBinding[Spec, Status]) Prepare(ctx context.Context, r Raw, 
 
 // respecified is r as a strategy left it, one generation on from the one it
 // was handed at when its spec is not what it was, as its kind writes a spec:
-// a VM updated, a container put on a network. A resource kept before
-// generations was at its first.
+// a VM updated, a container put on a network.
 func respecified[Spec, Status any](r Resource[Spec, Status], was json.RawMessage, generation int64) (Resource[Spec, Status], error) {
 	spec, err := json.Marshal(r.Spec)
 	if err != nil {
@@ -298,7 +297,7 @@ func respecified[Spec, Status any](r Resource[Spec, Status], was json.RawMessage
 	}
 
 	if !bytes.Equal(spec, was) {
-		r.Metadata.Generation = max(generation, 1) + 1
+		r.Metadata.Generation = generation + 1
 	}
 
 	return r, nil

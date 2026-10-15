@@ -227,19 +227,6 @@ func TestControlPlaneBinding(t *testing.T) {
 			assert.Equal(t, "box", typed.Kind)
 		})
 	}
-
-	t.Run("one kept before generations was at its first, whose change makes it its second", func(t *testing.T) {
-		t.Parallel()
-
-		applied, _, err := bound().Apply(context.Background(), rawBox(t, func(r *Resource[boxSpec, boxStatus]) {
-			r.Metadata.Generation = 0
-		}), "resize", []byte(`{"size": 3}`))
-		require.NoError(t, err)
-
-		typed, err := Decode[boxSpec, boxStatus](applied)
-		require.NoError(t, err)
-		assert.Equal(t, int64(2), typed.Metadata.Generation)
-	})
 }
 
 // aCommand is a box's command, asked of node-1.

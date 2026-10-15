@@ -257,8 +257,8 @@ func New(dependencies Dependencies, config Config) (*Reconciler, error) {
 // kind says it needs (graph.RootKind.Root), and carried out while its lease
 // is renewed every third of its time: removed when it was asked to be
 // deleted, a delete cut short taken up where it stopped, and applied at its
-// record's generation otherwise, a record kept before generations at its
-// first; one asked to be deleted whose graph cannot be planned is removed
+// record's generation otherwise; one asked to be deleted whose graph cannot
+// be planned is removed
 // through what its records say it owns, under its lease all the same; and a
 // lease lost meanwhile, which another control plane took once it lapsed,
 // stops the run.
@@ -435,8 +435,7 @@ func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.R
 		return unplanned(fmt.Errorf("its graph cannot be planned: %w", err))
 	}
 
-	// a record kept before generations is at its first.
-	generation := max(rec.Metadata.Generation, 1)
+	generation := rec.Metadata.Generation
 
 	var outcome execute.Outcome
 
@@ -461,7 +460,7 @@ func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.R
 			r.logger.InfoContext(ctx, "forgetting a root that went while its plan ran, its lease and how its plan went", "kind", root.Kind, "uuid", root.UUID)
 
 			return graph.Ended{}, true, nil
-		case max(read.Metadata.Generation, 1) != generation:
+		case read.Metadata.Generation != generation:
 			r.Enqueue(root)
 		}
 	}
@@ -520,7 +519,7 @@ func (r *Reconciler) wanted(root graph.Ref, generation int64) func(ctx context.C
 			return &graph.Waiting{Reason: "its root is gone"}
 		case going(rec):
 			return &graph.Waiting{Reason: "its root was asked to go"}
-		case max(rec.Metadata.Generation, 1) != generation:
+		case rec.Metadata.Generation != generation:
 			return &graph.Waiting{Reason: "its root was changed since its plan was made, which is made again"}
 		case rec.Reset && r.resets(root.Kind):
 			return &graph.Waiting{Reason: fmt.Sprintf("its root's %s was restored, and what the restored %s holds of its root is yet to be known", r.parentOf(root.Kind), r.parentOf(root.Kind))}

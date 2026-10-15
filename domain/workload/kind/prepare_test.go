@@ -140,10 +140,6 @@ func TestControlPlaneBinding_Prepare(t *testing.T) {
 			box:        func(r *Resource[boxSpec, boxStatus]) { r.Spec.Stickers = map[string]string{"fragile": "yes"} },
 			generation: 2,
 		},
-		"one kept before generations was at its first": {
-			box:        func(r *Resource[boxSpec, boxStatus]) { r.Spec.Size, r.Metadata.Generation = 0, 0 },
-			generation: 2,
-		},
 		"and one whose spec it leaves as it was is the generation it was": {
 			box:        func(r *Resource[boxSpec, boxStatus]) { r.Metadata.Node, r.Metadata.Generation = "", 3 },
 			generation: 3,

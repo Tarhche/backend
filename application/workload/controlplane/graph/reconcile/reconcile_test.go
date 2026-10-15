@@ -248,31 +248,20 @@ func TestReconciler_Reconcile(t *testing.T) {
 		assert.Empty(t, f.kept(t, web), "and so is how its plan went")
 	})
 
-	t.Run("a root is carried out at its record's generation, one kept before generations at its first", func(t *testing.T) {
+	t.Run("a root is carried out at its record's generation", func(t *testing.T) {
 		t.Parallel()
 
-		api := graph.ID(containerKind.Name, "api")
-
 		kinds := container()
-		kinds.Require(api, requirement(vm))
-		kinds.Hold(vm, network, volume, web, api)
+		kinds.Hold(vm, network, volume, web)
 
-		f := newFixture(t, kinds,
-			root(func(m *kind.Metadata) { m.Generation = 3 }),
-			record(refOf(api), []graph.Ref{refOf(vm)}, nil, func(m *kind.Metadata) { m.Generation = 0 }),
-		)
+		f := newFixture(t, kinds, root(func(m *kind.Metadata) { m.Generation = 3 }))
 
 		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
 
 		require.NoError(t, r.Reconcile(ctx, refOf(web)))
-		require.NoError(t, r.Reconcile(ctx, refOf(api)))
 
 		for _, e := range f.kept(t, web) {
 			assert.Equal(t, int64(3), e.Generation, "%s", e.Node)
-		}
-
-		for _, e := range f.kept(t, api) {
-			assert.Equal(t, int64(1), e.Generation, "%s", e.Node)
 		}
 	})
 

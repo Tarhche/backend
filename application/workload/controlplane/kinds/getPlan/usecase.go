@@ -66,7 +66,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	response := &Response{
 		Root:       graph.Ref{Kind: r.Kind, UUID: r.Metadata.UUID},
-		Generation: max(r.Metadata.Generation, 1),
+		Generation: r.Metadata.Generation,
 		Executions: executions,
 	}
 

@@ -775,7 +775,7 @@ func TestRoutes(t *testing.T) {
 		root := graph.Ref{Kind: kindstest.Kind, UUID: "web"}
 
 		a := newAPIWith(t, &graphtest.Told{})
-		a.keep(t, kindstest.AFan("web", kindstest.Running, kindstest.Running))
+		a.keep(t, kindstest.AFan("web", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) { f.Metadata.Generation = 1 }))
 		a.keep(t, kindstest.AFan("owned", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
 			f.Metadata.Owners = []kind.Reference{root}
 		}))

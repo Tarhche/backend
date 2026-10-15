@@ -144,8 +144,7 @@ type Metadata struct {
 	ExpiresAt time.Time     `json:"expires_at,omitzero"`
 
 	// Generation counts the specs it has had: 1 once it is admitted, and one
-	// more each time its spec changes since. A record kept before
-	// generations has none, which is read as its first.
+	// more each time its spec changes since.
 	Generation int64 `json:"generation,omitempty"`
 
 	// DeletionRequestedAt is when it was first asked to be deleted, and
