@@ -18,7 +18,9 @@
 // decides what it holds, as for any restore. And it is taken
 // whatever its resource was asked since, for as long as the resource's record
 // says an earlier restore, by the record it was sent from alone, which keeps
-// the restores sent to it until they are taken (resource.Record.Restores): a
+// the restores sent to it until what came of them is heard, taken or not
+// (resource.Record.Restores), and of tries whose results are never heard, as
+// many as a command is remembered by (dispatch's restoring): a
 // resource whose node went quiet while it was being restored, failed as lost,
 // waits on nothing any more, but its disk was replaced all the same, and what
 // lives in it, reset when the result was first heard, waits for its record to
@@ -219,21 +221,23 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 
 		// a restore its resource waits on no more is taken all the same,
 		// while its record says an earlier one, by the record it was sent
-		// from alone: one made again under its uuid since never was.
-		late := false
+		// from alone: one made again under its uuid since never was. Its id
+		// is let go of whatever came of it, failed, or of a restore before
+		// the one the record says, taken or not.
+		late, takes := false, restores
 
 		change, err := observe.Answer(d, &r, result, at)
 		switch {
-		case errors.Is(err, observe.ErrNotWaitedOn) && restores && slices.Contains(r.Restores, result.ID):
-			taken, err := took(&r, restored)
-			switch {
-			case err != nil:
-				return fmt.Errorf("%w: %w", errNotTaken, err)
-			case !taken:
-				return nil
+		case errors.Is(err, observe.ErrNotWaitedOn) && slices.Contains(r.Restores, result.ID):
+			late = true
+
+			if takes {
+				if takes, err = took(&r, restored); err != nil {
+					return fmt.Errorf("%w: %w", errNotTaken, err)
+				}
 			}
 
-			late, change = true, observe.Change{Changed: true}
+			change = observe.Change{Changed: takes}
 		case errors.Is(err, observe.ErrNotWaitedOn):
 			return nil
 		case err != nil:
@@ -255,7 +259,7 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 
 		// what lives in one on its way out goes with it: its restore is
 		// taken onto its record, and nothing in it is reset.
-		if restores && h.restorer != nil && !(late && going(after, r)) {
+		if takes && h.restorer != nil && !(late && going(after, r)) {
 			if err := h.restorer.Restored(ctx, kind.Reference{Kind: d.Name, UUID: r.Metadata.UUID}, restored.RestoredAt); err != nil {
 				return err
 			}
@@ -276,7 +280,7 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 		_, err = h.resources.Update(ctx, r)
 		switch {
 		case err == nil:
-			if late || after.State != before.State || (!result.OK && result.Action == createAction) {
+			if (late && takes) || after.State != before.State || (!result.OK && result.Action == createAction) {
 				h.changed(ctx, r)
 			}
 

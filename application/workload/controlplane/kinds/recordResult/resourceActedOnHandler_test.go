@@ -550,6 +550,45 @@ func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 		assert.Len(t, told.restored, 1)
 	})
 
+	t.Run("and one its resource waits on no more that failed, or is of a restore before the one its record says, takes nothing, and resets nothing, but lets go of its id", func(t *testing.T) {
+		t.Parallel()
+
+		for name, heard := range map[string]kind.ResourceActedOn{
+			"failed": func() kind.ResourceActedOn {
+				failed := saying(t, restoredAt)
+				failed.OK, failed.Status, failed.Reason = false, nil, "the archive is from another engine"
+
+				return failed
+			}(),
+			"of a restore before the one its record says": saying(t, restoredAt.Add(-time.Hour)),
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				// waiting on nothing any more, its record says a restore,
+				// and keeps the id of another try at one.
+				fan := kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running)
+
+				var err error
+				fan.Status, err = resource.WithRestore(fan.Status, kind.Restore{RestoredAt: restoredAt})
+				require.NoError(t, err)
+
+				fan.Restores = []string{"command-0", "command-1"}
+
+				told := &restorer{}
+				f := restoring(t, told, fan)
+
+				require.NoError(t, f.handler.Handle(ctx, message(t, heard)))
+
+				r, _ := f.stored(t, "fan-uuid")
+				assert.Equal(t, []string{"command-0"}, r.Restores, "its id let go of")
+				assert.True(t, restoreOf(t, r).Equal(restoredAt), "the restore its record says, as it was")
+				assert.Equal(t, kindstest.Running, kindstest.Typed(r).Status.State)
+				assert.Empty(t, told.restored)
+			})
+		}
+	})
+
 	t.Run("what could not be reset is asked for again, and the result is not taken until it is", func(t *testing.T) {
 		t.Parallel()
 
