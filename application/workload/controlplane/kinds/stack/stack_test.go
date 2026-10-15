@@ -294,21 +294,24 @@ func TestStacks_Admit(t *testing.T) {
 // decoded strictly.
 //
 // It runs alone, not in parallel, since what other tests allocated meanwhile
-// would be counted with what admitting it does; and what it is held to is
-// more than twice what the densest file takes, about 54 MiB, and a third
-// more than what the one with comments takes, about 93 MiB, so that neither
-// fails of what it is measured beside.
+// would be counted with what admitting it does; and what each is held to is
+// more than twice what the densest file takes, about 54 MiB, and a quarter
+// more than what the one with comments takes, about 252 MiB, so that
+// neither fails of what it is measured beside.
 func TestStacks_Admit_densest(t *testing.T) {
 	const megabyte = 1 << 20
 
-	for name, compose := range map[string]string{
-		"the densest file":                   densest(),
-		"and the same with as many comments": commented(densest()),
+	for name, tt := range map[string]struct {
+		compose string
+		most    uint64
+	}{
+		"the densest file":                   {compose: densest(), most: 128 * megabyte},
+		"and the same with as many comments": {compose: commented(densest()), most: 320 * megabyte},
 	} {
 		t.Run(name, func(t *testing.T) {
-			require.LessOrEqual(t, len(compose), stackKind.MaxFile)
+			require.LessOrEqual(t, len(tt.compose), stackKind.MaxFile)
 
-			file, invalid := stackKind.Parse(compose)
+			file, invalid := stackKind.Parse(tt.compose)
 			require.Empty(t, invalid)
 
 			references := 0
@@ -327,7 +330,7 @@ func TestStacks_Admit_densest(t *testing.T) {
 			g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
 			s := asked("dense", stackKind.VMChoice{UUID: "01"})
-			s.Spec.Compose = compose
+			s.Spec.Compose = tt.compose
 
 			var before, after runtime.MemStats
 
@@ -342,7 +345,7 @@ func TestStacks_Admit_densest(t *testing.T) {
 			require.Empty(t, invalid, "it is taken")
 
 			allocated := after.TotalAlloc - before.TotalAlloc
-			assert.Less(t, allocated, uint64(128*megabyte), "%d MiB allocated admitting it", allocated/megabyte)
+			assert.Less(t, allocated, tt.most, "%d MiB allocated admitting it", allocated/megabyte)
 		})
 	}
 }

@@ -21,14 +21,20 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
-// MaxFile is the most a stack's file may be, in bytes: 64 KiB, three times
-// as much as a compose file of nineteen services, healthchecks and all, says.
-// It is what bounds what YAML takes to read a file into nodes, which nothing
-// else of it bounds, since YAML reads all of it before anything else does:
-// as much as a file of comments in columns that alternate, of words of one
-// letter each in a list, or of keys of one letter each in braces costs,
-// tens of megabytes at 64 KiB, is four times as much at 256 KiB.
-const MaxFile = 64 << 10
+// MaxFile is the most a stack's file may be, in bytes: 256 KiB, fourteen
+// times as much as a compose file of nineteen services, healthchecks and
+// all, says. It is what bounds what YAML takes to read a file into nodes,
+// which nothing else of it bounds, since YAML reads all of it before
+// anything else does, about as much for each byte of it. The costliest file
+// a review found, of comment lines in columns that alternate, takes 198 MB
+// to read, 61 MB of it held at once, in 23 ms; one of keys of one letter
+// each in braces, refused, 97 MB, 79 MB at once, in 56 ms; and admitting
+// the densest graph a file may say with as many of those comments as fit,
+// which reads it and plans its graph, 253 MB, 75 MB at once, in 60 ms, and
+// with as many words of one letter instead, 114 MB in 98 ms. A file is read
+// again at every reconcile, preview and read of what depends on it, on each
+// control plane.
+const MaxFile = 256 << 10
 
 // The most a stack's file may say of each thing, so that what reading it, and
 // planning and carrying out what it says, takes is bounded by these, as what
