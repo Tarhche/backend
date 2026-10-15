@@ -616,13 +616,32 @@ func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instan
 }
 
 // hearAgain is err as what a heartbeat is to be heard again for
-// (kind.ErrHearAgain), and nothing for nothing.
+// (kind.ErrHearAgain), and nothing for nothing: what the database answered,
+// or did not, which may go another way heard again. What cannot be read or
+// written (unreadable) is not, as it is however often it is heard, and it is
+// let go of, as anything else a heartbeat could not do is.
 func hearAgain(err error) error {
-	if err == nil {
-		return nil
+	if err == nil || unreadable(err) {
+		return err
 	}
 
 	return fmt.Errorf("%w: %w", kind.ErrHearAgain, err)
+}
+
+// unreadable reports whether err is something that could not be read or
+// written as it is: a status, or a record, that is not what its kind's says
+// it is, whose JSON is not, or one of a kind that is none of it.
+func unreadable(err error) bool {
+	var (
+		syntax      *json.SyntaxError
+		typed       *json.UnmarshalTypeError
+		unsupported *json.UnsupportedTypeError
+		value       *json.UnsupportedValueError
+		marshaler   *json.MarshalerError
+	)
+
+	return errors.As(err, &syntax) || errors.As(err, &typed) || errors.As(err, &unsupported) || errors.As(err, &value) || errors.As(err, &marshaler) ||
+		errors.Is(err, kind.ErrInvalidPayload) || errors.Is(err, kind.ErrUnknownKind)
 }
 
 // orphaned forgets the record of what was just taken in, by its uuid, as

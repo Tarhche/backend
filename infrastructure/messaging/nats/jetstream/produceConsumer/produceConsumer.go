@@ -2,6 +2,7 @@ package produceConsumer
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -186,7 +187,8 @@ func (m *produceConsumer) consumeFunc(handler domain.MessageHandler) func(msg je
 }
 
 // handle handles one message, and acknowledges it once its handler is done
-// with it, or asks for it again when its handler failed.
+// with it, or asks for it again when its handler failed: at once, or once as
+// long as the handler asked for has passed (domain.Later).
 func (m *produceConsumer) handle(handler domain.MessageHandler, msg jetstream.Msg) {
 	// the producer's span context arrives in the traceparent header; the
 	// message is processed as a trace of its own that links back to the
@@ -210,6 +212,15 @@ func (m *produceConsumer) handle(handler domain.MessageHandler, msg jetstream.Ms
 
 	if err := trace.RecordError(span, err); err != nil {
 		m.logger.Error("consume error", "error", err, "subject", string(msg.Subject()))
+
+		var later *domain.Later
+		if errors.As(err, &later) && later.After > 0 {
+			if err := msg.NakWithDelay(later.After); err != nil {
+				m.logger.Error("nak error", "error", err)
+			}
+
+			return
+		}
 
 		if err := msg.Nak(); err != nil {
 			m.logger.Error("nak error", "error", err)

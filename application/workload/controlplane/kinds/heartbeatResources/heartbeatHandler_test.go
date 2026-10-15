@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/heartbeatResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
@@ -201,7 +202,7 @@ func TestHeartbeatHandler_Handle_hearAgain(t *testing.T) {
 		"and so is one that could not be, which the next beat says again": {
 			failure: errors.New("the database is gone"),
 		},
-		"but one to be heard again is failed, and heard again": {
+		"but one to be heard again is failed, and heard again a moment later": {
 			failure: fmt.Errorf("%w: the database is gone", kind.ErrHearAgain),
 			failed:  true,
 		},
@@ -218,6 +219,10 @@ func TestHeartbeatHandler_Handle_hearAgain(t *testing.T) {
 
 			if tt.failed {
 				assert.ErrorIs(t, err, kind.ErrHearAgain)
+
+				var later *domain.Later
+				require.ErrorAs(t, err, &later, "a moment later, not at once")
+				assert.Positive(t, later.After)
 
 				return
 			}

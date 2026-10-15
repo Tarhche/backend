@@ -11,9 +11,11 @@
 //
 // A heartbeat is failed only when what it says is to be heard again
 // (kind.ErrHearAgain): the first look into a restored parent, which no later
-// beat says again. Any other is let go of once it is handed on, since the
-// next beat says it all again; and one that cannot be read, or that names no
-// node or no kind, is let go of as it is.
+// beat says again. It is heard again a moment later (hearAgainAfter), not at
+// once, what it was failed on, the database, likely to take a moment to come
+// back. Any other is let go of once it is handed on, since the next beat says
+// it all again; and one that cannot be read, or that names no node or no
+// kind, is let go of as it is.
 package heartbeatResources
 
 import (
@@ -25,6 +27,13 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
+
+// hearAgainAfter is how long a heartbeat failed to be heard again waits to
+// be: soon enough that what the first look into a restored parent found is
+// taken in well within the half minute a restored parent's stacks are
+// decided in, and late enough that a database gone for a moment is not asked
+// again as fast as a message can be handed over.
+const hearAgainAfter = 2 * time.Second
 
 // Observer writes down what a node's heartbeat at a moment says of one
 // instance it holds. It fails nothing, the next beat saying it all again, but
@@ -69,6 +78,10 @@ func (h *HeartbeatHandler) Handle(ctx context.Context, data []byte) error {
 		at = time.Now()
 	}
 
-	// what is to be heard again is asked for again.
-	return h.observer.Heartbeat(ctx, heartbeat.Node, at, heartbeat.Observed)
+	// what is to be heard again is asked for again, a moment later.
+	if err := h.observer.Heartbeat(ctx, heartbeat.Node, at, heartbeat.Observed); err != nil {
+		return &domain.Later{Err: err, After: hearAgainAfter}
+	}
+
+	return nil
 }

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"time"
 )
 
 // Request reflects a request from the client to the server
@@ -55,6 +56,25 @@ type Replyer interface {
 // publish/subscribe interfaces
 type MessageHandler interface {
 	Handle(ctx context.Context, payload []byte) error
+}
+
+// Later is what a handler fails a message with to have it handed over again
+// once After has passed, rather than at once, as any other failure is: what
+// it failed on may take a moment to clear, the database gone for a moment
+// say, and handed over again at once, as often as it can be, the message
+// would only fail again. A consumer that cannot wait hands it over again as
+// it would any other.
+type Later struct {
+	Err   error
+	After time.Duration
+}
+
+func (l *Later) Error() string {
+	return l.Err.Error()
+}
+
+func (l *Later) Unwrap() error {
+	return l.Err
 }
 
 type MessageHandlerFunc func(ctx context.Context, payload []byte) error

@@ -494,6 +494,30 @@ func TestBlocks_Witnessed(t *testing.T) {
 		}
 	})
 
+	t.Run("but what the first look's heartbeat could not read is said, and not to be heard again, as it is however often it is heard", func(t *testing.T) {
+		t.Parallel()
+
+		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
+		w := blockstest.New(vmtest.WithVMs(restored))
+
+		// a stack whose record says its file is a number.
+		_, err := w.Memory.Create(ctx, resource.Record{Raw: kind.Raw{
+			Kind:     stackKind.Name,
+			Metadata: kind.Metadata{UUID: "stack-uuid", Name: "shop", Slug: "shop-abcde", OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+			Spec:     json.RawMessage(`{"vm":{"uuid":"vm-1"},"compose":1}`),
+			Status:   json.RawMessage(`{"state":"running","expected":"running"}`),
+		}})
+		require.NoError(t, err)
+
+		labels := labelled(t, "from-the-snapshot")
+		labels[stackKind.LabelStack] = "stack-uuid"
+		labels[stackKind.LabelService] = "web"
+
+		err = w.Containers.Witnessed(ctx, vmtest.Node, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "shop-abcde_web", State: "running", Labels: labels}), false, at)
+		require.Error(t, err, "said")
+		assert.NotErrorIs(t, err, kind.ErrHearAgain)
+	})
+
 	t.Run("but what a heartbeat of a later beat could not do is said, and not to be heard again", func(t *testing.T) {
 		t.Parallel()
 

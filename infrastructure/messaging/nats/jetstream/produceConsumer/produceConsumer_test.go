@@ -2,7 +2,9 @@ package produceConsumer
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -117,4 +119,71 @@ func TestProduceConsumer_Options(t *testing.T) {
 
 		assert.Equal(t, int32(1), deliveries.Load())
 	})
+}
+
+// TestProduceConsumer_failed holds a message its handler failed to being
+// handed over again: at once, or once as long as the handler asked for has
+// passed (domain.Later).
+func TestProduceConsumer_failed(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		failure error
+		after   time.Duration
+	}{
+		"at once, for a failure that asks nothing of when": {failure: errors.New("the database is gone")},
+		"and once its handler's while has passed, for one that asks for it later": {
+			failure: &domain.Later{Err: errors.New("the database is gone"), After: 700 * time.Millisecond},
+			after:   700 * time.Millisecond,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			pc, err := NewProduceConsumer(jetStream(t), "node-1", slog.New(slog.DiscardHandler))
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithCancel(t.Context())
+			defer func() {
+				cancel()
+				pc.Wait()
+			}()
+
+			var (
+				lock       sync.Mutex
+				deliveries []time.Time
+			)
+
+			require.NoError(t, pc.Consume(ctx, "workloadFailed", domain.MessageHandlerFunc(func(context.Context, []byte) error {
+				lock.Lock()
+				defer lock.Unlock()
+
+				deliveries = append(deliveries, time.Now())
+				if len(deliveries) == 1 {
+					return tt.failure
+				}
+
+				return nil
+			})))
+
+			require.NoError(t, pc.Produce(t.Context(), "workloadFailed", []byte("{}")))
+
+			require.Eventually(t, func() bool {
+				lock.Lock()
+				defer lock.Unlock()
+
+				return len(deliveries) >= 2
+			}, 10*time.Second, 10*time.Millisecond, "handed over again")
+
+			lock.Lock()
+			defer lock.Unlock()
+
+			waited := deliveries[1].Sub(deliveries[0])
+			if tt.after > 0 {
+				assert.GreaterOrEqual(t, waited, tt.after-50*time.Millisecond, "not before its while has passed")
+			} else {
+				assert.Less(t, waited, 500*time.Millisecond, "at once")
+			}
+		})
+	}
 }
