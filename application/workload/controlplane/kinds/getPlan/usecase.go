@@ -6,7 +6,11 @@
 // generation of its root forgets the nodes its plan no longer has once it has
 // saved every node of its own (graph.Executions.DeleteBefore), and one that
 // saved only part of it before it stopped leaves the rest as the run before
-// left them, which are its plan's nodes still. What is no root, of a kind
+// left them, which are its plan's nodes still. So may the plan say nodes of
+// two generations for a while: what a run could not forget, or did not, not
+// reading what was kept as it began, and what a run that lost its root's
+// lease saved of an older generation once a newer one forgot it, each
+// forgotten by the next run that finds it kept. What is no root, of a kind
 // whose resources are not roots or owned by something, is not there, as what
 // is not the owner's is not.
 package getPlan

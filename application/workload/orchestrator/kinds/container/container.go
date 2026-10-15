@@ -328,9 +328,11 @@ func (n *Node) on(ctx context.Context, daemon docker.Daemon, c containerKind.Con
 // on a network docker has it on, but its record does not say so, put on it
 // from its VM's terminal say, or by a try of the same connect whose result
 // was not heard, is on it as asked so, at the cost of a moment off it. One
-// put back on that dockerd then refuses is off it, and the command fails:
-// the network its spec names, it is put on it again later, as any container
-// off a network its spec names is.
+// put back on that dockerd then refuses is off it, and the command fails: off
+// a network its spec names, it stays off it until the control plane's
+// reconcile loop puts it on it again, plainly, as it puts any container off a
+// network its spec names (the control plane's container kind's
+// attachments).
 //
 // A network every dockerd has (networkKind.Default) takes no aliases, and a
 // container on it is on it as it was. Of that, and of a network a container
