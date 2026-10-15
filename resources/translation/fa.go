@@ -12,8 +12,6 @@ var farsi = map[string]string{
 	"container_is_not_running":          "کانتینر در حال اجرا نیست",
 	"memory_below_minimum":              "حافظهٔ هر تسک باید دست‌کم ۶ مگابایت باشد",
 	"ttl_requires_a_job":                "فقط برای یک job می‌توان طول عمر تعیین کرد؛ یک سرویس تا زمانی که متوقف شود اجرا می‌ماند",
-	"task_is_not_terminal_state":        "تسک هنوز به پایان نرسیده است",
-	"not_supported":                     "این فیلد هنوز پشتیبانی نمی‌شود",
 	"required_field":                    "این فیلد اجباری است",
 	"invalid_value":                     "مقدار ارائه شده نامعتبر است",
 	"invalid_email":                     "مقدار ارائه شده باید یک آدرس ایمیل معتبر باشد",
@@ -76,7 +74,6 @@ var farsi = map[string]string{
 	"disk_cannot_shrink":     "دیسک ماشین مجازی فقط می‌تواند بزرگ‌تر شود",
 	"immutable":              "این مقدار پس از تعیین شدن تغییر نمی‌کند",
 	"node_lost":              "گره‌ای که آن را نگه می‌داشت از دسترس خارج شد",
-	"waiting_for_vm":         "در انتظار بالا آمدن ماشین مجازی",
 	"managed_by_code_runner": "این ماشین مجازی را اجراکنندهٔ کد تا پایان اجرای قطعه‌کد نگه می‌دارد: فقط می‌توان آن را متوقف یا حذف کرد",
 
 	// a stack's file: what the platform reads in it, and refuses of it.

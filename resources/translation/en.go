@@ -12,8 +12,6 @@ var english = map[string]string{
 	"container_is_not_running":          "the container is not running",
 	"memory_below_minimum":              "a task needs at least 6 MiB of memory",
 	"ttl_requires_a_job":                "only a job can be given a time to live; a service runs until it is stopped",
-	"task_is_not_terminal_state":        "the task has not finished yet",
-	"not_supported":                     "this field is not supported yet",
 	"required_field":                    "this field is required",
 	"invalid_value":                     "the provided value is invalid",
 	"invalid_email":                     "should be a valid email address",
@@ -76,7 +74,6 @@ var english = map[string]string{
 	"disk_cannot_shrink":     "a VM's disk can only grow",
 	"immutable":              "this cannot be changed once it is set",
 	"node_lost":              "the node holding it went away",
-	"waiting_for_vm":         "waiting for its VM to come up",
 	"managed_by_code_runner": "the code runner runs this VM for as long as its snippet runs: it can only be stopped or deleted",
 
 	// a stack's file: what the platform reads in it, and refuses of it.
