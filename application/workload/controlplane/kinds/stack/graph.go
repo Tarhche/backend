@@ -740,6 +740,20 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 // said which, is held: what lives in it is its graph's to make again, as when
 // its VM is deleted under it.
 //
+// It is decided on what is left once its VM was heard of for longer than
+// silence since the look, which is how long a word of what lives in a VM may
+// take: a heartbeat of the look heard later than that, behind its VM's, is
+// one it may be decided without. A container made again since the snapshot,
+// under another uuid, whose record its silence since the look forgot, leaves
+// the stack to what the look's heartbeat of the one the restored disk holds
+// takes in (kinds/container's Adopt): when that heartbeat is heard more than
+// silence late, or is to be heard again for longer than that, the database
+// gone from the look on, and the stack's run comes first, the stack is lost,
+// though the restored disk holds its container. That is within the bound
+// silence sets on any word of what lives in a VM, and is not otherwise kept
+// from: nothing says how many heartbeats a look is, nor when the last of them
+// has been heard.
+//
 // What it cannot tell from what the restored disk held is a container of the
 // stack whose create was sent before its VM's restore was asked, while the VM
 // ran, and was carried out on the restored disk once its dockerd came up, its
