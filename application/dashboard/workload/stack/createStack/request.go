@@ -4,11 +4,14 @@ import (
 	"strings"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
-// MaxCompose is the longest file a stack is deployed from, in bytes.
-const MaxCompose = 256 << 10
+// MaxCompose is the longest file a stack is deployed from, in bytes: as long
+// as the control plane reads a stack's file, which it refuses as too_large
+// beyond that too.
+const MaxCompose = stackKind.MaxFile
 
 // Request is a stack to deploy into one of the caller's Docker VMs, from its
 // file. It is always deployed for whoever asks.

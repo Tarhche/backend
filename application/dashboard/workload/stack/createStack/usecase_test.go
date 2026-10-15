@@ -123,7 +123,7 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		assert.Equal(t, domain.ValidationErrors{"compose": "required_field"}, (&Request{Name: "shop", Compose: " \n "}).Validate())
-		assert.Empty(t, (&Request{Name: "shop", Compose: strings.Repeat("#", MaxCompose)}).Validate(), "256 KiB is not too large")
+		assert.Empty(t, (&Request{Name: "shop", Compose: strings.Repeat("#", MaxCompose)}).Validate(), "a file as long as a stack's may be is not too large")
 	})
 
 	for _, answer := range workloadtest.Answers() {

@@ -297,50 +297,63 @@ func TestStacks_Admit(t *testing.T) {
 // references let it be: as many services, networks and volumes as a file may
 // declare, each service on a network of its own and depending on the services
 // nearest before it, as many as the references left let it, which makes as
-// many references as a file may.
+// many references as a file may; and the same with as many comment lines as
+// fit after it, each in the column the one before it is not in, which is as
+// costly as a file is for YAML to read, read once to be read and again to be
+// decoded strictly.
 //
 // It runs alone, not in parallel, since what other tests allocated meanwhile
 // would be counted with what admitting it does; and what it is held to is
-// more than twice what it takes, about 54 MiB, so that it does not fail of
-// what it is measured beside.
+// more than twice what the densest file takes, about 54 MiB, and a third
+// more than what the one with comments takes, about 93 MiB, so that neither
+// fails of what it is measured beside.
 func TestStacks_Admit_densest(t *testing.T) {
 	const megabyte = 1 << 20
 
-	file, invalid := stackKind.Parse(densest())
-	require.Empty(t, invalid)
+	for name, compose := range map[string]string{
+		"the densest file":                   densest(),
+		"and the same with as many comments": commented(densest()),
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.LessOrEqual(t, len(compose), stackKind.MaxFile)
 
-	references := 0
-	for _, service := range file.Services {
-		references += len(service.Networks) + len(service.DependsOn)
+			file, invalid := stackKind.Parse(compose)
+			require.Empty(t, invalid)
 
-		for _, m := range service.Volumes {
-			if m.Type == stackKind.MountVolume {
-				references++
+			references := 0
+			for _, service := range file.Services {
+				references += len(service.Networks) + len(service.DependsOn)
+
+				for _, m := range service.Volumes {
+					if m.Type == stackKind.MountVolume {
+						references++
+					}
+				}
 			}
-		}
+
+			require.Equal(t, stackKind.MaxReferences, references, "as many references as a file may make")
+
+			g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner")))
+
+			s := asked("dense", stackKind.VMChoice{UUID: "01"})
+			s.Spec.Compose = compose
+
+			var before, after runtime.MemStats
+
+			runtime.GC()
+			runtime.ReadMemStats(&before)
+
+			_, invalid, err := g.strategy.Admit(context.Background(), s)
+
+			runtime.ReadMemStats(&after)
+
+			require.NoError(t, err)
+			require.Empty(t, invalid, "it is taken")
+
+			allocated := after.TotalAlloc - before.TotalAlloc
+			assert.Less(t, allocated, uint64(128*megabyte), "%d MiB allocated admitting it", allocated/megabyte)
+		})
 	}
-
-	require.Equal(t, stackKind.MaxReferences, references, "as many references as a file may make")
-
-	g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner")))
-
-	s := asked("dense", stackKind.VMChoice{UUID: "01"})
-	s.Spec.Compose = densest()
-
-	var before, after runtime.MemStats
-
-	runtime.GC()
-	runtime.ReadMemStats(&before)
-
-	_, invalid, err := g.strategy.Admit(context.Background(), s)
-
-	runtime.ReadMemStats(&after)
-
-	require.NoError(t, err)
-	require.Empty(t, invalid, "it is taken")
-
-	allocated := after.TotalAlloc - before.TotalAlloc
-	assert.Less(t, allocated, uint64(128*megabyte), "%d MiB allocated admitting it", allocated/megabyte)
 }
 
 // densest is the densest file a stack may have (TestStacks_Admit_densest).
@@ -381,6 +394,21 @@ func densest() string {
 
 			fmt.Fprintf(&b, "    depends_on: [%s]\n", strings.Join(names, ", "))
 		}
+	}
+
+	return b.String()
+}
+
+// commented is file and, after its last service's last line, a command of
+// one word and as many comment lines as fit in a file, each in the column
+// the one before it is not in, each of which YAML keeps a record of its own
+// of.
+func commented(file string) string {
+	var b strings.Builder
+
+	b.WriteString(file + "    command:\n    - a\n")
+	for b.Len()+len("#\n #\n") <= stackKind.MaxFile {
+		b.WriteString("#\n #\n")
 	}
 
 	return b.String()

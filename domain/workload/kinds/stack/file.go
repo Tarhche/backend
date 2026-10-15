@@ -20,8 +20,14 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
-// MaxFile is the most a stack's file may be, in bytes.
-const MaxFile = 256 << 10
+// MaxFile is the most a stack's file may be, in bytes: 64 KiB, three times
+// as much as a compose file of twenty services, healthchecks and all, says.
+// It is what bounds what YAML takes to read a file into nodes, which nothing
+// else of it bounds, since YAML reads all of it before anything else does:
+// as much as a file of comments in columns that alternate, of words of one
+// letter each in a list, or of keys of one letter each in braces costs,
+// tens of megabytes at 64 KiB, is four times as much at 256 KiB.
+const MaxFile = 64 << 10
 
 // The most a stack's file may say of each thing, so that what reading it, and
 // planning and carrying out what it says, takes is bounded by these, as what
@@ -416,7 +422,9 @@ func Field(path string) string {
 // is wrong with it is said at most, the first of it, as it is read, in the
 // order it says things, and nothing more of it is read once that much is. A
 // file that is taken is read twice, into nodes and decoded strictly, and one
-// that is refused once, into nodes.
+// that is refused once, into nodes; and what YAML takes to read it into
+// nodes, before any of these bounds it, is bounded by MaxFile alone: a file
+// larger than it is refused as too_large before YAML reads any of it.
 func Parse(compose string) (File, domain.ValidationErrors) {
 	return parse(compose, strictly)
 }
