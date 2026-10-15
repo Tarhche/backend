@@ -20,10 +20,18 @@
 //
 // The spec and the status are the kind's own JSON, kept as documents of
 // their own so that they can be read in the database as they are in the API.
-// They are read from JSON as relaxed extended JSON, which every JSON a kind
-// writes is, with two exceptions it is not expected to write: an object whose
-// only key is one of extended JSON's own, such as $date, is read as what that
-// key says; and an integer beyond what 64 bits hold is read as a double.
+// They are kept as they are written, whatever their keys say: a label whose
+// key is one of extended JSON's own, such as $date or $numberLong, which a
+// person or an image may give, is a label like any other, kept under a field
+// of that name, as the database keeps any name beneath a document's own
+// fields, a dot or a dollar in it. Each number is kept as relaxed extended
+// JSON reads one, and they are read back as relaxed extended JSON, which is
+// the JSON they were written as, but for an integer beyond what 64 bits hold,
+// kept and read back as a double. One kept while they were read from JSON as
+// relaxed extended JSON, which read an object of one of its own keys as what
+// that key says, a date say, is read back as it was kept. What the database
+// cannot keep as it is, a key with a NUL in it, or a document beyond what one
+// holds, is resource.ErrUnstorable.
 //
 // # Indexes
 //
@@ -63,12 +71,17 @@
 package resources
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
+	"math"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,6 +89,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -87,6 +101,12 @@ const (
 
 	// collectionName is the collection every kind's resources are kept in.
 	collectionName = "workloads"
+
+	// codeTooLarge and codeTooDeep are what the database refuses a document
+	// with that is beyond what a document holds (BSONObjectTooLarge), and
+	// nested deeper than it nests one (Overflow).
+	codeTooLarge = 10334
+	codeTooDeep  = 15
 )
 
 // Repository keeps the resources of the kinds it was told of.
@@ -170,7 +190,7 @@ func (r *Repository) Create(ctx context.Context, record resource.Record) (resour
 			return resource.Record{}, domain.ErrAlreadyExists
 		}
 
-		return resource.Record{}, err
+		return resource.Record{}, unstorable(err)
 	}
 
 	return toRecord(stored)
@@ -201,7 +221,7 @@ func (r *Repository) Update(ctx context.Context, record resource.Record) (resour
 	if mongo.IsDuplicateKeyError(err) {
 		return resource.Record{}, domain.ErrAlreadyExists
 	} else if err != nil {
-		return resource.Record{}, err
+		return resource.Record{}, unstorable(err)
 	}
 
 	if replaced.MatchedCount == 0 {
@@ -496,6 +516,27 @@ type answer struct {
 	At      time.Time `bson:"at"`
 }
 
+// unstorable is err, what writing a document failed with, said to be the
+// document's own when it is (resource.ErrUnstorable): one the driver cannot
+// write, a key with a NUL in it say, or one beyond what a message holds; or
+// one the database refuses as beyond what a document holds, or as nested
+// deeper than it nests one.
+func unstorable(err error) error {
+	var (
+		written mongo.MarshalError
+		refused mongo.ServerError
+	)
+
+	switch {
+	case errors.As(err, &written), errors.Is(err, driver.ErrDocumentTooLarge):
+	case errors.As(err, &refused) && (refused.HasErrorCode(codeTooLarge) || refused.HasErrorCode(codeTooDeep)):
+	default:
+		return err
+	}
+
+	return fmt.Errorf("%w: %w", resource.ErrUnstorable, err)
+}
+
 func toDocument(record resource.Record) (document, error) {
 	spec, err := valueOf(record.Spec)
 	if err != nil {
@@ -650,26 +691,123 @@ func toRecord(stored document) (resource.Record, error) {
 	return record, nil
 }
 
-// valueOf is a kind's JSON as a value to store. Nothing at all is null.
+// valueOf is a kind's JSON as a value to store, as it is written: every
+// object a document of the same keys in the same order, whatever they say,
+// one given twice holding what it is given last, as JSON is read; every array
+// an array; and every number as relaxed extended JSON reads one (number). No
+// key is read as a type, as extended JSON reads $date or $numberLong: a label
+// so named is a label like any other. Nothing at all is null. What cannot be
+// kept as it is, a key with a NUL in it, or a number beyond what a double
+// holds, is resource.ErrUnstorable.
 func valueOf(raw json.RawMessage) (bson.RawValue, error) {
 	if len(raw) == 0 {
 		raw = json.RawMessage("null")
 	}
 
-	wrapped := make([]byte, 0, len(raw)+6)
-	wrapped = append(wrapped, `{"v":`...)
-	wrapped = append(wrapped, raw...)
-	wrapped = append(wrapped, '}')
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
 
-	var value struct {
-		V bson.RawValue `bson:"v"`
+	value, err := plain(decoder)
+	if err == nil {
+		if _, err = decoder.Token(); errors.Is(err, io.EOF) {
+			err = nil
+		} else if err == nil {
+			err = errors.New("more follows the value")
+		}
 	}
 
-	if err := bson.UnmarshalExtJSON(wrapped, false, &value); err != nil {
-		return bson.RawValue{}, err
+	if err != nil {
+		return bson.RawValue{}, fmt.Errorf("%w: %w", resource.ErrUnstorable, err)
 	}
 
-	return value.V, nil
+	wrapped, err := bson.Marshal(bson.D{{Key: "v", Value: value}})
+	if err != nil {
+		return bson.RawValue{}, fmt.Errorf("%w: %w", resource.ErrUnstorable, err)
+	}
+
+	return bson.Raw(wrapped).Lookup("v"), nil
+}
+
+// plain is the next value decoder reads, as valueOf stores it: a bson.D, a
+// bson.A, a number as number has it, a string, a bool, or nil for null.
+func plain(decoder *json.Decoder) (any, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+
+	switch token := token.(type) {
+	case json.Delim:
+		if token == '[' {
+			array := bson.A{}
+
+			for decoder.More() {
+				value, err := plain(decoder)
+				if err != nil {
+					return nil, err
+				}
+
+				array = append(array, value)
+			}
+
+			_, err := decoder.Token()
+
+			return array, err
+		}
+
+		// an object, as nothing else opens a value.
+		document := bson.D{}
+		at := make(map[string]int)
+
+		for decoder.More() {
+			key, err := decoder.Token()
+			if err != nil {
+				return nil, err
+			}
+
+			value, err := plain(decoder)
+			if err != nil {
+				return nil, err
+			}
+
+			name, _ := key.(string)
+
+			if i, given := at[name]; given {
+				document[i].Value = value
+
+				continue
+			}
+
+			at[name] = len(document)
+			document = append(document, bson.E{Key: name, Value: value})
+		}
+
+		_, err := decoder.Token()
+
+		return document, err
+	case json.Number:
+		return number(token)
+	default:
+		return token, nil
+	}
+}
+
+// number is a JSON number as relaxed extended JSON reads one, which is how it
+// is read back: one written with neither a fraction nor an exponent an int32,
+// or an int64 beyond what that holds, and a double beyond both; and any other
+// a double.
+func number(written json.Number) (any, error) {
+	if !strings.ContainsAny(written.String(), ".eE") {
+		if integer, err := strconv.ParseInt(written.String(), 10, 64); err == nil {
+			if integer < math.MinInt32 || integer > math.MaxInt32 {
+				return integer, nil
+			}
+
+			return int32(integer), nil
+		}
+	}
+
+	return strconv.ParseFloat(written.String(), 64)
 }
 
 // jsonOf is a stored value as the kind's JSON again. Null, or nothing stored,

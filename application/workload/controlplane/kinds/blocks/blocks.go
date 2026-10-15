@@ -669,7 +669,8 @@ func hearAgain(err error) error {
 
 // unreadable reports whether err is something that could not be read or
 // written as it is: a status, or a record, that is not what its kind's says
-// it is, whose JSON is not, or one of a kind that is none of it.
+// it is, whose JSON is not, one of a kind that is none of it, or one the
+// repository cannot keep as it is (resource.ErrUnstorable).
 func unreadable(err error) bool {
 	var (
 		syntax      *json.SyntaxError
@@ -680,7 +681,7 @@ func unreadable(err error) bool {
 	)
 
 	return errors.As(err, &syntax) || errors.As(err, &typed) || errors.As(err, &unsupported) || errors.As(err, &value) || errors.As(err, &marshaler) ||
-		errors.Is(err, kind.ErrInvalidPayload) || errors.Is(err, kind.ErrUnknownKind)
+		errors.Is(err, kind.ErrInvalidPayload) || errors.Is(err, kind.ErrUnknownKind) || errors.Is(err, resource.ErrUnstorable)
 }
 
 // orphaned forgets the record of what was just taken in, by its uuid, as

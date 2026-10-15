@@ -519,6 +519,26 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.NotErrorIs(t, err, kind.ErrHearAgain)
 	})
 
+	t.Run("nor is what it found that cannot be kept as it is, as it is not however often it is heard, its look kept all the same", func(t *testing.T) {
+		t.Parallel()
+
+		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
+		w := blockstest.New(vmtest.WithVMs(restored))
+
+		unkept := &unkeeping{Repository: w.Resources, kind: containerKind.Name}
+		containers := controlPlaneContainers.New(blocks.Dependencies{Resources: unkept, VMs: records.New(unkept), Chooser: w.Chooser, Requester: w.Requester, Sightings: w.Sightings})
+
+		err := containers.Witnessed(ctx, vmtest.Node, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-snapshot")}), false, at)
+		require.ErrorIs(t, err, resource.ErrUnstorable, "said")
+		assert.NotErrorIs(t, err, kind.ErrHearAgain)
+
+		_, kept := w.Kept(containerKind.Name, "from-the-snapshot")
+		assert.False(t, kept)
+
+		v, _ := w.Stored("vm-1")
+		assert.True(t, v.Status.LookedAt.Equal(at), "the look kept as of its beat")
+	})
+
 	t.Run("but what a heartbeat of a later beat could not do is said, and not to be heard again", func(t *testing.T) {
 		t.Parallel()
 
@@ -742,6 +762,22 @@ func (c *creating) Create(ctx context.Context, r resource.Record) (resource.Reco
 	c.before(ctx, r)
 
 	return c.Repository.Create(ctx, r)
+}
+
+// unkeeping is a repository that cannot keep anything of a kind as it is, as
+// a database cannot keep a label whose key has a NUL in it.
+type unkeeping struct {
+	resource.Repository
+
+	kind string
+}
+
+func (u *unkeeping) Create(ctx context.Context, r resource.Record) (resource.Record, error) {
+	if r.Kind == u.kind {
+		return resource.Record{}, fmt.Errorf("%w: a label's key has a NUL in it", resource.ErrUnstorable)
+	}
+
+	return u.Repository.Create(ctx, r)
 }
 
 // blinking keeps records as the repository it wraps does, but for failing

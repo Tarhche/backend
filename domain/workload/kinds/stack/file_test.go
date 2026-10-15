@@ -182,6 +182,14 @@ services:
 		assert.Equal(t, []string{"HOME=${HOME:-/root}", "PASSWORD=$$secret"}, web.Environment)
 	})
 
+	t.Run("a variable is named as it says, a dollar or a dot among it, and is a word of its service's environment, as the rest are", func(t *testing.T) {
+		t.Parallel()
+
+		file, invalid := stack.Parsed(t, "services:\n  web:\n    image: nginx\n    environment:\n      $date: x\n      $numberLong: '5'\n      a.b: c\n")
+		require.Empty(t, invalid)
+		assert.Equal(t, []string{"$date=x", "$numberLong=5", "a.b=c"}, file.Services["web"].Environment)
+	})
+
 	t.Run("a service that names no network joins the default one, which is made only then", func(t *testing.T) {
 		t.Parallel()
 
@@ -407,6 +415,9 @@ func TestParse_keys(t *testing.T) {
 		"what a service says of a network it joins":                   {file: "networks: {n: ~}\nservices:\n  web: {image: a, networks: {n: {aliases: [x]}}}\n", invalid: domain.ValidationErrors{"compose.services.web.networks.n.aliases": stack.CodeUnsupportedKey}},
 		"what the file says of a network it declares":                 {file: "networks: {n: {driver: overlay}}\nservices:\n  web: {image: a}\n", invalid: domain.ValidationErrors{"compose.networks.n.driver": stack.CodeUnsupportedKey}},
 		"and of a volume":                                             {file: "volumes: {v: {external: true}}\nservices:\n  web: {image: a}\n", invalid: domain.ValidationErrors{"compose.volumes.v.external": stack.CodeUnsupportedKey}},
+		"a service's labels, under whatever keys":                     {file: "services:\n  web: {image: a, labels: {$date: x}}\n", invalid: domain.ValidationErrors{"compose.services.web.labels": stack.CodeUnsupportedKey}},
+		"a network's":                                                 {file: "networks: {n: {labels: {$numberLong: '5'}}}\nservices:\n  web: {image: a}\n", invalid: domain.ValidationErrors{"compose.networks.n.labels": stack.CodeUnsupportedKey}},
+		"and a volume's":                                              {file: "volumes: {v: {labels: {a.b: c}}}\nservices:\n  web: {image: a}\n", invalid: domain.ValidationErrors{"compose.volumes.v.labels": stack.CodeUnsupportedKey}},
 		"a variable that is a mapping":                                {file: "services:\n  web: {image: a, environment: {A: {b: 1}}}\n", invalid: domain.ValidationErrors{"compose.services.web.environment.A": "invalid_value"}},
 		"a word of a command that is a mapping":                       {file: "services:\n  web: {image: a, command: [{b: 1}]}\n", invalid: domain.ValidationErrors{"compose.services.web.command[0]": "invalid_value"}},
 		"a merge of a mapping":                                        {file: "services:\n  web: {image: a, <<: {user: root}}\n", invalid: domain.ValidationErrors{"compose.services.web.<<": stack.CodeUnsupportedKey}},

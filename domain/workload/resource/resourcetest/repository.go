@@ -515,6 +515,12 @@ func Repository(t *testing.T, make Maker) {
 		assert.Equal(t, []string{"command-1"}, again.Pending.IDs)
 	})
 
+	t.Run("every kind's resource is kept as its kind wrote it, whatever keys somebody gave it", func(t *testing.T) {
+		t.Parallel()
+
+		asWritten(t, make)
+	})
+
 	t.Run("what the control plane keeps beside the manifest can be cleared", func(t *testing.T) {
 		t.Parallel()
 

@@ -26,6 +26,12 @@ import (
 // and decides again, on what is there now.
 var ErrConflict = errors.New("the resource was changed after this copy of it was read")
 
+// ErrUnstorable is a resource a repository cannot keep as it is, for what is
+// in it rather than for anything that comes and goes: a key with a NUL in it,
+// say, or more of it than a document holds. Writing it again fails again, so
+// whoever wrote it lets it go rather than try it again.
+var ErrUnstorable = errors.New("the resource cannot be kept as it is")
+
 // Record is one resource as the control plane keeps it.
 type Record struct {
 	kind.Raw
@@ -212,15 +218,16 @@ func (f Filter) Passes(m kind.Metadata) bool {
 // A listing is newest first.
 type Repository interface {
 	// Create keeps a new resource. One whose uuid or slug another resource
-	// has already, of whatever kind, is domain.ErrAlreadyExists. It comes
-	// back as it is kept: given a uuid when it had none, at its first
-	// version.
+	// has already, of whatever kind, is domain.ErrAlreadyExists, and one it
+	// cannot keep as it is, ErrUnstorable. It comes back as it is kept:
+	// given a uuid when it had none, at its first version.
 	Create(ctx context.Context, r Record) (Record, error)
 
 	// Update writes a resource back over the version it was read at, and is
 	// the resource at its next version. It is ErrConflict when something
 	// wrote it since, domain.ErrNotExists when it is gone, or was never one
-	// of its kind, and domain.ErrAlreadyExists when its slug is another's.
+	// of its kind, domain.ErrAlreadyExists when its slug is another's, and
+	// ErrUnstorable when it cannot be kept as it is.
 	Update(ctx context.Context, r Record) (Record, error)
 
 	// Delete takes away the resource of the kind that uuid names. One that is
