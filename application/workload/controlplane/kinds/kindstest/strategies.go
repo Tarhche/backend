@@ -137,8 +137,6 @@ type Node struct {
 	// neither reported nor said to be gone. It reads every other house its
 	// fans are in, and House.
 	Unseen []string
-
-	executed []string
 }
 
 var _ kind.Node[Spec, Status] = &Node{}
@@ -146,8 +144,6 @@ var _ kind.Node[Spec, Status] = &Node{}
 func (n *Node) Execute(_ context.Context, r Fan, action string, payload any) (kind.Outcome[Status], error) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
-
-	n.executed = append(n.executed, action+" "+r.Metadata.UUID)
 
 	if n.Failure != nil {
 		return kind.Outcome[Status]{Output: "it would not " + action}, n.Failure
@@ -252,22 +248,6 @@ func (n *Node) Hold(r Fan) {
 	}
 
 	n.fans[r.Metadata.UUID] = r
-}
-
-// Lose takes a fan off the node, as though it had fallen over and gone.
-func (n *Node) Lose(uuid string) {
-	n.lock.Lock()
-	defer n.lock.Unlock()
-
-	delete(n.fans, uuid)
-}
-
-// Executed is every command carried out, as its action and its fan's uuid.
-func (n *Node) Executed() []string {
-	n.lock.Lock()
-	defer n.lock.Unlock()
-
-	return slices.Clone(n.executed)
 }
 
 // Registry is a control plane's registry with the fan registered in it,

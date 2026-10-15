@@ -37,8 +37,6 @@ type Execution struct {
 	Status           Status
 	Image            string
 	ResourceLimits   ResourceLimits
-	RestartPolicy    string
-	RestartCount     uint
 	WorkingDirectory string
 	ExposedPorts     port.PortSet
 	PortBindings     port.PortMap
@@ -47,12 +45,9 @@ type Execution struct {
 	// runtime gives its VM as the network the policy maps to.
 	NetworkPolicy network.Policy
 
-	HealthCheck string
-	AutoRemove  bool
 	Environment []string
 	Entrypoint  []string
 	Command     []string
-	CreatedAt   time.Time
 
 	// StartedAt is when this run last started: the moment its main process
 	// did. A runtime says it of every run it lists, as of one it inspects,
@@ -62,10 +57,6 @@ type Execution struct {
 	// ExitCode is what its main process exited with, for a run that has
 	// ended. A runtime says it of every run it lists, as of one it inspects.
 	ExitCode int
-
-	// ReadOnly makes the task's root filesystem immutable, so nothing it
-	// runs can change the image it was started from.
-	ReadOnly bool
 }
 
 // Deadline is when this task will have run long enough, counted from the

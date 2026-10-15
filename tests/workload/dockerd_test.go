@@ -253,11 +253,6 @@ func (d *dockerd) change(id string, change func(h *holding)) error {
 	return d.save(id, h)
 }
 
-// vms are the Docker VMs whose dockerd was reached.
-func (d *dockerd) vms() []string {
-	return slices.Sorted(maps.Keys(d.addresses))
-}
-
 // failure is how dockerd answers what it refuses.
 func failure(rw http.ResponseWriter, status int, format string, args ...any) {
 	answer(rw, status, map[string]string{"message": fmt.Sprintf(format, args...)})

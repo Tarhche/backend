@@ -872,16 +872,6 @@ func both(anybody tool, own string) []tool {
 	return []tool{anybody, mine}
 }
 
-// choice is a parameter that is one of a few words.
-func choice(name string, description string, values ...string) Parameter {
-	enum := make([]any, len(values))
-	for i, value := range values {
-		enum[i] = value
-	}
-
-	return Parameter{name: name, description: description, schema: &jsonschema.Schema{Type: "string", Enum: enum}}
-}
-
 func vmUUID() Parameter {
 	return uuidOf("VM")
 }

@@ -31,11 +31,6 @@ type Docker struct {
 	// State is a container's, in docker's words, beside the status's own.
 	State string `json:"docker_state,omitempty"`
 
-	// InUse says a container uses an image or a volume, and Containers are
-	// the containers on a network.
-	InUse      bool     `json:"in_use,omitempty"`
-	Containers []string `json:"containers,omitempty"`
-
 	Labels    map[string]string `json:"labels,omitempty"`
 	CreatedAt time.Time         `json:"created_at,omitzero"`
 }

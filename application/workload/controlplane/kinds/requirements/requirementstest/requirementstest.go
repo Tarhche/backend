@@ -240,11 +240,6 @@ func Fail(command kind.ActOnResource, reason string) kind.ResourceActedOn {
 	return result
 }
 
-// Silent says nothing of any command.
-func Silent(kind.ActOnResource) (kind.ResourceActedOn, bool) {
-	return kind.ResourceActedOn{}, false
-}
-
 // CommandOf is the command a record waits on, as its node was sent it: its
 // first try.
 func CommandOf(r resource.Record) kind.ActOnResource {

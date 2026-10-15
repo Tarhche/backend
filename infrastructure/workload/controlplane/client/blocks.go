@@ -59,14 +59,12 @@ var (
 	volumesPath    = "/api/" + volumeKind.Plural
 )
 
-// containerManifest, imageManifest, networkManifest and volumeManifest are
-// the building blocks as the control plane keeps them, and as its extras
-// show what nobody keeps a record of.
+// containerManifest and imageManifest are containers and images as the
+// control plane keeps them, and as its extras show what nobody keeps a
+// record of.
 type (
 	containerManifest = kind.Resource[containerKind.Spec, containerKind.Status]
 	imageManifest     = kind.Resource[imageKind.Spec, imageKind.Status]
-	networkManifest   = kind.Resource[networkKind.Spec, networkKind.Status]
-	volumeManifest    = kind.Resource[volumeKind.Spec, volumeKind.Status]
 )
 
 // manifestPage is a page of manifests, as the resource API lists them.
@@ -84,15 +82,11 @@ type asked[Spec any] struct {
 }
 
 // commanded is what asking for a building block, or for one of its
-// commands, came to: the resource as it is now, the command its node was
-// sent, and what came of it, when that was waited for and came in time; and,
-// of a command that deletes what containers need, what needs it.
+// commands, came to: the resource as it is now, and what came of the command
+// its node was sent, when that was waited for and came in time; and, of a
+// command that deletes what containers need, what needs it.
 type commanded[Spec, Status any] struct {
 	Resource *kind.Resource[Spec, Status] `json:"resource"`
-
-	Command *struct {
-		ID string `json:"id"`
-	} `json:"command"`
 
 	Result *struct {
 		OK     bool   `json:"ok"`

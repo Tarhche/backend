@@ -196,10 +196,6 @@ const (
 	// ServiceRunning is a service whose container runs.
 	ServiceRunning ServiceState = "running"
 
-	// ServiceDegraded is a service some of whose containers run, of several,
-	// which no service has, each being one container.
-	ServiceDegraded ServiceState = "degraded"
-
 	// ServiceStopped is a service whose container does not run, and did not
 	// run to its end as it was to.
 	ServiceStopped ServiceState = "stopped"
