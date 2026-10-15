@@ -602,7 +602,7 @@ func TestParse_directives(t *testing.T) {
 		invalid domain.ValidationErrors
 	}{
 		"a %TAG directive, which would have a tag read as a string": {
-			file:    "%TAG !s! tag:yaml.org,2002:str\n---\n" + web + "    user: !s!str a\n",
+			file:    "%TAG !s! tag:yaml.org,2002:\n---\n" + web + "    user: !s!str a\n",
 			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedDirective},
 		},
 		"a %YAML directive": {
