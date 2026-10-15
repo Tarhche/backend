@@ -1,9 +1,11 @@
 package recordResult_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"testing"
@@ -195,6 +197,46 @@ func TestResourceActedOnHandler_Handle(t *testing.T) {
 		assert.ErrorIs(t, f.handler.Handle(ctx, message(t, started)), f.memory.Fail)
 	})
 
+	t.Run("and one whose record the database did not take is asked for again", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, waiting(kindstest.Starting, kindstest.Running, "start"))
+		gone := errors.New("the database is gone for a moment")
+
+		handler := recordResult.NewResourceActedOnHandler(kindstest.Registry(&kindstest.Fans{}), &unwritten{Repository: f.memory, err: gone}, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now)
+
+		assert.ErrorIs(t, handler.Handle(ctx, message(t, started)), gone, "it may go another way next time, so it is redelivered")
+	})
+
+	for name, refused := range map[string]error{
+		"but one whose record cannot be kept as it is": fmt.Errorf("the fan's status cannot be stored: %w: BSON element key cannot contain null bytes", resource.ErrUnstorable),
+		"or written as JSON":                           &json.UnsupportedValueError{Str: "NaN"},
+		"or that is of a payload its kind cannot read": fmt.Errorf("%w: speed is no number", kind.ErrInvalidPayload),
+	} {
+		t.Run(name+", is let go of, and whoever waits for it is told, rather than asked for again", func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, waiting(kindstest.Starting, kindstest.Running, "start"))
+			before, _ := f.stored(t, "fan-uuid")
+
+			var logged bytes.Buffer
+			handler := recordResult.NewResourceActedOnHandler(kindstest.Registry(&kindstest.Fans{}), &unwritten{Repository: f.memory, err: refused}, f.waiters, slog.New(slog.NewTextHandler(&logged, nil)), f.clock.Now)
+
+			wait := f.waiters.Expect("command-1")
+			defer wait.Done()
+
+			require.NoError(t, handler.Handle(ctx, message(t, started)), "redelivered, it would fail the same way")
+			assert.Contains(t, logged.String(), "a command's result that cannot be taken", "it is said")
+
+			result, answered := wait.For(ctx, time.Second, 0, nil)
+			require.True(t, answered)
+			assert.Equal(t, "started", result.Output)
+
+			after, _ := f.stored(t, "fan-uuid")
+			assert.Equal(t, before, after, "nothing is taken")
+		})
+	}
+
 	for name, tt := range map[string]struct {
 		message func(t *testing.T) []byte
 	}{
@@ -272,6 +314,18 @@ func TestResourceActedOnHandler_Handle(t *testing.T) {
 		stored, _ := f.stored(t, "fan-uuid")
 		assert.Equal(t, kindstest.Stopping, kindstest.Typed(stored).Status.State)
 	})
+}
+
+// unwritten keeps records as the repository it wraps does, but for failing
+// every update with err.
+type unwritten struct {
+	resource.Repository
+
+	err error
+}
+
+func (u *unwritten) Update(context.Context, resource.Record) (resource.Record, error) {
+	return resource.Record{}, u.err
 }
 
 // restorer records the parents it was told were restored, and as of when,

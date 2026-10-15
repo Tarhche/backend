@@ -167,8 +167,12 @@ func (h *ResourceActedOnHandler) Handle(ctx context.Context, data []byte) error 
 // errNotTaken wraps what will never let a result be taken.
 var errNotTaken = errors.New("the result will never be taken")
 
+// permanent reports whether err will never let a result be taken, however
+// often it is heard: what take refused it for, and what could not be read or
+// written as it is (resource.Unreadable), a record its repository cannot keep
+// among it. A database that did not answer may next time.
 func permanent(err error) bool {
-	return errors.Is(err, errNotTaken)
+	return errors.Is(err, errNotTaken) || resource.Unreadable(err)
 }
 
 // take takes a result onto its resource, reading the resource again when

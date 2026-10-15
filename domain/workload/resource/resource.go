@@ -32,6 +32,24 @@ var ErrConflict = errors.New("the resource was changed after this copy of it was
 // whoever wrote it lets it go rather than try it again.
 var ErrUnstorable = errors.New("the resource cannot be kept as it is")
 
+// Unreadable reports whether err is of what was read or written rather than
+// of whatever read or wrote it, so that reading or writing it again fails
+// again: a status, or a record, that is not what its kind says it is, whose
+// JSON is not, one of a kind that is none of it, or one a repository cannot
+// keep as it is (ErrUnstorable). A database that did not answer is not.
+func Unreadable(err error) bool {
+	var (
+		syntax      *json.SyntaxError
+		typed       *json.UnmarshalTypeError
+		unsupported *json.UnsupportedTypeError
+		value       *json.UnsupportedValueError
+		marshaler   *json.MarshalerError
+	)
+
+	return errors.As(err, &syntax) || errors.As(err, &typed) || errors.As(err, &unsupported) || errors.As(err, &value) || errors.As(err, &marshaler) ||
+		errors.Is(err, kind.ErrInvalidPayload) || errors.Is(err, kind.ErrUnknownKind) || errors.Is(err, ErrUnstorable)
+}
+
 // Record is one resource as the control plane keeps it.
 type Record struct {
 	kind.Raw
