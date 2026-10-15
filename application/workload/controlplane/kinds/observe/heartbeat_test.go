@@ -921,4 +921,65 @@ func TestObserver_Heartbeat_witness(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("a heartbeat whose record could not be read fails as its witness says, when it is a lookout, and nothing otherwise", func(t *testing.T) {
+		t.Parallel()
+
+		gone := errors.New("the database is gone")
+
+		for name, tt := range map[string]struct {
+			lookout bool
+			says    error
+		}{
+			"of a look, as its lookout says, it is to be heard again": {lookout: true, says: fmt.Errorf("%w: %w", kind.ErrHearAgain, gone)},
+			"of any other, as its lookout says, it fails nothing":     {lookout: true},
+			"and nothing is asked of a witness that is no lookout":    {},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				repository := resourcesMemory.NewRepository()
+				create(t, repository, kindstest.AFan("running", kindstest.Running, kindstest.Running))
+				repository.Fail = gone
+
+				witnessing := &kindstest.Witnessing{Fans: &kindstest.Fans{}, Records: repository}
+				lookout := &lookingOut{Witnessing: witnessing, says: tt.says}
+
+				var strategy kind.ControlPlane[kindstest.Spec, kindstest.Status] = witnessing
+				if tt.lookout {
+					strategy = lookout
+				}
+
+				registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+				require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), strategy)))
+
+				err := observe.NewObserver(registry, repository, slog.New(slog.DiscardHandler)).Heartbeat(ctx, kindstest.NodeName, later, recorded)
+				assert.Equal(t, tt.says, err)
+
+				if tt.lookout {
+					assert.Equal(t, []error{gone}, lookout.told, "told what could not be read")
+				}
+
+				assert.Empty(t, witnessing.Heard(), "and its witness is told of nothing else of it")
+			})
+		}
+	})
+}
+
+// lookingOut is a witness that is a lookout too (kind.Lookout), which fails
+// a heartbeat whose record could not be read with what it says, and keeps
+// what it was told could not be.
+type lookingOut struct {
+	*kindstest.Witnessing
+
+	says error
+	told []error
+}
+
+var _ kind.Lookout = &lookingOut{}
+
+func (l *lookingOut) Unread(_ context.Context, _ string, _ kind.Observation, _ time.Time, err error) error {
+	l.told = append(l.told, err)
+
+	return l.says
 }

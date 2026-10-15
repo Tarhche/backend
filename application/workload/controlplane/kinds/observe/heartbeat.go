@@ -155,7 +155,9 @@ func NewObserver(registry *kind.Registry[kind.ControlPlaneBinding], resources re
 // Nothing here fails the heartbeat: what could not be written down is
 // reported, and the next beat says it all again; but for what a witness could
 // not take in of the first look into a restored parent, which no later beat
-// says again, and which it asks to be heard again for (kind.ErrHearAgain).
+// says again, and which it asks to be heard again for (kind.ErrHearAgain), and
+// a record of what the heartbeat names that could not be read, which the
+// witness says is of such a look, or may be (kind.Lookout).
 func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time, instance kind.Observation) error {
 	binding, registered := o.registry.Lookup(instance.Kind)
 	if !registered {
@@ -187,6 +189,14 @@ func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time,
 			}
 		case !errors.Is(err, domain.ErrNotExists):
 			o.logger.ErrorContext(ctx, "could not read what a node said it holds", "error", err, "node", nodeName, "kind", d.Name, "uuid", instance.UUID)
+
+			// of the first look into a restored parent, which no later
+			// beat says again, it is to be heard again.
+			if witness, witnesses := binding.Witness(); witnesses {
+				if lookout, looks := witness.(kind.Lookout); looks {
+					return lookout.Unread(ctx, nodeName, instance, at, err)
+				}
+			}
 
 			return nil
 		}

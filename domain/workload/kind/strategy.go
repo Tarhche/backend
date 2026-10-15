@@ -121,6 +121,17 @@ type Witness interface {
 	Witnessed(ctx context.Context, nodeName string, instance Observation, kept bool, at time.Time) error
 }
 
+// Lookout is a witness some of whose heartbeats no later beat says again:
+// those of the first look into a parent restored from a snapshot, which alone
+// take in what the look finds with no record. Unread is told that what the
+// framework reads of a heartbeat at a moment, of an instance, before the
+// witness is told of it, could not be read (err), and is what the heartbeat
+// is failed with: to be heard again (ErrHearAgain) when it is, or may be, of
+// such a look, and nothing otherwise, the next beat saying it all again.
+type Lookout interface {
+	Unread(ctx context.Context, nodeName string, instance Observation, at time.Time, err error) error
+}
+
 // Resolver is a control-plane strategy whose resources are named by more than
 // their uuids inside the parent they live in: a container by its Docker id or
 // its name, as the dashboard has always named one in its Docker VM.

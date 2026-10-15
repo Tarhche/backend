@@ -162,6 +162,7 @@ var (
 	_ kind.Extras   = &Blocks{}
 	_ kind.Extender = &Blocks{}
 	_ kind.Witness  = &Blocks{}
+	_ kind.Lookout  = &Blocks{}
 	_ kind.Resolver = &Blocks{}
 )
 
@@ -366,6 +367,11 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 	case errors.Is(err, domain.ErrNotExists):
 		// a VM nobody keeps a record of, on its way out.
 		return nil
+	case err != nil && len(instance.UUID) > 0:
+		// whether this beat is the first look into it since a restore is
+		// not known, and what that look finds with no record is taken in
+		// by its own heartbeats alone (Unread).
+		return hearAgain(err)
 	case err != nil:
 		return err
 	case v.Metadata.Node != nodeName:
@@ -404,6 +410,39 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.O
 	b.Sightings.Saw(b.descriptor.Name, Seen{Node: nodeName, At: at, Manifest: sighted, Labelled: b.labelled(instance, sighted)})
 
 	return failed
+}
+
+// Unread is what a heartbeat at a moment, of instance, is failed with when
+// the record of what it names could not be read (kind.Lookout): to be heard
+// again when it is, or may be, of the first look into the Docker VM it lives
+// in since the VM's restore, whose heartbeats alone take in what it finds
+// labelled as the platform's with no record (adoptable), a stack's container
+// made before its VM's snapshot among it; nothing otherwise, the next beat
+// saying it all again. It may be such a look when the VM's record cannot be
+// read either, and is one when the VM's record says this beat is its look,
+// or would be, no look into it kept since its restore (unlooked). Only what
+// carries a uuid, which it is labelled with, is ever taken in, and only what
+// lives in a Docker VM: so that a database gone for a while has the
+// heartbeats of the platform's own in its Docker VMs heard again, a moment
+// later, and every other let go of, as before. What cannot be read as it is
+// is let go of all the same (hearAgain).
+func (b *Blocks) Unread(ctx context.Context, nodeName string, instance kind.Observation, at time.Time, err error) error {
+	parent, in := ownerOf(instance.Owners, blockKinds.Parent)
+	if len(instance.UUID) == 0 || !in {
+		return nil
+	}
+
+	v, read := b.VMs.GetOne(ctx, parent.UUID)
+	switch {
+	case errors.Is(read, domain.ErrNotExists):
+		return nil
+	case read != nil:
+		return hearAgain(errors.Join(err, read))
+	case v.Metadata.Node != nodeName, !unlooked(v, at) && !adoptable(v, at):
+		return nil
+	}
+
+	return hearAgain(err)
 }
 
 // labelled reports whether what a node said of, sighted as it is shown, is

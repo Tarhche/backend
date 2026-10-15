@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -1189,4 +1190,124 @@ func TestRefusal(t *testing.T) {
 
 	assert.Equal(t, &noderequest.Error{Code: noderequest.CodeDockerUnavailable, Message: "its dockerd did not answer"}, blocks.Refusal(status, "anything"))
 	assert.Equal(t, &noderequest.Error{Code: noderequest.CodeInternal, Message: "it broke"}, blocks.Refusal(nil, "it broke"), "and when it says nothing, its reason")
+}
+
+// TestBlocks_Unread holds a heartbeat whose record could not be read to
+// being heard again when it is, or may be, of the first look into its Docker
+// VM since the VM's restore, whose heartbeats alone take in what it finds
+// with no record, and to being let go of otherwise, the next beat saying it
+// all again: so that a database gone for a while has nothing else heard
+// again.
+func TestBlocks_Unread(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	at := time.Now()
+	gone := errors.New("the database is gone for a moment")
+
+	restoredAt := at.Add(-time.Minute)
+
+	web := seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-snapshot")})
+
+	for name, tt := range map[string]struct {
+		vm       vmKind.VM
+		instance kind.Observation
+		vmGone   bool
+		failure  error
+		again    bool
+	}{
+		"one of a beat that would be the first look into its vm since its restore is heard again": {
+			vm:       vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = restoredAt }),
+			instance: web,
+			again:    true,
+		},
+		"and so is one of the beat that is": {
+			vm: vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+				v.Status.RestoredAt = restoredAt
+				v.Status.LookedAt = at
+			}),
+			instance: web,
+			again:    true,
+		},
+		"and one whose vm could not be read either, which may be": {
+			vm:       vmtest.Docker("vm-1", "owner"),
+			instance: web,
+			vmGone:   true,
+			again:    true,
+		},
+		"but one of a beat after its look is let go of": {
+			vm: vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+				v.Status.RestoredAt = restoredAt
+				v.Status.LookedAt = at.Add(-time.Second)
+			}),
+			instance: web,
+		},
+		"and so is one in a vm never restored": {
+			vm:       vmtest.Docker("vm-1", "owner"),
+			instance: web,
+		},
+		"and one in a vm its record says is on another node": {
+			vm: vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+				v.Status.RestoredAt = restoredAt
+				v.Metadata.Node = "another-node"
+			}),
+			instance: web,
+		},
+		"and one that carries no uuid, which is never taken in": {
+			vm:       vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = restoredAt }),
+			instance: seen(t, "", containerKind.Docker{ID: "c2", Name: "made-at-its-terminal", State: "running"}),
+			vmGone:   true,
+		},
+		"and one whose record cannot be read as it is, however often it is heard": {
+			vm:       vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = restoredAt }),
+			instance: web,
+			failure:  fmt.Errorf("the record cannot be read: %w", &json.SyntaxError{Offset: 1}),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w := blockstest.New(vmtest.WithVMs(tt.vm))
+
+			blinks := &blinking{Repository: w.Resources}
+			if tt.vmGone {
+				blinks.arm("get " + vmKind.Name)
+			}
+
+			containers := controlPlaneContainers.New(blocks.Dependencies{Resources: blinks, VMs: records.New(blinks), Chooser: w.Chooser, Requester: w.Requester, Sightings: w.Sightings})
+
+			failure := tt.failure
+			if failure == nil {
+				failure = gone
+			}
+
+			err := containers.Unread(ctx, vmtest.Node, tt.instance, at, failure)
+
+			if tt.again {
+				assert.ErrorIs(t, err, kind.ErrHearAgain)
+				assert.ErrorIs(t, err, failure, "saying what could not be read")
+
+				return
+			}
+
+			assert.NotErrorIs(t, err, kind.ErrHearAgain)
+		})
+	}
+
+	t.Run("a heartbeat whose vm could not be read is heard again when it carries a uuid, and let go of otherwise", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		blinks := &blinking{Repository: w.Resources}
+		containers := controlPlaneContainers.New(blocks.Dependencies{Resources: blinks, VMs: records.New(blinks), Chooser: w.Chooser, Requester: w.Requester, Sightings: w.Sightings})
+
+		blinks.arm("get " + vmKind.Name)
+		assert.ErrorIs(t, containers.Witnessed(ctx, vmtest.Node, web, false, at), kind.ErrHearAgain)
+
+		blinks.arm("get " + vmKind.Name)
+		err := containers.Witnessed(ctx, vmtest.Node, seen(t, "", containerKind.Docker{ID: "c2", Name: "made-at-its-terminal", State: "running"}), false, at)
+		require.Error(t, err, "said")
+		assert.NotErrorIs(t, err, kind.ErrHearAgain)
+	})
 }
