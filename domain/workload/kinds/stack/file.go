@@ -21,7 +21,7 @@ import (
 )
 
 // MaxFile is the most a stack's file may be, in bytes: 64 KiB, three times
-// as much as a compose file of twenty services, healthchecks and all, says.
+// as much as a compose file of nineteen services, healthchecks and all, says.
 // It is what bounds what YAML takes to read a file into nodes, which nothing
 // else of it bounds, since YAML reads all of it before anything else does:
 // as much as a file of comments in columns that alternate, of words of one
