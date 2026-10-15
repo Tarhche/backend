@@ -559,6 +559,146 @@ func TestParse_tags(t *testing.T) {
 	})
 }
 
+func TestParse_directives(t *testing.T) {
+	t.Parallel()
+
+	const web = "services:\n  web:\n    image: a\n"
+
+	// continued is a file of the one service web, whose command is a quoted
+	// value carried on over as many lines that begin with % as lines says,
+	// each after a break of its own, YAML's every kind of them in turn, and
+	// the words it is: a line separator and a paragraph separator end a line
+	// as the others do, but are kept in the value, as YAML 1.1 has it, and
+	// so join the words they are between.
+	continued := func(lines int) (string, []string) {
+		breaks := []string{"\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029"}
+
+		var b strings.Builder
+
+		words := []string{"printf"}
+
+		b.WriteString(web + "    command: \"printf")
+		for i := range lines {
+			kept := breaks[i%len(breaks)]
+			b.WriteString(kept + "%s")
+
+			if kept == "\u2028" || kept == "\u2029" {
+				words[len(words)-1] += kept + "%s"
+			} else {
+				words = append(words, "%s")
+			}
+		}
+
+		b.WriteString("\"\n")
+
+		return b.String(), words
+	}
+
+	most, mostWords := continued(stack.MaxPercentLines)
+	more, _ := continued(stack.MaxPercentLines + 1)
+
+	for name, tt := range map[string]struct {
+		file    string
+		invalid domain.ValidationErrors
+	}{
+		"a %TAG directive, which would have a tag read as a string": {
+			file:    "%TAG !s! tag:yaml.org,2002:str\n---\n" + web + "    user: !s!str a\n",
+			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedDirective},
+		},
+		"a %YAML directive": {
+			file:    "%YAML 1.1\n---\n" + web,
+			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedDirective},
+		},
+		"one YAML does not know": {
+			file:    "%FOO bar\n---\n" + web,
+			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedDirective},
+		},
+		"one after blank lines and comments": {
+			file:    "# a stack\n\n  # of one service\n%TAG !a! b\n---\n" + web,
+			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedDirective},
+		},
+		"one after the mark that says the file is UTF-8": {
+			file:    "\ufeff%TAG !a! b\n---\n" + web,
+			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedDirective},
+		},
+		"one after a line ended by a carriage return": {
+			file:    "# a stack\r%TAG !a! b\r---\r" + web,
+			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedDirective},
+		},
+		"more lines that begin with % than a file may have, each carrying a quoted value on": {
+			file:    more,
+			invalid: domain.ValidationErrors{"compose": stack.CodeUnsupportedDirective},
+		},
+		"a directive after the document, which begins one of its own": {
+			file:    web + "%TAG !a! b\n---\nx: 1\n",
+			invalid: domain.ValidationErrors{"compose": "invalid_value"},
+		},
+		"and one after the document's end": {
+			file:    web + "...\n%TAG !a! b\n---\nx: 1\n",
+			invalid: domain.ValidationErrors{"compose": "invalid_value"},
+		},
+		"a file in UTF-16, which YAML would read by the mark it begins with": {
+			file: func() string {
+				b := []byte{0xFF, 0xFE}
+				for _, c := range "%TAG !a! b\n---\n" + web {
+					b = append(b, byte(c), 0)
+				}
+
+				return string(b)
+			}(),
+			invalid: domain.ValidationErrors{"compose": "invalid_value"},
+		},
+	} {
+		t.Run("refuses "+name, func(t *testing.T) {
+			t.Parallel()
+
+			file, invalid := stack.Parsed(t, tt.file)
+
+			assert.Equal(t, tt.invalid, invalid)
+			assert.Empty(t, file.Services, "and is no file")
+		})
+	}
+
+	for name, tt := range map[string]struct {
+		file  string
+		words []string
+	}{
+		"a double-quoted value carried on to a line that begins with %": {
+			file:  web + "    command: \"printf\n%s hi\"\n",
+			words: []string{"printf", "%s", "hi"},
+		},
+		"and over an empty line": {
+			file:  web + "    command: \"printf\n\n%s\"\n",
+			words: []string{"printf", "%s"},
+		},
+		"a single-quoted one": {
+			file:  web + "    command: 'printf\n%s hi'\n",
+			words: []string{"printf", "%s", "hi"},
+		},
+		"a plain one in brackets": {
+			file:  web + "    command: [printf\n%s]\n",
+			words: []string{"printf %s"},
+		},
+		"each in a file that is a mapping in braces": {
+			file:  "{services: {web: {image: a, command: [\"printf\n%s\", x\n%y]}}}\n",
+			words: []string{"printf %s", "x %y"},
+		},
+		"as many lines that begin with % as a file may have, after each of YAML's breaks": {
+			file:  most,
+			words: mostWords,
+		},
+	} {
+		t.Run("takes "+name, func(t *testing.T) {
+			t.Parallel()
+
+			file, invalid := stack.Parsed(t, tt.file)
+			require.Empty(t, invalid)
+
+			assert.Equal(t, tt.words, file.Services["web"].Command)
+		})
+	}
+}
+
 func TestParse_keyLength(t *testing.T) {
 	t.Parallel()
 
@@ -974,7 +1114,9 @@ func TestParse_mostInvalid(t *testing.T) {
 // and a file as large as a stack's may be, as costly as the bounds let one
 // be, is read in a few tens of them, read into nodes once to be read, and
 // again to be decoded strictly (yaml.Decoder.KnownFields), which a file that
-// is taken is.
+// is taken is. A file of as many %TAG directives as fit, which YAML reads
+// each against every one before it, taking seconds, is refused before YAML
+// reads any of it.
 //
 // It runs alone, not in parallel, since what other tests allocated meanwhile
 // would be counted with what reading the files does.
@@ -1070,6 +1212,13 @@ func TestParse_bounded(t *testing.T) {
 				assert.Equal(t, want, invalid)
 			},
 			most: 8 * megabyte,
+		},
+		"as many %TAG directives as fit, each of a handle of its own, before a document that uses none of them, each of which YAML would have read against every one before it": {
+			file: tagDirectives(),
+			invalid: func(t *testing.T, invalid domain.ValidationErrors) {
+				assert.Equal(t, domain.ValidationErrors{"compose": stack.CodeUnsupportedDirective}, invalid)
+			},
+			most: megabyte,
 		},
 		"a file as large as one may be, as costly to read as one can be: as many services as it may have, and each word of their commands a node of its own": {
 			file: costliest(),
@@ -1275,6 +1424,30 @@ func TestParse_bounded(t *testing.T) {
 			assert.Less(t, allocated, tt.most, "%d MiB allocated reading %d KiB", allocated/megabyte, len(tt.file)>>10)
 		})
 	}
+}
+
+// tagDirectives is a file as large as a stack's may be of as many %TAG
+// directives as fit, each of a handle of three characters of its own, before
+// a document of one service that uses none of them.
+func tagDirectives() string {
+	const word = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+
+	document := "---\nservices:\n  web: {image: a}\n"
+
+	var b strings.Builder
+
+	for i := 0; i < len(word)*len(word)*len(word); i++ {
+		line := "%TAG !" + string([]byte{word[i/(len(word)*len(word))], word[i/len(word)%len(word)], word[i%len(word)]}) + "! a\n"
+		if b.Len()+len(line)+len(document) > stack.MaxFile {
+			break
+		}
+
+		b.WriteString(line)
+	}
+
+	b.WriteString(document)
+
+	return b.String()
 }
 
 // ranges is a file of one service whose ports are ranges of a thousand each,

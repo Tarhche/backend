@@ -75,6 +75,16 @@ const (
 	// first of it, as the file is read, in the order the file says things.
 	// Nothing more of it is read once that much is said.
 	MaxInvalid = 100
+
+	// MaxPercentLines is the most of its lines that begin with %. Beneath
+	// the first line of it that is neither blank nor a comment, such a line
+	// carries a quoted value, or a plain one in brackets, on from the line
+	// before, which YAML takes, or is a directive (%TAG), which begins a
+	// document of its own, and so a file of more than one, and which YAML
+	// reads against every directive of that document before it. A file of
+	// more of them is refused as directives are (CodeUnsupportedDirective),
+	// before YAML reads any of it.
+	MaxPercentLines = 100
 )
 
 // FileField is the field of a stack's spec its file is asked for under, and
@@ -137,6 +147,13 @@ const (
 	// binary or nothing say. The platform reads what is written, and nothing
 	// else.
 	CodeUnsupportedTag = "unsupported_tag"
+
+	// CodeUnsupportedDirective is a directive, a line that begins with %
+	// before the file's document, %YAML or %TAG say, which the file does not
+	// take: a tag is refused anyway (CodeUnsupportedTag), and what it is read
+	// as is the platform's to say. It is said under the file's own path, and
+	// so is a file with more lines that begin with % than MaxPercentLines.
+	CodeUnsupportedDirective = "unsupported_directive"
 
 	// CodeTooDeep is what is nested in the file deeper than MaxDepth.
 	CodeTooDeep = "too_deep"
@@ -341,9 +358,12 @@ func Field(path string) string {
 // under the path in the file of what it is wrong with (Field), and the code it
 // is refused with.
 //
-// The file is YAML, a document of one mapping, read strictly into the
-// platform's own shape of it: a key it does not take, which is no field of
-// that shape, is refused under its own path before anything is read into it,
+// The file is YAML, a document of one mapping, in UTF-8, which says no
+// directive (%YAML, %TAG), each refused under the file's own path, compose,
+// before YAML reads any of it, as invalid_value and CodeUnsupportedDirective
+// (directed); and it is read strictly into the platform's own shape of it:
+// a key it does not take, which is no field of that shape, is refused under
+// its own path before anything is read into it,
 // compose.services.web.healthcheck, be it one compose takes that the platform
 // does not carry out, build, healthcheck, configs, secrets, profiles, extends,
 // deploy, a top-level version or name or an x- key among them, or any other;
@@ -415,6 +435,14 @@ func parse(compose string, decode func(compose string) error) (File, domain.Vali
 		invalid[Field("")] = "too_large"
 
 		return File{}, invalid
+	case !utf8.ValidString(compose):
+		invalid[Field("")] = "invalid_value"
+
+		return File{}, invalid
+	case directed(compose):
+		invalid[Field("")] = CodeUnsupportedDirective
+
+		return File{}, invalid
 	}
 
 	root, err := documentOf(compose)
@@ -450,6 +478,62 @@ func parse(compose string, decode func(compose string) error) (File, domain.Vali
 	}
 
 	return file, nil
+}
+
+// directed reports whether a stack's file says a directive, %YAML or %TAG
+// say, as YAML would read it, looking at its text alone, before YAML reads
+// any of it, and allocating nothing: its first line that is neither blank nor
+// a comment, after the mark that may say it is UTF-8, begins with %, which
+// YAML reads as nothing but a directive; or more of its lines than
+// MaxPercentLines do. A line that begins with % beneath that first one
+// carries a quoted value, or a plain one in brackets, on from the line
+// before, which YAML takes, or is a directive, which begins a document of its
+// own, which documentOf refuses: that takes YAML reading so few of them that
+// it costs nothing. A line ends wherever YAML ends one: at a line feed, a
+// carriage return, a next line (U+0085), a line separator or a paragraph
+// separator.
+func directed(compose string) bool {
+	text := strings.TrimPrefix(compose, "\ufeff")
+
+	head, percent := true, 0
+
+	for len(text) > 0 {
+		end, next := lineOf(text)
+		line := text[:end]
+		text = text[next:]
+
+		if strings.HasPrefix(line, "%") {
+			if percent++; head || percent > MaxPercentLines {
+				return true
+			}
+
+			continue
+		}
+
+		if said := strings.TrimLeft(line, " \t"); len(said) > 0 && !strings.HasPrefix(said, "#") {
+			head = false
+		}
+	}
+
+	return false
+}
+
+// lineOf is where the first line of text ends, and where the one after it
+// begins: after the break that ends it, as YAML breaks lines (directed), or
+// at the end of text.
+func lineOf(text string) (end int, next int) {
+	for i := 0; i < len(text); i++ {
+		switch {
+		case text[i] == '\n' || text[i] == '\r':
+			return i, i + 1
+		case text[i] == 0xC2 && strings.HasPrefix(text[i:], "\u0085"):
+			return i, i + len("\u0085")
+		case text[i] == 0xE2 && (strings.HasPrefix(text[i:], "\u2028") || strings.HasPrefix(text[i:], "\u2029")):
+			return i, i + len("\u2028")
+		}
+	}
+
+	return len(text), len(text)
 }
 
 // strictly is what decoding a stack's file into the platform's own shape of
