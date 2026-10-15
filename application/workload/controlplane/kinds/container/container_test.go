@@ -421,6 +421,11 @@ func TestContainers_Admit(t *testing.T) {
 			spec: containerKind.Spec{Image: "nginx", Memory: kind.MaxInteger + 1},
 			want: domain.ValidationErrors{"memory": "too_large"},
 		},
+		"one aliased on a network whose name has a NUL in it, which the names are kept under": {
+			vms:  []vmKind.VM{vmtest.Docker("vm-1", "owner")},
+			spec: containerKind.Spec{Image: "nginx", Networks: []string{"front"}, Aliases: map[string][]string{"front": {"web"}, "fr\x00nt": {"web"}}},
+			want: domain.ValidationErrors{"aliases": "invalid_value"},
+		},
 		"one published from a port past the last there is, or on one": {
 			vms:  []vmKind.VM{vmtest.Docker("vm-1", "owner")},
 			spec: containerKind.Spec{Image: "nginx", Ports: []containerKind.PortBinding{{ContainerPort: 80, HostPort: 8080}, {ContainerPort: 65536}, {ContainerPort: 81, HostPort: 1 << 63}}},

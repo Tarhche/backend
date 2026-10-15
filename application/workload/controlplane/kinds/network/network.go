@@ -57,6 +57,10 @@ func (s *Networks) Admit(ctx context.Context, asked networkKind.Network) (networ
 		return networkKind.Network{}, domain.ValidationErrors{"name": "required_field"}, nil
 	case len(spec.Driver) > 0 && spec.Driver != "bridge":
 		return networkKind.Network{}, domain.ValidationErrors{"driver": "invalid_network_driver"}, nil
+	case !kind.ValidLabels(spec.Labels):
+		// a label is kept under its key, which no NUL can be in, and its
+		// value is held to the same.
+		return networkKind.Network{}, domain.ValidationErrors{"labels": "invalid_value"}, nil
 	}
 
 	parent, _ := asked.Metadata.Owner(networkKind.Parent)

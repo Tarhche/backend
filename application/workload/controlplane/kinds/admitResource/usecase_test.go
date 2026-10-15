@@ -342,6 +342,24 @@ func TestUseCase_Execute(t *testing.T) {
 			},
 			invalid: domain.ValidationErrors{"lifetime": "invalid_value"},
 		},
+		"labelled with a NUL in a label's key, which no key a record keeps can hold": {
+			request: func() admitResource.Request {
+				request := asked("kitchen", `{"blades": 3}`)
+				request.Manifest.Metadata.Labels = map[string]string{"room": "kitchen", "a\x00b": "c"}
+
+				return request
+			},
+			invalid: domain.ValidationErrors{"labels": "invalid_value"},
+		},
+		"or in its value": {
+			request: func() admitResource.Request {
+				request := asked("kitchen", `{"blades": 3}`)
+				request.Manifest.Metadata.Labels = map[string]string{"room": "kit\x00chen"}
+
+				return request
+			},
+			invalid: domain.ValidationErrors{"labels": "invalid_value"},
+		},
 		"what its kind refuses is refused": {
 			request: func() admitResource.Request { return asked("kitchen", `{"blades": 0}`) },
 			invalid: domain.ValidationErrors{"blades": "required_field"},

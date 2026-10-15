@@ -810,6 +810,14 @@ func validate(spec containerKind.Spec, choice stackKind.VMChoice) domain.Validat
 		invalid["pids_limit"] = "invalid_value"
 	}
 
+	// the names it is reached by on each network are kept under the
+	// network's, which no NUL can be in.
+	for network := range spec.Aliases {
+		if !kind.Keyable(network) {
+			invalid["aliases"] = "invalid_value"
+		}
+	}
+
 	if len(choice.UUID) > 0 && choice.Describes() {
 		invalid["vm"] = "vm_or_new_vm"
 	}

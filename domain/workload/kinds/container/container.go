@@ -492,8 +492,14 @@ type ConnectPayload struct {
 var _ domain.Validatable = &ConnectPayload{}
 
 func (p *ConnectPayload) Validate() domain.ValidationErrors {
-	if len(strings.TrimSpace(p.Network)) == 0 {
+	switch {
+	case len(strings.TrimSpace(p.Network)) == 0:
 		return domain.ValidationErrors{"network": "required_field"}
+
+	// the names it is reached by on it are kept under its name, which no
+	// NUL can be in.
+	case !kind.Keyable(p.Network):
+		return domain.ValidationErrors{"network": "invalid_value"}
 	}
 
 	return nil

@@ -355,6 +355,7 @@ func TestPayloads(t *testing.T) {
 
 	assert.Equal(t, domain.ValidationErrors{"network": "required_field"}, (&container.ConnectPayload{}).Validate())
 	assert.Empty(t, (&container.ConnectPayload{Network: "backend"}).Validate())
+	assert.Equal(t, domain.ValidationErrors{"network": "invalid_value"}, (&container.ConnectPayload{Network: "back\x00end", Aliases: []string{"api"}}).Validate(), "the names it is reached by on it are kept under its name, which no NUL can be in")
 	assert.Equal(t, domain.ValidationErrors{"network": "required_field"}, (&container.DisconnectPayload{Network: " "}).Validate())
 	assert.Empty(t, (&container.DeletePayload{}).Validate())
 	assert.Empty(t, (&container.LogsPayload{}).Validate())

@@ -43,6 +43,12 @@ func TestVolumes_Admit(t *testing.T) {
 	_, invalid, err = w.Volumes.Admit(ctx, asked(volumeKind.Spec{}))
 	require.NoError(t, err)
 	assert.Equal(t, domain.ValidationErrors{"name": "required_field"}, invalid)
+
+	for _, labels := range []map[string]string{{"tier": "db", "a\x00b": "c"}, {"tier": "d\x00b"}} {
+		_, invalid, err = w.Volumes.Admit(ctx, asked(volumeKind.Spec{Name: "data", Labels: labels}))
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"labels": "invalid_value"}, invalid, "a label is kept under its key, which no NUL can be in, and its value is held to the same")
+	}
 }
 
 func TestVolumes_Refuse(t *testing.T) {

@@ -364,6 +364,12 @@ func validate(d kind.Descriptor, request *Request) domain.ValidationErrors {
 		invalid["lifetime"] = "invalid_value"
 	}
 
+	// a label is kept under its key, which no NUL can be in, and its value
+	// is held to the same.
+	if !kind.ValidLabels(request.Manifest.Metadata.Labels) {
+		invalid["labels"] = "invalid_value"
+	}
+
 	return invalid
 }
 

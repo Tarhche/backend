@@ -43,6 +43,8 @@ func TestNetworks_Admit(t *testing.T) {
 	for spec, want := range map[*networkKind.Spec]domain.ValidationErrors{
 		{}:                                   {"name": "required_field"},
 		{Name: "backend", Driver: "overlay"}: {"driver": "invalid_network_driver"},
+		{Name: "backend", Labels: map[string]string{"tier": "web", "a\x00b": "c"}}: {"labels": "invalid_value"},
+		{Name: "backend", Labels: map[string]string{"tier": "w\x00eb"}}:            {"labels": "invalid_value"},
 	} {
 		_, invalid, err := w.Networks.Admit(ctx, asked(*spec))
 		require.NoError(t, err)

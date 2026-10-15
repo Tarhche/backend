@@ -57,6 +57,10 @@ func (s *Volumes) Admit(ctx context.Context, asked volumeKind.Volume) (volumeKin
 		return volumeKind.Volume{}, domain.ValidationErrors{"name": "required_field"}, nil
 	case len(spec.Driver) > 0 && spec.Driver != "local":
 		return volumeKind.Volume{}, domain.ValidationErrors{"driver": "invalid_volume_driver"}, nil
+	case !kind.ValidLabels(spec.Labels):
+		// a label is kept under its key, which no NUL can be in, and its
+		// value is held to the same.
+		return volumeKind.Volume{}, domain.ValidationErrors{"labels": "invalid_value"}, nil
 	}
 
 	parent, _ := asked.Metadata.Owner(volumeKind.Parent)
