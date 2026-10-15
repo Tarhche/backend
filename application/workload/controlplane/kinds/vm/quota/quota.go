@@ -12,6 +12,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
@@ -54,9 +55,10 @@ type Limits struct {
 }
 
 // Bounds checks what one VM of a kind, a machine or a Docker VM, as its image
-// says, is given against what one VM may be given. Each field is reported
-// under prefix, so a VM asked for inside another request is reported where it
-// was asked.
+// says, is given against what one VM may be given, which is never more than a
+// record keeps as a whole number (kind.MaxInteger), whatever the limits say.
+// Each field is reported under prefix, so a VM asked for inside another
+// request is reported where it was asked.
 func (l Limits) Bounds(prefix string, kind vm.Kind, resources vmKind.Resources) domain.ValidationErrors {
 	invalid := make(domain.ValidationErrors)
 
@@ -68,7 +70,7 @@ func (l Limits) Bounds(prefix string, kind vm.Kind, resources vmKind.Resources) 
 	switch {
 	case resources.CPUs == 0:
 		invalid[prefix+"resources.cpus"] = "required_field"
-	case resources.CPUs > l.MaxCPUs:
+	case uint64(resources.CPUs) > most(uint64(l.MaxCPUs)):
 		invalid[prefix+"resources.cpus"] = CodeTooLarge
 	}
 
@@ -77,7 +79,7 @@ func (l Limits) Bounds(prefix string, kind vm.Kind, resources vmKind.Resources) 
 		invalid[prefix+"resources.memory"] = "required_field"
 	case resources.Memory < minMemory:
 		invalid[prefix+"resources.memory"] = CodeTooSmall
-	case resources.Memory > l.MaxMemory:
+	case resources.Memory > most(l.MaxMemory):
 		invalid[prefix+"resources.memory"] = CodeTooLarge
 	}
 
@@ -86,11 +88,17 @@ func (l Limits) Bounds(prefix string, kind vm.Kind, resources vmKind.Resources) 
 		invalid[prefix+"resources.disk"] = "required_field"
 	case resources.Disk < minDisk:
 		invalid[prefix+"resources.disk"] = CodeTooSmall
-	case resources.Disk > l.MaxDisk:
+	case resources.Disk > most(l.MaxDisk):
 		invalid[prefix+"resources.disk"] = CodeTooLarge
 	}
 
 	return invalid
+}
+
+// most is the most a bound lets one VM be given: never more than a record
+// keeps as a whole number (kind.MaxInteger), whatever the bound says.
+func most(bound uint64) uint64 {
+	return min(bound, kind.MaxInteger)
 }
 
 // Lifetime checks how long a VM asks to be kept for. Zero is until it is

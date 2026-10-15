@@ -33,6 +33,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -314,10 +315,17 @@ func validate(asked taskKind.Task) domain.ValidationErrors {
 	// have been given to.
 	case spec.Limits.Memory < task.MinMemory:
 		invalid["limits.memory"] = "memory_below_minimum"
+
+	// nor kept with more than a record keeps as a whole number.
+	case spec.Limits.Memory > kind.MaxInteger:
+		invalid["limits.memory"] = "too_large"
 	}
 
-	if spec.Limits.Disk == 0 {
+	switch {
+	case spec.Limits.Disk == 0:
 		invalid["limits.disk"] = "required_field"
+	case spec.Limits.Disk > kind.MaxInteger:
+		invalid["limits.disk"] = "too_large"
 	}
 
 	if len(spec.Kind) > 0 && !spec.Kind.IsValid() {
@@ -343,7 +351,7 @@ func validate(asked taskKind.Task) domain.ValidationErrors {
 		invalid["network_policy"] = "invalid_network_policy"
 	}
 
-	if slices.Contains(spec.Ports, 0) {
+	if slices.ContainsFunc(spec.Ports, func(p port.Port) bool { return p == 0 || p > math.MaxUint16 }) {
 		invalid["ports"] = "invalid_value"
 	}
 

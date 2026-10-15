@@ -416,6 +416,16 @@ func TestContainers_Admit(t *testing.T) {
 			spec: containerKind.Spec{Image: "nginx", PidsLimit: -1},
 			want: domain.ValidationErrors{"pids_limit": "invalid_value"},
 		},
+		"one held to more memory than a record keeps as a whole number": {
+			vms:  []vmKind.VM{vmtest.Docker("vm-1", "owner")},
+			spec: containerKind.Spec{Image: "nginx", Memory: kind.MaxInteger + 1},
+			want: domain.ValidationErrors{"memory": "too_large"},
+		},
+		"one published from a port past the last there is, or on one": {
+			vms:  []vmKind.VM{vmtest.Docker("vm-1", "owner")},
+			spec: containerKind.Spec{Image: "nginx", Ports: []containerKind.PortBinding{{ContainerPort: 80, HostPort: 8080}, {ContainerPort: 65536}, {ContainerPort: 81, HostPort: 1 << 63}}},
+			want: domain.ValidationErrors{"ports[1].container_port": "invalid_port", "ports[2].host_port": "invalid_port"},
+		},
 		"one in a docker vm that is stopped": {
 			vms:   []vmKind.VM{vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped })},
 			spec:  containerKind.Spec{Image: "nginx"},

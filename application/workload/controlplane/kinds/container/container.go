@@ -41,6 +41,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/netip"
 	"slices"
 	"strings"
@@ -785,13 +786,24 @@ func validate(spec containerKind.Spec, choice stackKind.VMChoice) domain.Validat
 	}
 
 	for i, p := range spec.Ports {
-		if p.ContainerPort == 0 {
+		if p.ContainerPort == 0 || p.ContainerPort > math.MaxUint16 {
 			invalid[fmt.Sprintf("ports[%d].container_port", i)] = "invalid_port"
+		}
+
+		// none is one docker picks.
+		if p.HostPort > math.MaxUint16 {
+			invalid[fmt.Sprintf("ports[%d].host_port", i)] = "invalid_port"
 		}
 
 		if len(p.HostIP) > 0 && !isIP(p.HostIP) {
 			invalid[fmt.Sprintf("ports[%d].host_ip", i)] = "invalid_ip"
 		}
+	}
+
+	// no more than a record keeps as a whole number, which is all docker
+	// takes besides.
+	if spec.Memory > kind.MaxInteger {
+		invalid["memory"] = "too_large"
 	}
 
 	if spec.PidsLimit < 0 {

@@ -1730,6 +1730,8 @@ func TestParse_limits(t *testing.T) {
 		"a fraction of a byte":     {key: "memory", value: "1.5", code: stack.CodeInvalidMemory},
 		"less memory than none":    {key: "memory", value: "-512m", code: stack.CodeInvalidMemory},
 		"memory in words":          {key: "memory", value: "lots", code: stack.CodeInvalidMemory},
+		"more memory than a record keeps as a whole number": {key: "memory", value: "10000000000g", code: "too_large"},
+		"and a gibibyte past the most it keeps":             {key: "memory", value: "8589934592g", code: "too_large"},
 	} {
 		t.Run("refuses "+name, func(t *testing.T) {
 			t.Parallel()
@@ -1749,6 +1751,9 @@ func TestParse_limits(t *testing.T) {
 		"1.5g":    3 << 29,
 		"64mb":    64 << 20,
 		"100b":    100,
+
+		// the most a record keeps as a whole number, to the gibibyte.
+		"8589934591g": 8589934591 << 30,
 	} {
 		t.Run("reads memory of "+written, func(t *testing.T) {
 			t.Parallel()

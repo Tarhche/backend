@@ -185,7 +185,9 @@ func TestTasks_Admit(t *testing.T) {
 		"no memory":                   {change: func(t *taskKind.Task) { t.Spec.Limits.Memory = 0 }, field: "limits.memory", code: "required_field"},
 		"less memory than a vm takes": {change: func(t *taskKind.Task) { t.Spec.Limits.Memory = task.MinMemory - 1 }, field: "limits.memory", code: "memory_below_minimum"},
 		"no disk":                     {change: func(t *taskKind.Task) { t.Spec.Limits.Disk = 0 }, field: "limits.disk", code: "required_field"},
-		"a kind nobody knows":         {change: func(t *taskKind.Task) { t.Spec.Kind = "cron" }, field: "kind", code: "invalid_value"},
+		"more memory than a record keeps as a whole number": {change: func(t *taskKind.Task) { t.Spec.Limits.Memory = kind.MaxInteger + 1 }, field: "limits.memory", code: "too_large"},
+		"or disk":             {change: func(t *taskKind.Task) { t.Spec.Limits.Disk = 1 << 63 }, field: "limits.disk", code: "too_large"},
+		"a kind nobody knows": {change: func(t *taskKind.Task) { t.Spec.Kind = "cron" }, field: "kind", code: "invalid_value"},
 		"fewer retries than none": {change: func(t *taskKind.Task) {
 			retries := -2
 			t.Spec.MaxRetries = &retries
@@ -194,6 +196,7 @@ func TestTasks_Admit(t *testing.T) {
 		"a ttl for a service":            {change: func(t *taskKind.Task) { t.Spec.Kind = task.KindService }, field: "ttl", code: "ttl_requires_a_job"},
 		"a policy nobody knows":          {change: func(t *taskKind.Task) { t.Spec.NetworkPolicy = "host" }, field: "network_policy", code: "invalid_network_policy"},
 		"port zero":                      {change: func(t *taskKind.Task) { t.Spec.Ports = []port.Port{0} }, field: "ports", code: "invalid_value"},
+		"a port past the last there is":  {change: func(t *taskKind.Task) { t.Spec.Ports = []port.Port{8080, 65536} }, field: "ports", code: "invalid_value"},
 		"ports with no network to serve": {change: func(t *taskKind.Task) { t.Spec.NetworkPolicy = network.PolicyNone }, field: "ports", code: "ports_require_network"},
 	} {
 		t.Run("refused: "+name, func(t *testing.T) {

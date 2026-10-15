@@ -2,6 +2,7 @@ package quota_test
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/quota"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
@@ -61,6 +63,16 @@ func TestLimits_Bounds(t *testing.T) {
 		t.Parallel()
 
 		assert.Equal(t, domain.ValidationErrors{"vm.resources.cpus": "too_large"}, limits.Bounds("vm.", vm.KindDocker, vmKind.Resources{CPUs: 8, Memory: vmtest.GiB, Disk: 10 * vmtest.GiB}))
+	})
+
+	t.Run("and none is given more than a record keeps as a whole number, whatever the limits say", func(t *testing.T) {
+		t.Parallel()
+
+		unbounded := limits
+		unbounded.MaxCPUs, unbounded.MaxMemory, unbounded.MaxDisk = math.MaxUint, math.MaxUint64, math.MaxUint64
+
+		assert.Equal(t, domain.ValidationErrors{"resources.cpus": "too_large", "resources.memory": "too_large", "resources.disk": "too_large"}, unbounded.Bounds("", vm.KindMachine, vmKind.Resources{CPUs: kind.MaxInteger + 1, Memory: kind.MaxInteger + 1, Disk: math.MaxUint64}))
+		assert.Empty(t, unbounded.Bounds("", vm.KindMachine, vmKind.Resources{CPUs: kind.MaxInteger, Memory: kind.MaxInteger, Disk: kind.MaxInteger}), "and the most it keeps is given")
 	})
 }
 

@@ -17,6 +17,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
@@ -2075,7 +2076,8 @@ func (r *reading) cpus(n *yaml.Node, path string) float64 {
 }
 
 // memory is a number of bytes above nothing, or of k, m or g of them,
-// nothing when it says nothing.
+// nothing when it says nothing; and no more than a record keeps as a whole
+// number (kind.MaxInteger), which is all docker takes besides.
 func (r *reading) memory(n *yaml.Node, path string) uint64 {
 	if isNull(n) {
 		return 0
@@ -2084,8 +2086,13 @@ func (r *reading) memory(n *yaml.Node, path string) uint64 {
 	written, ok := scalar(n)
 	bytes, valid := Bytes(written)
 
-	if !ok || !valid {
+	switch {
+	case !ok || !valid:
 		r.refuse(path, CodeInvalidMemory)
+
+		return 0
+	case bytes > kind.MaxInteger:
+		r.refuse(path, "too_large")
 
 		return 0
 	}
