@@ -100,12 +100,6 @@ func (r *Runtime) matching(ctx context.Context, match func(labels map[string]str
 	return executions, nil
 }
 
-// EnsureImage does nothing: the engine pulls a VM's image when it creates the
-// VM, and a VM is all a task runs in.
-func (r *Runtime) EnsureImage(context.Context, string) error {
-	return nil
-}
-
 // Create makes the VM a run of a task is, and boots it, which starts its
 // command.
 //
@@ -185,29 +179,6 @@ func (r *Runtime) Inspect(ctx context.Context, executionID string) (task.Executi
 	}
 
 	return executionOf(instance), nil
-}
-
-// Stats samples what a run is using. Its CPU percent is the engine's: 0 to 100
-// of all of the VM's vCPUs together.
-func (r *Runtime) Stats(ctx context.Context, executionID string) (task.Stats, error) {
-	stats, err := r.engine.Stats(ctx, executionID)
-	if err != nil {
-		return task.Stats{}, err
-	}
-
-	sampled := task.Stats{
-		CPUPercent:    stats.CPUPercent,
-		MemoryUsage:   stats.MemoryUsed,
-		MemoryLimit:   stats.MemoryLimit,
-		NetworkInput:  stats.NetworkRx,
-		NetworkOutput: stats.NetworkTx,
-	}
-
-	if stats.MemoryLimit > 0 {
-		sampled.MemoryPercent = float64(stats.MemoryUsed) / float64(stats.MemoryLimit) * 100
-	}
-
-	return sampled, nil
 }
 
 // Logs writes what a run's command wrote, a line at a time. What the kernel

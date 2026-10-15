@@ -117,10 +117,6 @@ type Runtime interface {
 	// under.
 	BySlug(ctx context.Context, slug string) ([]Execution, error)
 
-	// EnsureImage makes sure an image is on this node, pulling it if it is
-	// not. Starting a task does this too; it is worth doing on its own when
-	// something is being timed from the moment the task is started.
-	EnsureImage(ctx context.Context, image string) error
 	Create(ctx context.Context, execution *Execution) (executionID string, err error)
 	Start(ctx context.Context, executionID string) error
 	Stop(ctx context.Context, executionID string) error
@@ -128,7 +124,6 @@ type Runtime interface {
 	Kill(ctx context.Context, executionID string) error
 	Delete(ctx context.Context, executionID string) error
 	Inspect(ctx context.Context, executionID string) (Execution, error)
-	Stats(ctx context.Context, executionID string) (Stats, error)
 	Logs(ctx context.Context, executionID string, writer io.Writer) error
 	StreamLogs(ctx context.Context, executionID string, since time.Time, emit func(LogLine) error) error
 	Exec(ctx context.Context, executionID string, options ExecOptions) (ExecSession, error)

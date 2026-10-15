@@ -37,10 +37,6 @@ func (m *MockRuntime) BySlug(ctx context.Context, slug string) ([]task.Execution
 	return args.Get(0).([]task.Execution), args.Error(1)
 }
 
-func (m *MockRuntime) EnsureImage(ctx context.Context, image string) error {
-	return m.Called(ctx, image).Error(0)
-}
-
 func (m *MockRuntime) Create(ctx context.Context, c *task.Execution) (string, error) {
 	args := m.Called(ctx, c)
 
@@ -71,12 +67,6 @@ func (m *MockRuntime) Inspect(ctx context.Context, taskUUID string) (task.Execut
 	args := m.Called(ctx, taskUUID)
 
 	return args.Get(0).(task.Execution), args.Error(1)
-}
-
-func (m *MockRuntime) Stats(ctx context.Context, taskUUID string) (task.Stats, error) {
-	args := m.Called(ctx, taskUUID)
-
-	return args.Get(0).(task.Stats), args.Error(1)
 }
 
 func (m *MockRuntime) Logs(ctx context.Context, taskUUID string, writer io.Writer) error {

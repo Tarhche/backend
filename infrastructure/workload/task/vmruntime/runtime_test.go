@@ -377,35 +377,6 @@ func TestRuntime_Lifecycle(t *testing.T) {
 		_, err = r.Inspect(t.Context(), id)
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
-
-	t.Run("an image is the engine's to pull", func(t *testing.T) {
-		t.Parallel()
-
-		assert.NoError(t, runtimeOn(memory.New()).EnsureImage(t.Context(), "anything:at-all"))
-	})
-
-	t.Run("what a run uses is what its VM uses", func(t *testing.T) {
-		t.Parallel()
-
-		e := memory.New()
-		r := runtimeOn(e)
-
-		id, err := r.Create(t.Context(), snippet(nil))
-		require.NoError(t, err)
-		require.NoError(t, e.SetStats(id, vm.Stats{CPUPercent: 40, MemoryUsed: 50 << 20, NetworkRx: 10, NetworkTx: 20}))
-
-		stats, err := r.Stats(t.Context(), id)
-		require.NoError(t, err)
-
-		assert.Equal(t, task.Stats{
-			CPUPercent:    40,
-			MemoryUsage:   50 << 20,
-			MemoryLimit:   200 << 20,
-			MemoryPercent: 25,
-			NetworkInput:  10,
-			NetworkOutput: 20,
-		}, stats)
-	})
 }
 
 func TestRuntime_Logs(t *testing.T) {
