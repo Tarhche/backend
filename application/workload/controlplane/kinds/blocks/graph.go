@@ -68,6 +68,27 @@ func (b *Blocks) Recorded(ctx context.Context, vmUUID string, name string) (reso
 	return resource.Record{}, false, nil
 }
 
+// Sighted is what of the kind the Docker VM vmUUID names holds under name,
+// its Docker name, with nobody keeping a record of it, as its node last said,
+// and whether it holds one: what is shown there (Sightings.In), as what a
+// container naming it takes as there before it (kinds/container's external),
+// made from its VM's terminal say. What the platform labelled as its own is
+// not, until it is shown, as a heartbeat of what a delete removed a moment
+// ago may say it.
+func (b *Blocks) Sighted(vmUUID string, name string) (kind.Raw, bool) {
+	if len(vmUUID) == 0 || len(name) == 0 {
+		return kind.Raw{}, false
+	}
+
+	for _, seen := range b.Sightings.In(b.descriptor.Name, vmUUID) {
+		if b.kind.Named(seen, name) || ObservedOf(seen.Status).Docker.Name == name {
+			return seen, true
+		}
+	}
+
+	return kind.Raw{}, false
+}
+
 // Ready is nothing when what lives in the Docker VM vmUUID names can be made
 // or removed now, which it can while the VM runs. One that does not, and one
 // being deleted, which takes what lives in it with it, are graph.Waiting,

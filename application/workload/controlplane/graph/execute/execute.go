@@ -9,7 +9,9 @@
 // became. A node there already is done as it is, whatever made it, so a plan
 // applied again makes nothing it made before, and one that stopped part way
 // is taken up where it stopped. An external node is never made: while it is
-// missing, it waits. Every node there, made or found, is linked to what it
+// missing, it waits, and it is found where it is, with nobody keeping a
+// record of it too, when its kind says what holds it (graph.Holder). Every
+// node there, made or found, is linked to what it
 // needs as the plan types each edge now (graph.Ownership.Link), so that the
 // records keep what owns what as the policy says.
 //
@@ -30,6 +32,7 @@
 package execute
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -84,6 +87,21 @@ func New(kinds graph.Kinds, ownership graph.Ownership, executions graph.Executio
 	}
 
 	return e, nil
+}
+
+// exists is the record node is, whenever there is one, and whether it is
+// there, as its kind says (graph.Kind.Exists); and, of an external node of a
+// kind that says what holds one with nobody keeping a record of it
+// (graph.Holder), what holds it: a network made from its VM's terminal is
+// there, though nobody keeps a record of it.
+func (e *Executor) exists(ctx context.Context, node graph.Node) (graph.Ref, bool, error) {
+	k := e.kinds[node.Kind]
+
+	if holder, holds := k.(graph.Holder); holds && node.External {
+		return holder.Holds(ctx, node.Spec)
+	}
+
+	return k.Exists(ctx, node.Spec)
 }
 
 // levelsOf is the plan's levels, once every node of it is of a kind the

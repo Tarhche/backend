@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -239,6 +240,51 @@ func TestExecutor_Apply(t *testing.T) {
 
 		assert.NotContains(t, kinds.Asked(graphtest.Create), volume, "it is not made")
 		assert.Contains(t, kinds.Asked(graphtest.Create), web, "while what needs it is")
+	})
+
+	t.Run("and so is one its kind says is held with nobody keeping a record of it, as it is held, while nothing that is not external is looked for so", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := container(true)
+
+		f := newFixture(t, kinds)
+		plan := f.plan(t, web)
+
+		// the volume its vm's dockerd holds, made from its terminal.
+		seenInItsVM := graph.Ref{Kind: volumeKind.Name, UUID: "seen-in-its-vm"}
+		holder := &holding{Kind: kinds, held: map[graph.NodeID]graph.Ref{volume: seenInItsVM, network: {Kind: networkKind.Name, UUID: "seen-too"}}}
+
+		held := kinds.Kinds(every...)
+		held[volumeKind.Name] = holder
+		held[networkKind.Name] = holder
+
+		executor, err := execute.New(held, f.ownership, f.executions, f.clock.Now)
+		require.NoError(t, err)
+
+		previewed, err := executor.Preview(ctx, plan)
+		require.NoError(t, err)
+
+		for _, level := range previewed.Levels {
+			for _, node := range level {
+				if node.Node == volume {
+					assert.Equal(t, execute.Exists, node.Verdict, "a preview finds it as a run does")
+					assert.Equal(t, seenInItsVM, node.Ref)
+				}
+			}
+		}
+
+		outcome, err := executor.Apply(ctx, graphtest.Ref(web), 1, plan)
+		require.NoError(t, err)
+		assert.Equal(t, execute.Done, outcome.State)
+
+		there, _ := outcome.Node(volume)
+		assert.Equal(t, graph.StateDone, there.State)
+		assert.Equal(t, seenInItsVM, there.Ref, "as what holds it")
+
+		assert.NotContains(t, kinds.Asked(graphtest.Create), volume, "it is not made")
+		assert.Contains(t, kinds.Asked(graphtest.Create), network, "and the network, which is not external, is made, however its kind finds one")
+		assert.Equal(t, []graph.NodeID{volume, volume}, holder.Asked(), "only what is external is looked for where it is held")
 	})
 
 	t.Run("each create is handed the records of what it needs in the plan, and nothing else", func(t *testing.T) {
@@ -1255,4 +1301,43 @@ func TestExecutor_Apply_generations(t *testing.T) {
 
 		assert.Equal(t, map[graph.NodeID]int64{vm: 1, network: 1, volume: 1, web: 1}, nodes(t, f))
 	})
+}
+
+// holding is the kinds a fake kind is, which also says what holds a node it
+// keeps no record of (graph.Holder): what a Docker VM's dockerd holds that
+// nobody keeps a record of, made from its terminal.
+type holding struct {
+	*graphtest.Kind
+
+	held map[graph.NodeID]graph.Ref
+
+	lock  sync.Mutex
+	asked []graph.NodeID
+}
+
+var _ graph.Holder = &holding{}
+
+func (h *holding) Holds(ctx context.Context, spec any) (graph.Ref, bool, error) {
+	id, _ := spec.(graph.NodeID)
+
+	h.lock.Lock()
+	h.asked = append(h.asked, id)
+	h.lock.Unlock()
+
+	ref, there, err := h.Kind.Exists(ctx, spec)
+	if err != nil || there || ref != (graph.Ref{}) {
+		return ref, there, err
+	}
+
+	held, holds := h.held[id]
+
+	return held, holds, nil
+}
+
+// Asked are the nodes it was asked what holds, in order.
+func (h *holding) Asked() []graph.NodeID {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	return slices.Clone(h.asked)
 }

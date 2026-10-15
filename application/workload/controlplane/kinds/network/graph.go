@@ -52,7 +52,10 @@ type Graph struct {
 	records  *requirements.Records
 }
 
-var _ graph.Kind = &Graph{}
+var (
+	_ graph.Kind   = &Graph{}
+	_ graph.Holder = &Graph{}
+)
 
 // NewGraph is the network kind as a graph needs it, over what its strategy
 // reads, keeping and removing networks through records.
@@ -90,6 +93,40 @@ func (g *Graph) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 	}
 
 	return requirements.RefOf(r), made, nil
+}
+
+// Holds is the record of the network the want names, as Exists says it, or,
+// with none, the network its VM's dockerd holds under that name that nobody
+// keeps a record of, as its node last said (blocks.Blocks.Sighted), under the
+// uuid it is seen by, which is there: made from its VM's terminal, say, which
+// a container names as there before it, and which no graph makes or removes
+// (graph.Holder). Gone from its VM since, it is missing again, and what needs
+// it waits on it.
+func (g *Graph) Holds(ctx context.Context, spec any) (graph.Ref, bool, error) {
+	w, err := wantOf(spec)
+	if err != nil {
+		return graph.Ref{}, false, err
+	}
+
+	r, found, err := g.networks.Recorded(ctx, w.VM.UUID, w.Spec.Name)
+	switch {
+	case err != nil:
+		return graph.Ref{}, false, err
+	case found:
+		made, err := madeBy(r)
+		if err != nil {
+			return graph.Ref{}, false, err
+		}
+
+		return requirements.RefOf(r), made, nil
+	}
+
+	seen, there := g.networks.Sighted(w.VM.UUID, w.Spec.Name)
+	if !there {
+		return graph.Ref{}, false, nil
+	}
+
+	return graph.Ref{Kind: networkKind.Name, UUID: seen.Metadata.UUID}, true, nil
 }
 
 // Create makes the network the want names in the Docker VM the graph made for

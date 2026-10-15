@@ -86,7 +86,7 @@ func (e *Executor) Preview(ctx context.Context, plan *graph.Plan) (Preview, erro
 		for _, id := range ids {
 			node, _ := plan.Node(id)
 
-			ref, there, err := e.kinds[node.Kind].Exists(ctx, node.Spec)
+			ref, there, err := e.exists(ctx, node)
 			if err != nil {
 				return Preview{}, fmt.Errorf("whether %s is there: %w", id, err)
 			}

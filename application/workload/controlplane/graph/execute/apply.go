@@ -114,13 +114,13 @@ func While(wanted func(ctx context.Context) error) ApplyOption {
 
 // create finds the node, or makes it when it is not there, while what the run
 // is for wants it made: an external one is never made, and waits while it is
-// missing. It is the record the node is: one there that is not made, its
+// missing, wherever it is found (exists). It is the record the node is: one there that is not made, its
 // record all the same, is made. Once it is there, it is linked to what it
 // needs.
 func (r *run) create(ctx context.Context, node graph.Node) (graph.Ref, string, error) {
 	k := r.executor.kinds[node.Kind]
 
-	ref, there, err := k.Exists(ctx, node.Spec)
+	ref, there, err := r.executor.exists(ctx, node)
 	switch {
 	case err != nil:
 		return graph.Ref{}, "", err

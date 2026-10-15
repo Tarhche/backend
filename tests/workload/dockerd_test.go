@@ -1259,6 +1259,37 @@ func (d *dockerd) Remove(t *testing.T, id string, name string) {
 	}
 }
 
+// MakeNetwork makes a network in the VM id names behind everybody's back,
+// named name, as somebody at its terminal would: labelled as nothing of the
+// platform's.
+func (d *dockerd) MakeNetwork(t *testing.T, id string, name string) {
+	t.Helper()
+
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	if err := d.change(id, func(h *holding) {
+		h.Networks = append(h.Networks, network.Summary{Name: name, ID: h.made("network"), Created: time.Now().UTC(), Scope: "local", Driver: "bridge"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// MakeVolume makes a volume in the VM id names behind everybody's back, named
+// name, as somebody at its terminal would.
+func (d *dockerd) MakeVolume(t *testing.T, id string, name string) {
+	t.Helper()
+
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	if err := d.change(id, func(h *holding) {
+		h.Volumes = append(h.Volumes, volumeOf(name, nil))
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Refuse has no registry have reference from now on, as one that is down
 // has none, until Allow: a pull of it is refused before it starts.
 func (d *dockerd) Refuse(reference string) {

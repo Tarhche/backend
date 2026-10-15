@@ -15,11 +15,13 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/createContainer"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/deleteContainer"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworks"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/createVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/deleteVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/createVolume"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumes"
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
@@ -287,6 +289,100 @@ func TestAContainerWaitingOnWhatIsNotItsOwn(t *testing.T) {
 
 	waiting := w.containerRecord(t, vmUUID, "app")
 	assert.Equal(t, containerKind.Missing, waiting.Status.Status.State)
+}
+
+// TestAContainerOnWhatItsVMsTerminalMade walks a container that names a
+// network, or mounts a volume, made from its VM's terminal, which nobody
+// keeps a record of: it is there before the container, and not its own, as
+// its VM's dockerd holds it, which its graph finds where it is held, and the
+// container runs on it, its graph making nothing of it.
+func TestAContainerOnWhatItsVMsTerminalMade(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		kind  string
+		named string
+		made  func(w *workload, t *testing.T, vmUUID string)
+		shown func(w *workload, ctx context.Context, vmUUID string) (bool, error)
+		asked func(r *createContainer.Request)
+		on    func(c held) bool
+	}{
+		"a network": {
+			kind:  networkKind.Name,
+			named: "shared",
+			made:  func(w *workload, t *testing.T, vmUUID string) { w.dockerd.MakeNetwork(t, vmUUID, "shared") },
+			shown: func(w *workload, ctx context.Context, vmUUID string) (bool, error) {
+				listed, err := getNetworks.NewUseCase(w.client, w.translator).Execute(ctx, &getNetworks.Request{VMUUID: vmUUID, OwnerUUID: ownerUUID})
+				if err != nil {
+					return false, err
+				}
+
+				return slices.ContainsFunc(listed.Items, func(n presenter.DockerNetwork) bool { return n.Name == "shared" && n.Unmanaged }), nil
+			},
+			asked: func(r *createContainer.Request) { r.Networks = []string{"shared"} },
+			on:    func(c held) bool { _, on := c.NetworkSettings.Networks["shared"]; return on },
+		},
+		"a volume": {
+			kind:  volumeKind.Name,
+			named: "cache",
+			made:  func(w *workload, t *testing.T, vmUUID string) { w.dockerd.MakeVolume(t, vmUUID, "cache") },
+			shown: func(w *workload, ctx context.Context, vmUUID string) (bool, error) {
+				listed, err := getVolumes.NewUseCase(w.client, w.translator).Execute(ctx, &getVolumes.Request{VMUUID: vmUUID, OwnerUUID: ownerUUID})
+				if err != nil {
+					return false, err
+				}
+
+				return slices.ContainsFunc(listed.Items, func(v presenter.Volume) bool { return v.Name == "cache" && v.Unmanaged }), nil
+			},
+			asked: func(r *createContainer.Request) {
+				r.Mounts = []createContainer.Mount{{Type: containerKind.MountVolume, Source: "cache", Target: "/cache"}}
+			},
+			on: func(c held) bool {
+				return slices.ContainsFunc(c.Mounts, func(m container.MountPoint) bool { return m.Name == "cache" && m.Destination == "/cache" })
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w := start(t)
+			ctx := t.Context()
+
+			vmUUID := w.dockerVM(t, "builds")
+
+			tt.made(w, t, vmUUID)
+
+			// heard of, and shown as nobody's.
+			eventually(t, tt.kind+" "+tt.named+" shown as nobody's", func(ctx context.Context) (bool, error) {
+				return tt.shown(w, ctx, vmUUID)
+			}, func(shown bool) bool { return shown })
+
+			asked := &createContainer.Request{
+				VMUUID:        vmUUID,
+				Name:          "app",
+				Image:         "nginx:1.27",
+				RestartPolicy: containerKind.RestartAlways,
+				OwnerUUID:     ownerUUID,
+			}
+			tt.asked(asked)
+
+			created, err := createContainer.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, asked)
+			require.NoError(t, err)
+			require.Empty(t, created.ValidationErrors)
+
+			app := w.containerRecord(t, vmUUID, "app")
+			assert.Equal(t, []string{tt.kind + "/" + tt.named}, app.Spec.External, "what was there before it is not its own")
+
+			w.containerIn(t, vmUUID, "app", "running")
+
+			c, there := w.dockerd.Holds(t, vmUUID).Container("app")
+			require.True(t, there)
+			assert.True(t, tt.on(c), "it runs on what its vm's terminal made")
+
+			_, kept := w.findBlock(t, tt.kind, vmUUID, tt.named)
+			assert.False(t, kept, "of which nobody keeps a record still: its graph made nothing of it")
+		})
+	}
 }
 
 // plan is how each node of root's plan went, the last time it was carried

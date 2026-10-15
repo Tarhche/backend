@@ -146,6 +146,17 @@ type Kind interface {
 	Delete(ctx context.Context, ref Ref) error
 }
 
+// Holder is a kind some of whose resources may be there with no record of
+// theirs, made by somebody else: a network or a volume a Docker VM's dockerd
+// holds that was made from its terminal. Holds is the record an external
+// node is, as Exists says, or, with none, what holds it with nobody keeping a
+// record of it, under the uuid it is seen by, and whether either is there:
+// what is external is found where it is, and a graph never makes or removes
+// it. A node that is not external is looked for with Exists alone.
+type Holder interface {
+	Holds(ctx context.Context, spec any) (Ref, bool, error)
+}
+
 // Kinds are the kinds a graph is made of, by their names.
 type Kinds map[string]Kind
 

@@ -2,12 +2,14 @@ package network_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/requirements/requirementstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
@@ -134,6 +136,70 @@ func TestGraph_Exists(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, exists)
 		assert.Zero(t, ref)
+	})
+}
+
+func TestGraph_Holds(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// what its vm's dockerd holds under the name with nobody keeping a record
+	// of it, made from its terminal, in vm, as its node said it.
+	sighted := func(w *requirementstest.Workload, vm string, labelled bool) {
+		w.Sightings.Saw(networkKind.Name, blocks.Seen{Node: vmtest.Node, At: time.Now(), Labelled: labelled, Manifest: kind.Raw{
+			Kind:     networkKind.Name,
+			Metadata: kind.Metadata{UUID: "network-from-the-terminal", Owners: []kind.Reference{{Kind: vmKind.Name, UUID: vm}}},
+			Status:   json.RawMessage(`{"state":"present","id":"n-terminal","name":"backend"}`),
+		}})
+	}
+
+	t.Run("one its vm's dockerd holds that nobody keeps a record of is there, as it is seen", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		sighted(w, "vm-1", false)
+
+		ref, there, err := w.Kinds[networkKind.Name].(graph.Holder).Holds(ctx, wanted("vm-1"))
+		require.NoError(t, err)
+		assert.True(t, there)
+		assert.Equal(t, graph.Ref{Kind: networkKind.Name, UUID: "network-from-the-terminal"}, ref)
+
+		_, exists, err := w.Kinds[networkKind.Name].Exists(ctx, wanted("vm-1"))
+		require.NoError(t, err)
+		assert.False(t, exists, "which is no record of a graph's to make")
+	})
+
+	t.Run("but not one in another vm, nor one labelled as the platform's not shown yet, which may be what a delete removed a moment ago", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner"), vmtest.Docker("vm-2", "owner")))
+		sighted(w, "vm-2", false)
+
+		_, there, err := w.Kinds[networkKind.Name].(graph.Holder).Holds(ctx, wanted("vm-1"))
+		require.NoError(t, err)
+		assert.False(t, there)
+
+		w = requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		sighted(w, "vm-1", true)
+
+		ref, there, err := w.Kinds[networkKind.Name].(graph.Holder).Holds(ctx, wanted("vm-1"))
+		require.NoError(t, err)
+		assert.False(t, there)
+		assert.Zero(t, ref)
+	})
+
+	t.Run("and one there is a record of is as its record says, whatever its vm's dockerd holds", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		w.Keep(aNetwork("n-1", "vm-1", networkKind.Pending, networkKind.Present, false))
+		sighted(w, "vm-1", false)
+
+		ref, there, err := w.Kinds[networkKind.Name].(graph.Holder).Holds(ctx, wanted("vm-1"))
+		require.NoError(t, err)
+		assert.False(t, there, "not made yet")
+		assert.Equal(t, graph.Ref{Kind: networkKind.Name, UUID: "n-1"}, ref)
 	})
 }
 
