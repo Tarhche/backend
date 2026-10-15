@@ -6,8 +6,7 @@
 //
 // holder and expires_at null while nobody holds it, next_at and seen while
 // nothing backs its root off, and poked false but while another control plane
-// asked for it while it was held. A lease kept before seen was has none,
-// which is read as nothing seen.
+// asked for it while it was held.
 //
 // When a lease expires, and when a root's backoff is over, is judged by the
 // database's clock, $$NOW, in the pipelines that write them, never by a

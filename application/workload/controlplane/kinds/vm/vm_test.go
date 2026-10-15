@@ -814,11 +814,6 @@ func TestVMs_Extras(t *testing.T) {
 	assert.Same(t, w.Runs, w.VMs.Extras(), "the code runner's runs are among anybody's vms")
 }
 
-// TestVMs_keptAsTheyWere holds the VMs kept before their images alone said
-// what they are, whose specs still carry the field that said it and whose
-// records still carry the label that did, both as they were stored, to being
-// what their images say: read, narrowed, chosen for a container and bounded
-// as any other VM is. Nothing moves them; the data is moved by hand.
 // TestVM_createAnswered holds a VM being made to the answer of its create,
 // which alone says what its node gave it: its node seen running it first,
 // in a heartbeat taken between the VM coming up and the create being
