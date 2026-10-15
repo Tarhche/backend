@@ -18,12 +18,12 @@ import (
 // record is what the engine keeps of one instance, beside what microsandbox
 // keeps of its sandbox.
 //
-// microsandbox's own record of a sandbox cannot answer for an instance: a
-// restore drops the labels, the environment and the init it was made with, and
-// the ports a sandbox publishes are never reported back (#1676). So the spec an
-// instance was last given, the host ports it was given and what became of its
-// main process are kept here, and are the truth for all of them. What the
-// sandbox is doing right now is microsandbox's to say.
+// microsandbox's own record of a sandbox cannot answer for an instance: as of
+// 0.7.8, a restore drops the labels, the environment and the init it was made
+// with, and the ports a sandbox publishes are never reported back (#1676). So
+// the spec an instance was last given, the host ports it was given and what
+// became of its main process are kept here, and are the truth for all of
+// them. What the sandbox is doing right now is microsandbox's to say.
 type record struct {
 	Spec vm.Spec `json:"spec"`
 

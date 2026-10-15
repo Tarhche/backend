@@ -227,7 +227,7 @@ type ExecSession interface {
 // Archive describes what Snapshot wrote.
 type Archive struct {
 	// Engine is the engine and version that wrote it, such as
-	// "microsandbox/0.7.6". A restore needs the same engine.
+	// "microsandbox/0.7.8". A restore needs the same engine.
 	Engine string
 
 	// Image is what the instance boots from, and Kind what the engine booted

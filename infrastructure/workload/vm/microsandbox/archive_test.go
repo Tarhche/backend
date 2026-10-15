@@ -31,7 +31,7 @@ func TestArchiveHeader(t *testing.T) {
 
 		header, rest, err := readHeader(&archive)
 		require.NoError(t, err)
-		assert.Equal(t, archiveHeader{Engine: "microsandbox/0.7.6", Kind: vm.KindDocker, Image: "docker:29-dind", Disk: 4 << 30}, header)
+		assert.Equal(t, archiveHeader{Engine: "microsandbox/0.7.8", Kind: vm.KindDocker, Image: "docker:29-dind", Disk: 4 << 30}, header)
 
 		read, err := io.ReadAll(rest)
 		require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestArchiveHeader(t *testing.T) {
 	t.Run("fields it does not know are passed over", func(t *testing.T) {
 		t.Parallel()
 
-		header, rest, err := readHeader(strings.NewReader(`{"engine":"microsandbox/0.7.6","later":{"a":[1,2]},"kind":"machine"}` + "\nrest"))
+		header, rest, err := readHeader(strings.NewReader(`{"engine":"microsandbox/0.7.8","later":{"a":[1,2]},"kind":"machine"}` + "\nrest"))
 		require.NoError(t, err)
 		assert.Equal(t, vm.KindMachine, header.Kind)
 
@@ -90,14 +90,14 @@ func TestArchiveHeader(t *testing.T) {
 	t.Run("another release of this engine is refused", func(t *testing.T) {
 		t.Parallel()
 
-		_, _, err := readHeader(strings.NewReader(`{"engine":"microsandbox/0.7.5","kind":"machine"}` + "\n"))
+		_, _, err := readHeader(strings.NewReader(`{"engine":"microsandbox/0.7.6","kind":"machine"}` + "\n"))
 		assert.ErrorIs(t, err, vm.ErrEngineMismatch)
 	})
 
 	t.Run("what is not an archive at all is refused", func(t *testing.T) {
 		t.Parallel()
 
-		for _, archive := range []string{"", "\x28\xb5\x2f\xfd binary", `{"kind":"machine","engine":"microsandbox/0.7.6"}`, `["engine"]`} {
+		for _, archive := range []string{"", "\x28\xb5\x2f\xfd binary", `{"kind":"machine","engine":"microsandbox/0.7.8"}`, `["engine"]`} {
 			_, _, err := readHeader(strings.NewReader(archive))
 			assert.ErrorIs(t, err, vm.ErrEngineMismatch, "%q", archive)
 		}
@@ -106,7 +106,7 @@ func TestArchiveHeader(t *testing.T) {
 	t.Run("a header that does not end its line is refused", func(t *testing.T) {
 		t.Parallel()
 
-		_, _, err := readHeader(strings.NewReader(`{"engine":"microsandbox/0.7.6"}rest`))
+		_, _, err := readHeader(strings.NewReader(`{"engine":"microsandbox/0.7.8"}rest`))
 		assert.Error(t, err)
 	})
 }

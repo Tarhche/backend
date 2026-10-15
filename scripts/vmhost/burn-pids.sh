@@ -2,12 +2,12 @@
 # The vmhost image's entrypoint: it runs first, and then becomes what it was
 # given to run.
 #
-# microsandbox 0.7.6 takes a VM to be running for as long as kill(pid, 0)
-# succeeds on the PID its last run recorded, whoever holds that PID now
-# (#1642). A container that starts again hands out the same PIDs in the same
-# order, so a stale run's PID soon belongs to some other process, or to a
-# thread of the vmhost itself, and starting that VM waits for it to go away,
-# for up to half an hour. So before the vmhost loads microsandbox, this
+# microsandbox, as of 0.7.8, takes a VM to be running for as long as
+# kill(pid, 0) succeeds on the PID its last run recorded, whoever holds that
+# PID now (#1642). A container that starts again hands out the same PIDs in
+# the same order, so a stale run's PID soon belongs to some other process, or
+# to a thread of the vmhost itself, and starting that VM waits for it to go
+# away, for up to half an hour. So before the vmhost loads microsandbox, this
 # container's PID counter is moved past every PID microsandbox has recorded,
 # by forking until it is. Remove it once microsandbox checks that a PID is
 # still its own (#1685).

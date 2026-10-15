@@ -18,7 +18,7 @@ import (
 // another release loads it.
 const (
 	Name    = "microsandbox"
-	Version = "0.7.6"
+	Version = "0.7.8"
 )
 
 // archiveEngine is what an archive this engine writes says wrote it.
