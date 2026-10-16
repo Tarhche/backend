@@ -956,8 +956,9 @@ func TestCodeRunner(t *testing.T) {
 	// builds it before it runs it, with nothing of the standard library built
 	// beforehand, and gives up on it once the code runner's time is out,
 	// saying so in place of what it would have printed. Each is run here as
-	// the code runner asks for it, in its image, with its limits and its
-	// network, so one that runs out of memory, disk or time does so here.
+	// the code runner asks for it (runCode.TaskOf), in its image, with its
+	// limits and its network, which reaches the public internet, so one that
+	// runs out of memory, disk or time does so here.
 	snippets := []struct {
 		name   string
 		code   string
@@ -1015,11 +1016,11 @@ func main() {
 	for i, snippet := range snippets {
 		t.Run("a Go snippet "+snippet.name+" is built and run inside the code runner's time, with what it gives one", func(t *testing.T) {
 			request := runCode.Request{Runner: "go-1.24", Code: snippet.code}
-			limits := request.ResourceLimits()
+			asked := runCode.TaskOf(&request)
 
-			goes := execution(fmt.Sprintf("it-task-go-%d", i), request.Image(), nil, []string{"--timeout", strconv.Itoa(int(runCode.CodeTimeout.Seconds())), request.Code})
-			goes.ResourceLimits = limits.ResourceLimits()
-			goes.NetworkPolicy = network.DefaultPolicy
+			goes := execution(fmt.Sprintf("it-task-go-%d", i), asked.Spec.Image, nil, asked.Spec.Command)
+			goes.ResourceLimits = asked.Spec.Limits.ResourceLimits()
+			goes.NetworkPolicy = asked.Spec.NetworkPolicy
 
 			_, run, logs := ran(t, goes)
 

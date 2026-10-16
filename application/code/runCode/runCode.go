@@ -11,6 +11,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
@@ -167,6 +168,15 @@ func TaskOf(request *Request) workloadControlPlane.TaskRequest {
 			TTL:        ttl,
 			Limits:     request.ResourceLimits(),
 			MaxRetries: &retries,
+
+			// a snippet reaches the public internet, as somebody running code
+			// to see what it does expects of it: it fetches a page, calls an
+			// API, resolves a name. It reaches nothing else, whatever it
+			// tries: its VM's egress is the public internet alone, never the
+			// private ranges the vmhost and every other VM's ports are on, nor
+			// the host. A task that names no policy is isolated, and calls
+			// nothing; a snippet's names this one.
+			NetworkPolicy: network.PolicyPublic,
 
 			// a snippet that serves something is reached by name: the workload
 			// publishes these on the node and answers for them at the ingress.

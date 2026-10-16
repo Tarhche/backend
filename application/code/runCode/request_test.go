@@ -230,7 +230,7 @@ func TestKeepable(t *testing.T) {
 		return Keepable(payload)
 	}
 
-	t.Run("a snippet that prints something prints the same thing", func(t *testing.T) {
+	t.Run("a snippet that only prints something is answered with what it printed", func(t *testing.T) {
 		t.Parallel()
 
 		assert.True(t, keepable(t, Request{ID: "request-id", Code: "print", Runner: "go-1.24"}))

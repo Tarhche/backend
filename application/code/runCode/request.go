@@ -108,12 +108,19 @@ func (r *Request) ResourceLimits() taskKind.Limits {
 	return limits
 }
 
-// Keepable reports whether the answer to a run is the same answer every time.
+// Keepable reports whether the answer to a run is worth keeping, and giving
+// whoever asks for the same code again while it is kept.
 //
-// A snippet that only prints something prints the same thing whenever the same
-// code is run, so that answer is worth keeping. One that serves a port, or that
-// somebody is given a way into, is a task to be reached rather than an
-// answer to be repeated.
+// A snippet that only prints something is answered once, with what it
+// printed, and the same code asked for again within the hour the answer is
+// kept is answered with what it printed then, rather than run again. That is
+// not what running it again would always print: a snippet reaches the public
+// internet, and one that fetches a page, reads the time or draws a random
+// number may print something else every time. The hour is how stale such an
+// answer may be, and what it saves is a VM booted for every reader of a page
+// whose snippet prints what it printed for the reader before. One that serves
+// a port, or that somebody is given a way into, is a task to be reached rather
+// than an answer to be repeated, and is never kept.
 func Keepable(payload []byte) bool {
 	var request Request
 	if err := json.Unmarshal(payload, &request); err != nil {

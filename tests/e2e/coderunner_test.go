@@ -82,8 +82,9 @@ func runSnippet(t testing.TB, runner, code string) runAnswer {
 // TestCodeRunner runs snippets through the public code runner, each in an
 // ephemeral VM of its own: one that prints and ends, a Go one that is built
 // before it does, one that prints and runs past its time, whose runner exits
-// with 124 and is a snippet that failed, and two that serve a port through the
-// ingress, one until it is stopped and one until it ends.
+// with 124 and is a snippet that failed, one that fetches a page off the
+// internet, and two that serve a port through the ingress, one until it is
+// stopped and one until it ends.
 func TestCodeRunner(t *testing.T) {
 	// the code runner keeps the answers of snippets it has run, so each run
 	// asks for code it has not seen.
@@ -150,6 +151,22 @@ setInterval(() => {}, 1000);
 		}
 
 		t.Logf("it printed %q", output)
+	})
+
+	// a snippet reaches the public internet, as its task's network policy
+	// says (public): one fetching a page over plain http, which no proxy
+	// that inspects TLS on the way out has a say in, prints what the page
+	// answered with, rather than why it could not be reached.
+	timings.step(t, "a snippet reaching the internet", func(t *testing.T) {
+		answer := runSnippet(t, runner, fmt.Sprintf(`fetch("http://example.com")
+  .then((response) => console.log("example.com answered e2e %s " + response.status))
+  .catch((error) => console.log("example.com was not reached e2e %s: " + error.cause));
+`, token, token))
+
+		output := string(answer.Logs)
+		if len(answer.Error) > 0 || answer.State != "completed" || !strings.Contains(output, "example.com answered e2e "+token+" 200") {
+			t.Fatalf("the snippet is %s (%s), printing %q", answer.State, answer.Error, output)
+		}
 	})
 
 	timings.step(t, "a snippet serving a port, stopped", func(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
@@ -96,6 +97,7 @@ func TestRunCode_Handle(t *testing.T) {
 		assert.Equal(t, 0, *run.Spec.MaxRetries, "a snippet that could not be run is not tried again")
 		assert.False(t, run.Spec.Interactive)
 		assert.Empty(t, run.Spec.Ports)
+		assert.Equal(t, network.PolicyPublic, run.Spec.NetworkPolicy, "it reaches the public internet")
 	})
 
 	t.Run("a Go snippet is given what building it takes", func(t *testing.T) {
@@ -117,6 +119,8 @@ func TestRunCode_Handle(t *testing.T) {
 		assert.Equal(t, []port.Port{3000}, run.Spec.Ports)
 		assert.Equal(t, []string{"--timeout", "120", "serve"}, run.Spec.Command)
 		assert.Equal(t, LiveTTL, run.Spec.TTL)
+		assert.Equal(t, network.PolicyPublic, run.Spec.NetworkPolicy, "it reaches out, and is reached on its ports")
+		assert.True(t, run.Spec.NetworkPolicy.AllowsPorts())
 	})
 
 	t.Run("one somebody only has a way into is watched as well", func(t *testing.T) {

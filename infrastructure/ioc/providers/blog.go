@@ -271,6 +271,9 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 
 	ps := pubsub.NewPublishSubscriber(natsConnection, logger)
 
+	// a snippet's answer is kept for an hour, and the same code asked for
+	// within it is answered with it rather than run again: what it printed
+	// then, which is not always what it would print now (runCode.Keepable).
 	runCodeCache, err := cache.NewNatsCache(
 		natsConnection,
 		BlogWebSocketCacheBucketName,

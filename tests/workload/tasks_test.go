@@ -262,6 +262,7 @@ func TestASnippet(t *testing.T) {
 		spec, err := w.engine.Spec(running.Status.Run.ID)
 		require.NoError(t, err)
 		assert.Equal(t, vm.Resources{CPUs: 2, Memory: runCode.DefaultMaxMemorySize, Disk: runCode.DefaultMaxDiskSize}, spec.Resources)
+		assert.Equal(t, vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow}, spec.Network, "its vm reaches the public internet")
 
 		close(release)
 
