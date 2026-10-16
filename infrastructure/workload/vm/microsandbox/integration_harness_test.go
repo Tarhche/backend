@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -265,6 +266,21 @@ func runOK(t *testing.T, e Engine, id string, script string) string {
 	require.Equal(t, 0, r.code, "%q in %s: stdout %q, stderr %q", script, id, r.stdout, r.stderr)
 
 	return strings.TrimSpace(r.stdout)
+}
+
+// rootMiB is how large an instance's root filesystem is, in MiB, as df inside
+// it says: the disk it was given, less what its filesystem keeps for itself.
+func rootMiB(t *testing.T, e Engine, id string) int {
+	t.Helper()
+
+	said := runOK(t, e, id, "df -m / | awk 'NR == 2 { print $2 }'")
+
+	mebibytes, err := strconv.Atoi(said)
+	require.NoError(t, err, "df in %s says %q", id, said)
+
+	t.Logf("%s: its root filesystem is %d MiB", id, mebibytes)
+
+	return mebibytes
 }
 
 // serve answers HTTP on a guest port of an alpine VM with body, from a

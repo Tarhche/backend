@@ -152,6 +152,7 @@ func TestNode_Execute(t *testing.T) {
 			name: "an engine that fails half way through leaves nothing stored",
 			engine: func(t *testing.T) vm.Engine {
 				var e engine.MockEngine
+				e.On("Inspect", mock.Anything, "vm-1").Return(vm.Instance{ID: "vm-1", State: vm.InstanceRunning}, nil)
 				e.On("Snapshot", mock.Anything, "vm-1", mock.Anything).
 					Run(func(args mock.Arguments) {
 						_, _ = io.WriteString(args.Get(2).(io.Writer), "half an archive")
@@ -266,6 +267,7 @@ func TestNode_Execute(t *testing.T) {
 		t.Parallel()
 
 		var e engine.MockEngine
+		e.On("Inspect", mock.Anything, "vm-1").Return(vm.Instance{ID: "vm-1", State: vm.InstanceRunning}, nil)
 		e.On("Snapshot", mock.Anything, "vm-1", mock.Anything).Once().Return(vm.Archive{}, errors.New("the disk went away"))
 
 		node := New(&e, storage.New(), lock.New(), &recorded{})
@@ -312,6 +314,154 @@ func TestNode_Execute(t *testing.T) {
 
 		_, err := New(memory.New(), storage.New(), lock.New(), &recorded{}).Execute(t.Context(), aSnapshot("snapshot-1"), snapshotKind.ActionDelete, nil)
 		assert.ErrorIs(t, err, kind.ErrUnknownAction)
+	})
+}
+
+// TestNode_Execute_ofARun holds a snapshot of one of the code runner's runs,
+// which the dashboard shows as a VM, to being taken of the instance its task
+// runs in, which its engine names after the run and labels with the task.
+func TestNode_Execute_ofARun(t *testing.T) {
+	t.Parallel()
+
+	const image = "ghcr.io/tarhche/code-runner:nodejs-22.14-latest"
+
+	// attempts is an engine holding two runs of task-1, each with a disk of
+	// its own, as the task's runtime makes them: its first attempt, which
+	// ended, and its second, which runs.
+	attempts := func(t *testing.T) *memory.Engine {
+		t.Helper()
+
+		// a second goes by whenever the engine reads the time, so the second
+		// attempt started after the first.
+		var ticks sync.Mutex
+		at := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
+
+		e := memory.New(memory.WithClock(func() time.Time {
+			ticks.Lock()
+			defer ticks.Unlock()
+
+			at = at.Add(time.Second)
+
+			return at
+		}))
+
+		for _, run := range []struct{ id, disk string }{
+			{id: "execution-0", disk: "what the first attempt wrote"},
+			{id: "execution-1", disk: "what the second attempt wrote"},
+		} {
+			_, err := e.Create(t.Context(), vm.Spec{
+				ID:        run.id,
+				Image:     image,
+				Resources: vm.Resources{CPUs: 2, Memory: 200 << 20, Disk: 100 << 20},
+				Labels:    map[string]string{vm.LabelTask: "task-1", vm.LabelPurpose: vm.PurposeTask},
+				Command:   []string{"--timeout", "120", "setInterval(() => {}, 1000)"},
+			})
+			require.NoError(t, err)
+			require.NoError(t, e.SetDisk(run.id, []byte(run.disk)))
+		}
+
+		require.NoError(t, e.Exit("execution-0", 0))
+
+		return e
+	}
+
+	// ofTheRun is a snapshot of task-1's run, as the control plane records
+	// it when it asks for it to be taken: taken of it as of a VM.
+	ofTheRun := func(uuid string) snapshotKind.Snapshot {
+		s := aSnapshot(uuid)
+		s.Metadata.Owners = nil
+		s.Metadata.Refs = []kind.Reference{{Kind: snapshotKind.Parent, UUID: "task-1"}}
+		s.Spec.VM = snapshotKind.VMRef{UUID: "task-1", Name: "request-1"}
+		s.Status.Image = image
+		s.Status.Disk = 100 << 20
+
+		return s
+	}
+
+	t.Run("it is taken of the instance its task runs in, the one that runs", func(t *testing.T) {
+		t.Parallel()
+
+		archives := storage.New()
+
+		outcome, err := New(attempts(t), archives, lock.New(), &recorded{}).Execute(t.Context(), ofTheRun("snapshot-1"), snapshotKind.ActionCreate, nil)
+		require.NoError(t, err)
+		assert.Equal(t, snapshotKind.Ready, outcome.Status.State)
+		assert.Equal(t, uint64(100<<20), outcome.Status.Disk, "the disk its run was given")
+
+		archive, stored := archives.Object(snapshotKind.ObjectKey("snapshot-1"))
+		require.True(t, stored)
+
+		restored := memory.New()
+		_, err = restored.Restore(t.Context(), vm.Spec{ID: "vm-2", Image: image}, bytes.NewReader(archive))
+		require.NoError(t, err)
+
+		disk, err := restored.Disk("vm-2")
+		require.NoError(t, err)
+		assert.Equal(t, "what the second attempt wrote", string(disk))
+	})
+
+	t.Run("of one that runs no more, the run that started last", func(t *testing.T) {
+		t.Parallel()
+
+		e := attempts(t)
+		require.NoError(t, e.Exit("execution-1", 0))
+
+		archives := storage.New()
+
+		_, err := New(e, archives, lock.New(), &recorded{}).Execute(t.Context(), ofTheRun("snapshot-1"), snapshotKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		archive, _ := archives.Object(snapshotKind.ObjectKey("snapshot-1"))
+
+		restored := memory.New()
+		_, err = restored.Restore(t.Context(), vm.Spec{ID: "vm-2", Image: image}, bytes.NewReader(archive))
+		require.NoError(t, err)
+
+		disk, err := restored.Disk("vm-2")
+		require.NoError(t, err)
+		assert.Equal(t, "what the second attempt wrote", string(disk))
+	})
+
+	t.Run("under its task's lock, which every command to the task takes", func(t *testing.T) {
+		t.Parallel()
+
+		locks := lock.New()
+		archives := storage.New()
+
+		release, err := locks.Lock(t.Context(), "task-1")
+		require.NoError(t, err)
+
+		done := make(chan error, 1)
+
+		go func() {
+			_, err := New(attempts(t), archives, locks, &recorded{}).Execute(t.Context(), ofTheRun("snapshot-1"), snapshotKind.ActionCreate, nil)
+			done <- err
+		}()
+
+		select {
+		case <-done:
+			t.Fatal("it was taken while a command to its task was being carried out")
+		case <-time.After(50 * time.Millisecond):
+		}
+
+		release()
+
+		require.NoError(t, <-done)
+
+		_, stored := archives.Object(snapshotKind.ObjectKey("snapshot-1"))
+		assert.True(t, stored)
+	})
+
+	t.Run("one whose task this node holds nothing of any more fails, and leaves nothing behind", func(t *testing.T) {
+		t.Parallel()
+
+		archives := storage.New()
+		recorder := &recorded{}
+
+		_, err := New(memory.New(), archives, lock.New(), recorder).Execute(t.Context(), ofTheRun("snapshot-1"), snapshotKind.ActionCreate, nil)
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+		assert.Empty(t, archives.Names())
+		assert.Empty(t, recorder.recordedSizes())
 	})
 }
 

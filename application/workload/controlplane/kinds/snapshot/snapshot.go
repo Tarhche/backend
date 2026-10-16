@@ -12,6 +12,15 @@
 // its archive came out and which engine wrote it. What is refused is said
 // under the fields the dashboard asks with.
 //
+// It is admitted of one of the code runner's runs too, which is shown among
+// anybody's VMs as the VM its snippet runs in (the vm kind's extras, Runs),
+// while it runs: a run ends at its snippet's end, and goes at once. Its run
+// is the guest's, so its snapshot is whoever took it, and counts among their
+// snapshots, as one of a VM of theirs would; it outlives the run, as one of a
+// VM outlives the VM, and is restored as a new VM of theirs, a machine booted
+// from the runner's image with no snippet to run. Whoever asks is always whose
+// a snapshot is: for a VM of theirs, the VM's owner.
+//
 // Its name is changed in the control plane (ActionRename), once it is ready
 // or failed, and so is its delete, which takes its archive away from the
 // snapshots bucket, an archive that is not there being one taken away
@@ -54,10 +63,23 @@ type Nodes interface {
 	Alive(ctx context.Context, nodeName string) (bool, error)
 }
 
+// Runs are the code runner's runs, which are shown among anybody's VMs, each
+// as the VM its snippet runs in, and nobody keeps as a VM: the vm kind's
+// extras (runs.Runs).
+type Runs interface {
+	// One is the run uuid names, as the VM it runs in, or
+	// domain.ErrNotExists.
+	One(ctx context.Context, uuid string) (kind.Raw, error)
+}
+
 // Dependencies are what the strategy reads and keeps snapshots in.
 type Dependencies struct {
 	VMs   VMs
 	Nodes Nodes
+
+	// Runs are the code runner's runs, which a snapshot is taken of as it is
+	// of a VM, by whoever asks for one. None takes none.
+	Runs Runs
 
 	// Resources are where snapshots are kept, as every kind's resources are.
 	Resources resource.Repository
@@ -97,7 +119,11 @@ func New(d Dependencies) *Snapshots {
 // Admit takes in a snapshot its owner asked for, of one of their VMs that is
 // running or stopped, on a node that can be asked: a disk is taken from a VM
 // at rest or running, and one on its way somewhere is changing under it. A VM
-// that is not there, or not theirs, is domain.ErrNotExists.
+// that is not there, or not theirs, is domain.ErrNotExists, unless it is one
+// of the code runner's runs, which is anybody's to take a snapshot of while it
+// runs: one that ran to its end goes at once, and has no disk to keep. The
+// snapshot is whoever asked for it, of a run as of a VM of theirs, and is
+// counted among theirs.
 func (s *Snapshots) Admit(ctx context.Context, asked snapshotKind.Snapshot) (snapshotKind.Snapshot, domain.ValidationErrors, error) {
 	vmUUID := snapshotKind.VMOf(asked)
 
@@ -105,7 +131,7 @@ func (s *Snapshots) Admit(ctx context.Context, asked snapshotKind.Snapshot) (sna
 		return snapshotKind.Snapshot{}, invalid, nil
 	}
 
-	v, err := s.VMs.GetOneByOwner(ctx, asked.Metadata.OwnerUUID, vmUUID)
+	v, run, err := s.vmOf(ctx, asked.Metadata.OwnerUUID, vmUUID)
 	if err != nil {
 		return snapshotKind.Snapshot{}, nil, err
 	}
@@ -115,11 +141,12 @@ func (s *Snapshots) Admit(ctx context.Context, asked snapshotKind.Snapshot) (sna
 		return snapshotKind.Snapshot{}, nil, err
 	}
 
-	if !alive || (v.Status.State != vmKind.Running && v.Status.State != vmKind.Stopped) {
+	takeable := v.Status.State == vmKind.Running || (v.Status.State == vmKind.Stopped && !run)
+	if !alive || !takeable {
 		return snapshotKind.Snapshot{}, domain.ValidationErrors{"vm": "invalid_state_transition"}, nil
 	}
 
-	_, kept, err := s.Resources.GetAll(ctx, snapshotKind.Name, resource.Filter{OwnerUUID: v.Metadata.OwnerUUID}, 0, 1)
+	_, kept, err := s.Resources.GetAll(ctx, snapshotKind.Name, resource.Filter{OwnerUUID: asked.Metadata.OwnerUUID}, 0, 1)
 	if err != nil {
 		return snapshotKind.Snapshot{}, nil, err
 	}
@@ -132,7 +159,7 @@ func (s *Snapshots) Admit(ctx context.Context, asked snapshotKind.Snapshot) (sna
 		Kind: snapshotKind.Name,
 		Metadata: kind.Metadata{
 			Name:      strings.TrimSpace(asked.Metadata.Name),
-			OwnerUUID: v.Metadata.OwnerUUID,
+			OwnerUUID: asked.Metadata.OwnerUUID,
 			Labels:    maps.Clone(asked.Metadata.Labels),
 			Owners:    slices.Clone(asked.Metadata.Owners),
 			Refs:      kind.LivingIn(asked.Metadata.Refs, kind.Reference{Kind: snapshotKind.Parent, UUID: v.Metadata.UUID}),
@@ -145,6 +172,31 @@ func (s *Snapshots) Admit(ctx context.Context, asked snapshotKind.Snapshot) (sna
 			Disk:   v.Spec.Resources.Disk,
 		},
 	}, nil, nil
+}
+
+// vmOf is the VM a snapshot ownerUUID asked for is to be taken of, and
+// whether it is one of the code runner's runs: one of ownerUUID's own VMs, or
+// else the run uuid names, as the VM its snippet runs in, which is the
+// guest's, and so nobody's own, and no VM's record either. Somebody has to be
+// asking for a run's snapshot, since a snapshot is whoever took it. Neither
+// being there is domain.ErrNotExists.
+func (s *Snapshots) vmOf(ctx context.Context, ownerUUID string, uuid string) (vmKind.VM, bool, error) {
+	v, err := s.VMs.GetOneByOwner(ctx, ownerUUID, uuid)
+	if !errors.Is(err, domain.ErrNotExists) || s.Runs == nil || len(ownerUUID) == 0 {
+		return v, false, err
+	}
+
+	run, err := s.Runs.One(ctx, uuid)
+	if err != nil {
+		return vmKind.VM{}, false, err
+	}
+
+	v, err = kind.Decode[vmKind.Spec, vmKind.Status](run)
+	if err != nil {
+		return vmKind.VM{}, false, err
+	}
+
+	return v, true, nil
 }
 
 // Reconcile asks for a snapshot admitted to be taken. A snapshot is never

@@ -17,6 +17,15 @@
 // than taken again over it, which would store a later disk under a record
 // that says something else of it.
 //
+// A snapshot of one of the code runner's runs, which the dashboard shows as
+// a VM, is taken of the VM its task runs in: under its task's lock, which is
+// the one every command to the task takes, so that the task is not stopped,
+// killed for its ttl, changed or deleted while its disk is read; and of the
+// instance its engine holds for it, which is named after the task's run
+// rather than its uuid, and labelled with the task (vm.LabelTask). One of a
+// run whose instance has gone since it was asked for, as the instance of a
+// run that ended goes at once, fails, and leaves nothing behind.
+//
 // Its state is its record's, in the control plane: a node holds nothing of a
 // snapshot, and reports none.
 package snapshot
@@ -27,9 +36,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -127,7 +138,17 @@ func (n *Node) Execute(ctx context.Context, s snapshotKind.Snapshot, action stri
 
 	started := n.now()
 
-	archive, size, err := n.take(ctx, s.Metadata.UUID, vmUUID)
+	instanceID, err := n.instanceOf(ctx, vmUUID)
+
+	var (
+		archive vm.Archive
+		size    int64
+	)
+
+	if err == nil {
+		archive, size, err = n.take(ctx, s.Metadata.UUID, instanceID)
+	}
+
 	if err != nil {
 		// a node going away has not failed the snapshot: whoever takes the
 		// command next takes it.
@@ -156,9 +177,10 @@ func (n *Node) Execute(ctx context.Context, s snapshotKind.Snapshot, action stri
 	return kind.Outcome[snapshotKind.Status]{Status: status}, nil
 }
 
-// take streams the VM's archive into the bucket, under the snapshot's object
-// key, and says what the engine wrote and how much of it was stored.
-func (n *Node) take(ctx context.Context, snapshotUUID string, vmUUID string) (vm.Archive, int64, error) {
+// take streams the archive of the VM's instance, which its engine names
+// instanceID, into the bucket, under the snapshot's object key, and says what
+// the engine wrote and how much of it was stored.
+func (n *Node) take(ctx context.Context, snapshotUUID string, instanceID string) (vm.Archive, int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, snapshotKind.TransferTimeout)
 	defer cancel()
 
@@ -174,7 +196,7 @@ func (n *Node) take(ctx context.Context, snapshotUUID string, vmUUID string) (vm
 	wrote := make(chan written, 1)
 
 	go func() {
-		archive, err := n.engine.Snapshot(ctx, vmUUID, writer)
+		archive, err := n.engine.Snapshot(ctx, instanceID, writer)
 
 		// the end of the archive, or why it ends early: the bucket reads
 		// either as the end of what it is storing.
@@ -200,6 +222,52 @@ func (n *Node) take(ctx context.Context, snapshotUUID string, vmUUID string) (vm
 	}
 
 	return result.archive, stored.read, nil
+}
+
+// instanceOf is the instance of the VM uuid names that a snapshot of it is
+// taken of, as its engine names it: the VM's own, named by its uuid; or, for
+// one of the code runner's runs, which is a task shown as a VM, the instance
+// its task runs in, labelled with the task (vm.LabelTask) and named after
+// the run, of which the one running speaks for it, and otherwise the one that
+// started last, as a task's runs do. One its engine holds nothing of is
+// domain.ErrNotExists.
+func (n *Node) instanceOf(ctx context.Context, uuid string) (string, error) {
+	_, err := n.engine.Inspect(ctx, uuid)
+
+	switch {
+	case err == nil:
+		return uuid, nil
+	case !errors.Is(err, domain.ErrNotExists):
+		return "", err
+	}
+
+	instances, err := n.engine.List(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	runs := slices.DeleteFunc(instances, func(instance vm.Instance) bool { return instance.Labels[vm.LabelTask] != uuid })
+	if len(runs) == 0 {
+		return "", fmt.Errorf("%w: this node holds nothing of %q to snapshot", domain.ErrNotExists, uuid)
+	}
+
+	speaking := slices.MaxFunc(runs, func(a, b vm.Instance) int {
+		return cmp.Or(compareBool(a.State == vm.InstanceRunning, b.State == vm.InstanceRunning), a.StartedAt.Compare(b.StartedAt))
+	})
+
+	return speaking.ID, nil
+}
+
+// compareBool orders false before true.
+func compareBool(a bool, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	}
+
+	return -1
 }
 
 // remembered is what came of taking a snapshot here, if it was taken here.

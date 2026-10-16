@@ -923,6 +923,56 @@ func TestCodeRunner(t *testing.T) {
 		assert.Equal(t, vm.InstanceStopped, inspected(t, e, id).State, "stopped, rather than exited")
 	})
 
+	// a run is snapshotted as any VM is, while its snippet runs, which is how
+	// the dashboard keeps one of the code runner's runs: its disk is the layer
+	// it wrote over its image, which the archive carries with the image. The
+	// archive is restored as a new VM, a machine booting the runner's image
+	// with the disk it is restored with, which runs no snippet: a VM somebody
+	// asked for has no main process.
+	t.Run("a running snippet's vm is snapshotted, and restored as a machine that runs no snippet", func(t *testing.T) {
+		id, err := runtime.Create(ctx, execution("it-task-snapshotted", machineImage(), nil, []string{"sh", "-c", "echo written-by-the-snippet > /root/kept && sync && echo main-started && sleep 600"}))
+		require.NoError(t, err)
+		t.Cleanup(func() { removed(t, e, id) })
+
+		eventually(t, 30*time.Second, func() bool {
+			lines, err := e.Logs(ctx, id, vm.LogOptions{})
+			require.NoError(t, err)
+
+			return hasLine(lines, vm.LogSourceMain, "main-started")
+		}, "%s runs its snippet", id)
+
+		archive, written := archived(t, e, id)
+		assert.Equal(t, vm.KindMachine, written.Kind)
+		assert.Equal(t, machineImage(), written.Image)
+		assert.Equal(t, uint64(100<<20), written.Disk, "the disk the run was given")
+		assert.Equal(t, vm.InstanceRunning, inspected(t, e, id).State, "a live snapshot leaves the snippet running")
+
+		// restored with the disk the dashboard gives a new machine.
+		kept := machine("it-run-restored", func(spec *vm.Spec) { spec.Resources.Disk = 10 << 30 })
+		instance := restored(t, e, kept, archive)
+		assert.Equal(t, vm.InstanceRunning, instance.State, "it stays up, with no main process to end it")
+
+		assert.Equal(t, "written-by-the-snippet", runOK(t, e, kept.ID, "cat /root/kept"), "what the snippet wrote is on its disk")
+		assert.NotEqual(t, 0, run(t, e, kept.ID, "pgrep -f 'sleep 600'").code, "and no snippet runs in it")
+		assert.GreaterOrEqual(t, rootMiB(t, e, kept.ID), int(kept.Resources.Disk>>20)*9/10, "its disk is the one it was restored with, grown past the run's")
+
+		// a run's disk is a managed layer over its image, which microsandbox,
+		// as of 0.7.8, records as 4 GiB once it is restored, whatever it was:
+		// growing it to anything less is refused as a shrink, and the disk is
+		// left the run's, a hundred MiB or so, which the dashboard's VM says
+		// is the disk it was restored with.
+		t.Run("one restored with less than 4 GiB keeps the run's disk", func(t *testing.T) {
+			_, err := archive.Seek(0, io.SeekStart)
+			require.NoError(t, err)
+
+			small := machine("it-run-restored-small")
+			restored(t, e, small, archive)
+
+			assert.Equal(t, "written-by-the-snippet", runOK(t, e, small.ID, "cat /root/kept"))
+			assert.Less(t, rootMiB(t, e, small.ID), int(small.Resources.Disk>>20)/2, "a restored managed disk grows to less than 4 GiB now, and what is said of a run's snapshot restored with a small disk is no longer so")
+		})
+	})
+
 	// a snippet that runs on, as the code runner runs it: in its image, under
 	// its script, which runs the snippet under timeout. One is killed when its
 	// reader stops it or once it outlives its ttl, and is not held up.

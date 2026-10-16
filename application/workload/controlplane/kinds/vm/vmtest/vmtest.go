@@ -199,6 +199,7 @@ func New(opts ...Option) *Workload {
 	w.Snapshots = controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
 		VMs:         w.Records,
 		Nodes:       w.Placement,
+		Runs:        w.Runs,
 		Resources:   w.Resources,
 		UserMax:     SnapshotUserMax,
 		DockerImage: Images.Docker,

@@ -203,12 +203,14 @@ func NewControlPlaneWorkload(
 		return nil, err
 	}
 
-	// a snapshot is taken of one of its owner's VMs, by the node holding it,
-	// and is the kind's own to say a VM can be restored or made from: one of
-	// the same kind, as both their images say.
+	// a snapshot is taken of one of its owner's VMs, or of one of the code
+	// runner's runs as the asker's, by the node holding it, and is the kind's
+	// own to say a VM can be restored or made from: one of the same kind, as
+	// both their images say.
 	snapshots := controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
 		VMs:         vms,
 		Nodes:       vmPlacement,
+		Runs:        codeRunner,
 		Resources:   kinds.Resources,
 		Archives:    stores.Archives,
 		UserMax:     controlPlaneConfigs.SnapshotUserMax,

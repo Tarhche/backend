@@ -2,11 +2,14 @@ package workload_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/code/runCode"
+	"github.com/khanzadimahdi/testproject/application/code/stop"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/createSnapshot"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/deleteSnapshot"
@@ -18,6 +21,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
@@ -184,6 +188,108 @@ func TestASnapshot(t *testing.T) {
 		assert.False(t, stored)
 
 		w.vmIn(t, vmUUID, "running")
+	})
+}
+
+// TestASnapshotOfARun takes a snapshot of one of the code runner's runs from
+// the dashboard, as of any VM, and holds it to being whoever took it: among
+// the run's snapshots and its taker's own, taken of the VM its snippet runs
+// in, outliving the run, and restored as a new VM of its taker's, a machine
+// booted from the runner's image with no snippet to run; and never restored
+// onto the run.
+func TestASnapshotOfARun(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	programs := newSnippets()
+	w.programs.are(programs.run)
+
+	runner := w.codeRunner(t)
+
+	runner.ask(t, runCode.Request{ID: "request-kept", Code: "setInterval(() => {}, 1000)", Runner: "nodejs-22.14", Terminal: true})
+
+	running := w.task(t, "request-kept", "running", func(tk taskKind.Task) bool {
+		return tk.Status.State == taskKind.Running && tk.Status.Run != nil && len(tk.Status.Run.ID) > 0
+	})
+
+	require.NoError(t, w.engine.SetDisk(running.Status.Run.ID, []byte("what the snippet wrote")))
+
+	taken, err := createSnapshot.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createSnapshot.Request{
+		VMUUID:    running.Metadata.UUID,
+		Name:      "the snippet as it ran",
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, taken.ValidationErrors)
+	require.NotNil(t, taken.Snapshot)
+
+	snapshotUUID := taken.Snapshot.UUID
+
+	assert.Equal(t, ownerUUID, taken.Snapshot.OwnerUUID, "whoever took it, rather than the guest, whose the run is")
+	assert.Equal(t, running.Metadata.UUID, taken.Snapshot.VMUUID)
+	assert.Equal(t, "request-kept", taken.Snapshot.VMName)
+	assert.Equal(t, "machine", taken.Snapshot.Kind)
+
+	t.Run("it is ready once its node has stored the disk of the vm the run is", func(t *testing.T) {
+		ready := w.snapshotIn(t, snapshotUUID, "ready")
+		assert.Equal(t, uint64(runCode.DefaultMaxDiskSize), ready.Disk, "the disk the run was given")
+
+		_, stored := w.archives.Object(snapshotKind.ObjectKey(snapshotUUID))
+		assert.True(t, stored)
+
+		listed, err := getSnapshots.NewUseCase(w.client, w.owners).Execute(ctx, &getSnapshots.Request{VMUUID: running.Metadata.UUID, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Len(t, listed.Items, 1, "it is among the run's snapshots, and its taker's own")
+		assert.Equal(t, snapshotUUID, listed.Items[0].UUID)
+	})
+
+	t.Run("it is never restored onto the run", func(t *testing.T) {
+		refused, err := restoreVM.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, &restoreVM.Request{
+			UUID:         running.Metadata.UUID,
+			SnapshotUUID: snapshotUUID,
+		})
+		require.NoError(t, err)
+		assert.Contains(t, refused.ValidationErrors, "vm", "a run is the code runner's to run")
+
+		stored, err := w.resources.GetOne(ctx, taskKind.Name, running.Metadata.UUID)
+		require.NoError(t, err)
+		assert.Nil(t, stored.Pending, "and its task is asked nothing")
+	})
+
+	t.Run("it outlives the run, and is restored as a new vm of its taker's, which runs no snippet", func(t *testing.T) {
+		payload, err := json.Marshal(stop.Request{ID: "request-stop", TaskUUID: running.Metadata.UUID})
+		require.NoError(t, err)
+		require.NoError(t, runner.stop.Handle(ctx, payload))
+
+		w.taskGone(t, running.Metadata.UUID)
+		w.snapshotIn(t, snapshotUUID, "ready")
+
+		made, err := createVM.NewUseCase(w.client, w.validator, w.translator, w.owners, ingressDomain).Execute(ctx, &createVM.Request{
+			Name:         "the snippet again",
+			Kind:         string(vm.KindMachine),
+			Resources:    input.Resources{CPUs: 1, Memory: 1 << 30, Disk: 1 << 30},
+			Network:      input.Network{Ingress: "allow", Egress: "allow"},
+			SnapshotUUID: snapshotUUID,
+			OwnerUUID:    ownerUUID,
+		})
+		require.NoError(t, err)
+		require.Empty(t, made.ValidationErrors)
+		require.NotNil(t, made.VM)
+
+		again := w.vmIn(t, made.VM.UUID, "running")
+		assert.Equal(t, ownerUUID, again.OwnerUUID)
+		assert.Empty(t, again.ManagedBy, "it is a vm of its taker's, which nothing else keeps")
+		assert.Equal(t, "ghcr.io/tarhche/code-runner:nodejs-22.14-latest", again.Image, "booted from the image the run was")
+
+		spec, err := w.engine.Spec(made.VM.UUID)
+		require.NoError(t, err)
+		assert.False(t, spec.HasMainProcess(), "it boots into the runner's image, and runs no snippet")
+
+		disk, err := w.engine.Disk(made.VM.UUID)
+		require.NoError(t, err)
+		assert.Equal(t, "what the snippet wrote", string(disk))
 	})
 }
 

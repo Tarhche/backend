@@ -24,9 +24,11 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 )
 
@@ -99,6 +101,7 @@ func strategyOf(w *vmtest.Workload, archives snapshotKind.Store, userMax uint) *
 	return controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
 		VMs:         w.Records,
 		Nodes:       w.Placement,
+		Runs:        w.Runs,
 		Resources:   w.Resources,
 		Archives:    archives,
 		UserMax:     userMax,
@@ -282,6 +285,81 @@ func TestSnapshots_Admit(t *testing.T) {
 		w := vmtest.New(vmtest.WithVMs(vmtest.Running("01", "other")))
 
 		_, _, err := strategyOf(w, nil, 10).Admit(ctx, asked("mine", "01"))
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	t.Run("one of the code runner's runs is whoever took it, taken where the run is, of the vm its snippet runs in", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run-1")))
+
+		admitted, invalid, err := strategyOf(w, nil, 10).Admit(ctx, asked("the snippet", "run-1"))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, "owner", admitted.Metadata.OwnerUUID, "whoever asked for it, rather than the guest, whose the run is")
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "run-1"}}, admitted.Metadata.Refs, "it is taken of the run, as its vm")
+		assert.Empty(t, admitted.Metadata.Owners, "which does not own it")
+		assert.Equal(t, vmtest.Node, admitted.Metadata.Node, "by the node holding the run")
+		assert.Equal(t, snapshotKind.VMRef{UUID: "run-1", Name: "request-run-1"}, admitted.Spec.VM)
+		assert.Equal(t, "ghcr.io/tarhche/code-runner:nodejs-22.14-latest", admitted.Status.Image, "a machine's, booting the runner's image")
+		assert.Equal(t, uint64(100*vmtest.MiB), admitted.Status.Disk, "the disk the run was given")
+	})
+
+	for name, state := range map[string]kind.State{
+		"one on its way":           taskKind.Scheduled,
+		"one stopping":             taskKind.Stopping,
+		"one that ran to its end":  taskKind.Completed,
+		"one that failed":          taskKind.Failed,
+		"one restarting meanwhile": taskKind.Restarting,
+	} {
+		t.Run("refused: a run but while it runs, as "+name, func(t *testing.T) {
+			t.Parallel()
+
+			r := vmtest.Run("run-1")
+			r.Status.State = state
+
+			_, invalid, err := strategyOf(vmtest.New(vmtest.WithTasks(r)), nil, 10).Admit(ctx, asked("the snippet", "run-1"))
+			require.NoError(t, err)
+			assert.Equal(t, domain.ValidationErrors{"vm": "invalid_state_transition"}, invalid)
+		})
+	}
+
+	t.Run("a run's are counted among whoever takes them, and the guest's are nobody's to count against", func(t *testing.T) {
+		t.Parallel()
+
+		guest := func(s *snapshotKind.Snapshot) { s.Metadata.OwnerUUID = task.GuestOwnerUUID }
+
+		w := keeping(t, []resource.Record{kept("a", guest), kept("b", guest)}, vmtest.WithTasks(vmtest.Run("run-1")))
+
+		_, invalid, err := strategyOf(w, nil, 2).Admit(ctx, asked("the snippet", "run-1"))
+		require.NoError(t, err)
+		assert.Empty(t, invalid)
+
+		w = keeping(t, []resource.Record{kept("a"), kept("b")}, vmtest.WithTasks(vmtest.Run("run-1")))
+
+		_, invalid, err = strategyOf(w, nil, 2).Admit(ctx, asked("one too many", "run-1"))
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"snapshots": "quota_exceeded"}, invalid)
+	})
+
+	t.Run("nobody's asking finds no run", func(t *testing.T) {
+		t.Parallel()
+
+		nobody := asked("the snippet", "run-1")
+		nobody.Metadata.OwnerUUID = ""
+
+		_, _, err := strategyOf(vmtest.New(vmtest.WithTasks(vmtest.Run("run-1"))), nil, 10).Admit(ctx, nobody)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "a snapshot is whoever took it")
+	})
+
+	t.Run("a task that is not the code runner's is no vm", func(t *testing.T) {
+		t.Parallel()
+
+		theirs := vmtest.Run("task-1")
+		theirs.Metadata.OwnerUUID = "owner"
+
+		_, _, err := strategyOf(vmtest.New(vmtest.WithTasks(theirs)), nil, 10).Admit(ctx, asked("theirs", "task-1"))
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 }
