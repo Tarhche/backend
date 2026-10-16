@@ -11,7 +11,10 @@
 // A run is what any VM is to whoever reads the dashboard, but for what only a
 // VM somebody asked for can be. It can be stopped and deleted, which is
 // asking its task for its stop and its delete, as the task kind is asked
-// anything, and read, which is reading what it wrote. It is changed as a VM
+// anything, and read, which is reading what it wrote. What it uses is its
+// task's run's, which its node samples as it samples a VM, and samples afresh
+// when it is asked its stats, which is asking its task for its own (the task
+// kind's stats query, asked of its node as any query is). It is changed as a VM
 // is (vmKind.UpdatePayload): its name, which is its task's record's, and its
 // ports, network and resources, which are its task's ports, network policy
 // (network.PolicyOf) and limits, held to what one VM may be given at most and
@@ -74,9 +77,11 @@ type Runs struct {
 	resources resource.Repository
 
 	// registry is where the task kind is, whose commands a run is asked as
-	// any task is, through dispatcher.
+	// any task is, through dispatcher, and whose queries are asked of the node
+	// holding it through requester.
 	registry   *kind.Registry[kind.ControlPlaneBinding]
 	dispatcher *dispatch.Dispatcher
+	requester  noderequest.Requester
 
 	// limits are what one VM may be given, which a run changed is held to at
 	// most, and room what its node has room for.
@@ -89,12 +94,13 @@ type Runs struct {
 var _ kind.Extras = &Runs{}
 
 // New is the code runner's runs, read from the tasks resources keeps and
-// asked for their commands through dispatcher, as the task kind in registry
-// says, a run changed held to the most limits let one VM be given and to what
-// room says its node has room for, and what could not be asked of one once it
-// was changed told to logger.
-func New(resources resource.Repository, registry *kind.Registry[kind.ControlPlaneBinding], dispatcher *dispatch.Dispatcher, limits quota.Limits, room Room, logger *slog.Logger) *Runs {
-	return &Runs{resources: resources, registry: registry, dispatcher: dispatcher, limits: limits, room: room, logger: logger}
+// asked for their commands through dispatcher, and for their queries of their
+// nodes through requester, as the task kind in registry says, a run changed
+// held to the most limits let one VM be given and to what room says its node
+// has room for, and what could not be asked of one once it was changed told
+// to logger.
+func New(resources resource.Repository, registry *kind.Registry[kind.ControlPlaneBinding], dispatcher *dispatch.Dispatcher, requester noderequest.Requester, limits quota.Limits, room Room, logger *slog.Logger) *Runs {
+	return &Runs{resources: resources, registry: registry, dispatcher: dispatcher, requester: requester, limits: limits, room: room, logger: logger}
 }
 
 // All is every run there is now, as VMs, newest first.
@@ -422,13 +428,24 @@ func asVM(invalid domain.ValidationErrors) domain.ValidationErrors {
 	return said
 }
 
-// Query reads what a run has written, as a VM's log, and refuses anything
-// else as CodeRefused.
+// Query reads what a run has written, as a VM's log, and samples what it
+// uses, as a VM's stats (stats), and refuses anything else as CodeRefused.
 func (r *Runs) Query(ctx context.Context, run kind.Raw, action string, payload []byte) ([]byte, domain.ValidationErrors, error) {
-	if action != vmKind.ActionLogs {
-		return nil, refusal(), nil
+	switch action {
+	case vmKind.ActionLogs:
+		return r.logs(ctx, run.Metadata.UUID, payload)
+	case vmKind.ActionStats:
+		answer, err := r.stats(ctx, run.Metadata.UUID)
+
+		return answer, nil, err
 	}
 
+	return nil, refusal(), nil
+}
+
+// logs is what the run uuid names has written, as a VM's log (Logs), as much
+// of it as payload asks for.
+func (r *Runs) logs(ctx context.Context, uuid string, payload []byte) ([]byte, domain.ValidationErrors, error) {
 	var options vmKind.LogsPayload
 	if len(payload) > 0 {
 		if err := json.Unmarshal(payload, &options); err != nil {
@@ -436,7 +453,7 @@ func (r *Runs) Query(ctx context.Context, run kind.Raw, action string, payload [
 		}
 	}
 
-	record, err := r.record(ctx, run.Metadata.UUID)
+	record, err := r.record(ctx, uuid)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -449,6 +466,58 @@ func (r *Runs) Query(ctx context.Context, run kind.Raw, action string, payload [
 	answer, err := json.Marshal(Logs(t, options))
 
 	return answer, nil, err
+}
+
+// stats is a sample of what the run uuid names uses, as its node takes one
+// now: its task's own (taskKind.ActionStats), asked of the node holding it,
+// which samples the run that speaks for it as it samples a VM, and answers in
+// the shape a VM's stats are answered in. A run that is not running is not
+// asked, as a VM that is not is not, and neither is one on no node yet; what
+// its node refused, or that it did not answer, is said as a node's refusal
+// (noderequest.Error), as any query's is.
+func (r *Runs) stats(ctx context.Context, uuid string) ([]byte, error) {
+	binding, registered := r.registry.Lookup(taskKind.Name)
+	if !registered {
+		return nil, fmt.Errorf("%w: %q", kind.ErrUnknownKind, taskKind.Name)
+	}
+
+	record, err := r.record(ctx, uuid)
+	if err != nil {
+		return nil, err
+	}
+
+	common, err := record.Common()
+	if err != nil {
+		return nil, err
+	}
+
+	switch {
+	case !binding.Descriptor().Allows(taskKind.ActionStats, common.State):
+		return nil, &noderequest.Error{Code: noderequest.CodeNotRunning, Message: fmt.Sprintf("a %s that is %s cannot be asked for its %s", vmKind.Name, stateOf(common.State), vmKind.ActionStats)}
+	case len(record.Metadata.Node) == 0:
+		return nil, &noderequest.Error{Code: noderequest.CodeNotRunning, Message: fmt.Sprintf("the %s is on no node yet", vmKind.Name)}
+	}
+
+	asked, err := kind.Query{Kind: taskKind.Name, UUID: record.Metadata.UUID, Action: taskKind.ActionStats, Resource: record.Raw}.Request()
+	if err != nil {
+		return nil, err
+	}
+
+	reply, err := r.requester.Request(ctx, record.Metadata.Node, asked)
+
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return nil, &noderequest.Error{Code: noderequest.CodeTimeout, Message: fmt.Sprintf("the node holding the %s did not answer in time", vmKind.Name)}
+	case err != nil:
+		return nil, &noderequest.Error{Code: noderequest.CodeInternal, Message: fmt.Sprintf("the node holding the %s is not answering", vmKind.Name)}
+	}
+
+	var refused *noderequest.Error
+	if errors.As(reply.Err(), &refused) {
+		return nil, refused
+	}
+
+	return reply.Result, nil
 }
 
 // record is the task of the run uuid names.
@@ -516,8 +585,9 @@ func Logs(t taskKind.Task, options vmKind.LogsPayload) vmKind.Logs {
 // the runner's image, given what its task was limited to the way a node gives
 // it, with the network its task's policy maps to and a disk thrown away with
 // it. Its lifetime is its task's ttl, counted from when its run started, and
-// its state is its task's, in a VM's words. Its node reports no stats for a
-// run, so it has none to show.
+// its state is its task's, in a VM's words. What it uses is what its node last
+// sampled of its run, as it samples a VM it holds: nothing while it is not
+// running, and nothing until its node has sampled it.
 func Manifest(t taskKind.Task) vmKind.VM {
 	var startedAt time.Time
 	if t.Status.Run != nil {
@@ -559,6 +629,7 @@ func Manifest(t taskKind.Task) vmKind.VM {
 				Reason:     t.Status.Reason,
 				ObservedAt: t.Status.ObservedAt,
 			},
+			Stats:     t.Status.Stats,
 			StartedAt: startedAt,
 		},
 	}

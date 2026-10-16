@@ -180,10 +180,11 @@ func NewControlPlaneWorkload(
 	vmPlacement := placement.New(stores.Nodes, vms, controlPlaneConfigs.VMCPUOvercommit)
 
 	// the code runner's runs, shown among anybody's VMs: read from their tasks,
-	// and stopped, changed and taken away as their tasks are, as any task's
+	// stopped, changed and taken away as their tasks are, as any task's
 	// commands are asked, a change held to what one VM may be given at most
-	// and to its node's room.
-	codeRunner := runs.New(kinds.Resources, registry, kinds.Dispatcher, vmLimits(controlPlaneConfigs), vmPlacement, logger)
+	// and to its node's room, and sampled as their tasks are, asked of their
+	// nodes as any query is.
+	codeRunner := runs.New(kinds.Resources, registry, kinds.Dispatcher, requester, vmLimits(controlPlaneConfigs), vmPlacement, logger)
 
 	// a slug is one resource's, whatever its kind, as the resources of every
 	// kind are kept together: a VM's and a task's are what the ingress serves

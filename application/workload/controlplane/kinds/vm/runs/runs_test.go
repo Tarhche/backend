@@ -3,6 +3,7 @@ package runs_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -212,6 +213,25 @@ func TestManifest(t *testing.T) {
 		assert.Equal(t, vm.KindMachine, shown.Kind)
 		assert.Equal(t, vm.Running, shown.CurrentState)
 		assert.Equal(t, made.Add(5*time.Second), shown.LastHeartbeatAt)
+		assert.Equal(t, vm.Stats{}, shown.Stats, "with nothing to show its node has not sampled")
+	})
+
+	t.Run("what it uses is what its node last sampled of its run, as a vm's is, the blog's way too", func(t *testing.T) {
+		t.Parallel()
+
+		sampled := vm.Stats{CPUPercent: 12.5, MemoryUsed: 64 << 20, MemoryLimit: 512 << 20, DiskUsed: 10 << 20, DiskTotal: 512 << 20, NetworkRx: 1, NetworkTx: 2, SampledAt: made.Add(4 * time.Second)}
+
+		r := run("run-uuid", func(t *taskKind.Task) { t.Status.Stats = vmKind.StatsOf(sampled) })
+
+		assert.Equal(t, vmKind.StatsOf(sampled), runs.Manifest(r).Status.Stats)
+		assert.Equal(t, sampled, vmKind.Entity(runs.Manifest(r), vmtest.Images.Docker).Stats)
+
+		encoded, err := json.Marshal(runs.Manifest(r).Status)
+		require.NoError(t, err)
+
+		var fields map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(encoded, &fields))
+		assert.JSONEq(t, `{"cpu_percent":12.5,"memory_used":67108864,"memory_limit":536870912,"disk_used":10485760,"disk_total":536870912,"network_rx":1,"network_tx":2,"sampled_at":"2026-10-05T12:00:04Z"}`, string(fields["stats"]))
 	})
 }
 
@@ -697,9 +717,118 @@ func TestRuns_Query(t *testing.T) {
 	t.Run("and nothing else is asked of one", func(t *testing.T) {
 		t.Parallel()
 
-		_, refused, err := w.Runs.Query(ctx, raw(t, r), vmKind.ActionStats, nil)
+		_, refused, err := w.Runs.Query(ctx, raw(t, r), vmKind.ActionState, nil)
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{"vm": runs.CodeRefused}, refused)
+	})
+}
+
+func TestRuns_Query_stats(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	sampled := vmKind.StatsOf(vm.Stats{CPUPercent: 12.5, MemoryUsed: 64 << 20, MemoryLimit: 512 << 20, DiskTotal: 512 << 20, SampledAt: made})
+
+	t.Run("what a run uses is its task's sample, asked afresh of the node holding it, as a vm's is", func(t *testing.T) {
+		t.Parallel()
+
+		r := run("run")
+		w := vmtest.New(vmtest.WithTasks(r))
+
+		w.Requester.Answer = func(_ context.Context, nodeName string, request noderequest.Request) (noderequest.Reply, error) {
+			answer, err := json.Marshal(sampled)
+			if err != nil {
+				return noderequest.Reply{}, err
+			}
+
+			return noderequest.Reply{OK: true, Result: answer}, nil
+		}
+
+		answer, refused, err := w.Runs.Query(ctx, raw(t, r), vmKind.ActionStats, nil)
+		require.NoError(t, err)
+		require.Empty(t, refused)
+
+		var stats vmKind.Stats
+		require.NoError(t, json.Unmarshal(answer, &stats))
+		assert.Equal(t, *sampled, stats)
+
+		asked := w.Requester.Asked()
+		require.Len(t, asked, 1)
+		assert.Equal(t, vmtest.Node, asked[0].NodeName, "its task's node")
+
+		query, err := kind.QueryOf(asked[0].Request)
+		require.NoError(t, err)
+		assert.Equal(t, taskKind.Name, query.Kind, "its task's own query")
+		assert.Equal(t, taskKind.ActionStats, query.Action)
+		assert.Equal(t, "run", query.UUID)
+		assert.Equal(t, taskKind.Name, query.Resource.Kind, "carrying its task as it is kept, which its node reads it from")
+		assert.Equal(t, "run", query.Resource.Metadata.UUID)
+	})
+
+	t.Run("one that is not running is not asked, as a vm that is not is not", func(t *testing.T) {
+		t.Parallel()
+
+		for _, state := range []kind.State{taskKind.Scheduled, taskKind.Restarting, taskKind.Stopping, taskKind.Completed, taskKind.Failed} {
+			r := run("run", func(t *taskKind.Task) { t.Status.State = state })
+			w := vmtest.New(vmtest.WithTasks(r))
+
+			_, refused, err := w.Runs.Query(ctx, raw(t, r), vmKind.ActionStats, nil)
+			require.Empty(t, refused)
+
+			var notRunning *noderequest.Error
+			require.ErrorAs(t, err, &notRunning, "%s", state)
+			assert.Equal(t, noderequest.CodeNotRunning, notRunning.Code, "%s", state)
+			assert.Empty(t, w.Requester.Asked(), "%s: its node is asked nothing", state)
+		}
+	})
+
+	t.Run("nor is one on no node", func(t *testing.T) {
+		t.Parallel()
+
+		r := run("run", func(t *taskKind.Task) { t.Metadata.Node = "" })
+		w := vmtest.New(vmtest.WithTasks(r))
+
+		_, _, err := w.Runs.Query(ctx, raw(t, r), vmKind.ActionStats, nil)
+
+		var notRunning *noderequest.Error
+		require.ErrorAs(t, err, &notRunning)
+		assert.Equal(t, noderequest.CodeNotRunning, notRunning.Code)
+		assert.Empty(t, w.Requester.Asked())
+	})
+
+	t.Run("what its node refused is its refusal, and a node that does not answer in time says so", func(t *testing.T) {
+		t.Parallel()
+
+		r := run("run")
+
+		for name, tt := range map[string]struct {
+			reply noderequest.Reply
+			err   error
+			code  noderequest.Code
+		}{
+			"refused":      {reply: noderequest.Failed(fmt.Errorf("%w: its run is down", vm.ErrNotRunning)), code: noderequest.CodeNotRunning},
+			"not in time":  {err: context.DeadlineExceeded, code: noderequest.CodeTimeout},
+			"not answered": {err: errors.New("no responders"), code: noderequest.CodeInternal},
+		} {
+			w := vmtest.New(vmtest.WithTasks(r))
+			w.Requester.Answer = func(context.Context, string, noderequest.Request) (noderequest.Reply, error) {
+				return tt.reply, tt.err
+			}
+
+			_, _, err := w.Runs.Query(ctx, raw(t, r), vmKind.ActionStats, nil)
+
+			var refused *noderequest.Error
+			require.ErrorAs(t, err, &refused, name)
+			assert.Equal(t, tt.code, refused.Code, name)
+		}
+	})
+
+	t.Run("one that went in the meantime is not there", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := vmtest.New().Runs.Query(ctx, raw(t, run("run")), vmKind.ActionStats, nil)
+		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 }
 

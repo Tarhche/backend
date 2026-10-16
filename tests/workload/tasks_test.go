@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"slices"
 	"sync"
 	"testing"
@@ -25,6 +27,7 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
@@ -433,6 +436,62 @@ func TestALiveSnippet(t *testing.T) {
 		own, err := listed.Execute(ctx, &getVMs.Request{OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		assert.False(t, slices.ContainsFunc(own.Items, func(v presenter.VM) bool { return v.UUID == running.Metadata.UUID }))
+	})
+
+	t.Run("it says what it uses as any vm does, sampled by its node, and sampled afresh when its stats are asked for", func(t *testing.T) {
+		require.NoError(t, w.engine.SetStats(running.Status.Run.ID, vm.Stats{CPUPercent: 12, MemoryUsed: 64 << 20, DiskUsed: 10 << 20}))
+
+		listed := getVMs.NewUseCase(w.client, w.validator, w.owners, ingressDomain)
+
+		shown := eventually(t, "the run shown with what it uses", func(ctx context.Context) (presenter.VM, error) {
+			everybody, err := listed.Execute(ctx, &getVMs.Request{})
+			if err != nil {
+				return presenter.VM{}, err
+			}
+
+			index := slices.IndexFunc(everybody.Items, func(v presenter.VM) bool { return v.UUID == running.Metadata.UUID })
+			if index < 0 {
+				return presenter.VM{}, domain.ErrNotExists
+			}
+
+			return everybody.Items[index], nil
+		}, func(v presenter.VM) bool { return v.Stats != nil && v.Stats.MemoryUsed == 64<<20 })
+
+		assert.Equal(t, 12.0, shown.Stats.CPUPercent)
+		assert.Equal(t, running.Spec.Limits.Memory, shown.Stats.MemoryLimit, "of the memory its task was given")
+		assert.Equal(t, uint64(10<<20), shown.Stats.DiskUsed)
+		assert.Equal(t, running.Spec.Limits.Disk, shown.Stats.DiskTotal, "and of its disk")
+
+		require.NoError(t, w.engine.SetStats(running.Status.Run.ID, vm.Stats{CPUPercent: 40, MemoryUsed: 96 << 20}))
+
+		// anybody's, as the dashboard asks for the VMs it lists, among which
+		// the guest's runs are.
+		anybodys := url.Values{"owner": {""}}
+
+		for _, path := range []string{"/api/vms/" + running.Metadata.UUID + "/stats", "/api/tasks/" + running.Metadata.UUID + "/stats"} {
+			status, body := w.controlPlane(t, http.MethodGet, path, anybodys)
+			require.Equal(t, http.StatusOK, status, "%s: %s", path, body)
+
+			var answer struct {
+				Result vmKind.Stats `json:"result"`
+			}
+			require.NoError(t, json.Unmarshal(body, &answer), path)
+			assert.Equal(t, 40.0, answer.Result.CPUPercent, "%s: sampled afresh by its node", path)
+			assert.Equal(t, uint64(96<<20), answer.Result.MemoryUsed, path)
+			assert.Equal(t, running.Spec.Limits.Memory, answer.Result.MemoryLimit, path)
+		}
+
+		// its reader is answered what it always was, and nothing of what it
+		// uses.
+		for _, reply := range runner.replies.Replies() {
+			if reply.RequestID != "request-live" {
+				continue
+			}
+
+			var fields map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(reply.Payload, &fields))
+			assert.NotContains(t, fields, "stats")
+		}
 	})
 
 	t.Run("stopped by its reader, it is taken away", func(t *testing.T) {

@@ -83,8 +83,9 @@ func runSnippet(t testing.TB, runner, code string) runAnswer {
 // ephemeral VM of its own: one that prints and ends, a Go one that is built
 // before it does, one that prints and runs past its time, whose runner exits
 // with 124 and is a snippet that failed, one that fetches a page off the
-// internet, and two that serve a port through the ingress, one until it is
-// stopped and one until it ends.
+// internet, two that serve a port through the ingress, one until it is
+// stopped and one until it ends, and a live one whose VM says what it uses
+// while it runs, as any VM does.
 func TestCodeRunner(t *testing.T) {
 	// the code runner keeps the answers of snippets it has run, so each run
 	// asks for code it has not seen.
@@ -176,6 +177,58 @@ setInterval(() => {}, 1000);
 	timings.step(t, "a snippet serving a port, ending on its own", func(t *testing.T) {
 		servePort(t, runner, token, true)
 	})
+
+	timings.step(t, "a live snippet's VM reporting its stats", func(t *testing.T) {
+		reportsStats(t, runner, token)
+	})
+}
+
+// reportsStats runs a live snippet, one with a terminal, which runs until it
+// is stopped, and reads its VM through the dashboard's API, among anybody's
+// VMs, as the run's account, which may read them: while it runs, its VM says
+// what it uses, as any VM does, its node sampling its run as it samples a VM,
+// its memory among it, and how big its disk is. Then it is stopped.
+func reportsStats(t *testing.T, runner, token string) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+
+	f := follow(ctx, t)
+
+	id := "e2e-" + random(4)
+	f.send(id, "runCode", map[string]any{
+		"runner":   runner,
+		"code":     fmt.Sprintf(`console.log("sampled e2e %s");`+"\n"+`setInterval(() => {}, 1000);`, token),
+		"terminal": true,
+	})
+
+	var answer liveAnswer
+	for answer.State != "running" {
+		payload, ended := f.next(id)
+
+		answer = liveAnswer{}
+		if err := json.Unmarshal(payload, &answer); err != nil {
+			t.Fatalf("the code runner answered %q: %v", payload, err)
+		}
+
+		if ended {
+			t.Fatalf("the snippet ended before it ran: %s (%s), printing %q", answer.State, answer.Error, answer.Logs)
+		}
+	}
+
+	path := "/api/dashboard/workload/vms/" + url.PathEscape(answer.TaskUUID)
+
+	eventually(t, "the snippet's vm "+answer.TaskUUID, time.Minute, func() (bool, string) {
+		var v vmView
+		user.call(t, http.MethodGet, path, nil, http.StatusOK, &v)
+
+		if v.Stats == nil {
+			return false, v.String() + ", not sampled yet"
+		}
+
+		return v.State == "running" && v.Stats.MemoryUsed > 0 && v.Stats.DiskTotal > 0, fmt.Sprintf("%s, using %d of %d bytes of memory and %d of %d of disk", v, v.Stats.MemoryUsed, v.Stats.MemoryLimit, v.Stats.DiskUsed, v.Stats.DiskTotal)
+	})
+
+	f.stop(answer.TaskUUID)
 }
 
 // liveAnswer is one of the answers a snippet that serves a port is followed
@@ -191,6 +244,110 @@ type liveAnswer struct {
 	} `json:"endpoints"`
 }
 
+// follower is the blog's websocket as an article's page holds it open: what
+// the page sends on it, and each answer as it comes, read whatever the test
+// is doing meanwhile, as a browser reads it: the server pings, and closes a
+// connection whose pongs stop.
+type follower struct {
+	t       *testing.T
+	ctx     context.Context
+	conn    *websocket.Conn
+	replies chan socketReply
+	failed  chan error
+}
+
+// socketReply is one of the answers the websocket carries.
+type socketReply struct {
+	RequestID string `json:"request_id"`
+	Kind      int    `json:"kind"`
+	Payload   []byte `json:"payload"`
+}
+
+// follow opens the blog's websocket, signed in as nobody, for as long as ctx
+// lasts and the test does.
+func follow(ctx context.Context, t *testing.T) *follower {
+	t.Helper()
+
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, "ws"+strings.TrimPrefix(env.blogURL, "http")+"/api/ws", nil)
+	if err != nil {
+		t.Fatalf("opening the code runner's websocket: %v", err)
+	}
+
+	t.Cleanup(func() { _ = conn.Close() })
+
+	go func() {
+		<-ctx.Done()
+		_ = conn.Close()
+	}()
+
+	f := &follower{t: t, ctx: ctx, conn: conn, replies: make(chan socketReply, 64), failed: make(chan error, 1)}
+
+	go func() {
+		for {
+			var r socketReply
+			if err := conn.ReadJSON(&r); err != nil {
+				f.failed <- err
+
+				return
+			}
+
+			f.replies <- r
+		}
+	}()
+
+	return f
+}
+
+// send asks the code runner for subject with body, under id, as the page does.
+func (f *follower) send(id, subject string, body any) {
+	f.t.Helper()
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+
+	if err := f.conn.WriteJSON(map[string]any{"id": id, "subject": subject, "payload": payload}); err != nil {
+		f.t.Fatalf("sending %s: %v", subject, err)
+	}
+}
+
+// next is the next answer to request, and whether it is its last.
+func (f *follower) next(request string) ([]byte, bool) {
+	f.t.Helper()
+
+	for {
+		select {
+		case r := <-f.replies:
+			// a chunk is 1; anything else is an answer's last.
+			if r.RequestID == request {
+				return r.Payload, r.Kind != 1
+			}
+		case err := <-f.failed:
+			f.t.Fatalf("following the snippet: %v", err)
+		case <-f.ctx.Done():
+			f.t.Fatalf("following the snippet: %v", f.ctx.Err())
+		}
+	}
+}
+
+// stop stops a snippet as its reader does, which is taking its task away,
+// and is answered on its own: what is left of the run is not followed any
+// further, as the page does not.
+func (f *follower) stop(taskUUID string) {
+	f.t.Helper()
+
+	stop := "e2e-" + random(4)
+	f.send(stop, "codeStop", map[string]any{"task_uuid": taskUUID})
+
+	var stopped struct {
+		Errors map[string]string `json:"errors"`
+	}
+	if payload, _ := f.next(stop); json.Unmarshal(payload, &stopped) != nil || len(stopped.Errors) > 0 {
+		f.t.Fatalf("stopping the snippet was answered %q", payload)
+	}
+}
+
 // servePort runs a snippet that serves a port the way an article's reader
 // does: followed over the websocket and served through the ingress by the
 // name its answers give. Then it is stopped, or, when it ends on its own, it
@@ -199,69 +356,7 @@ func servePort(t *testing.T, runner, token string, ends bool) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, "ws"+strings.TrimPrefix(env.blogURL, "http")+"/api/ws", nil)
-	if err != nil {
-		t.Fatalf("opening the code runner's websocket: %v", err)
-	}
-	defer conn.Close()
-
-	go func() {
-		<-ctx.Done()
-		_ = conn.Close()
-	}()
-
-	send := func(id, subject string, body any) {
-		payload, err := json.Marshal(body)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := conn.WriteJSON(map[string]any{"id": id, "subject": subject, "payload": payload}); err != nil {
-			t.Fatalf("sending %s: %v", subject, err)
-		}
-	}
-
-	// what the server says is read as it comes, whatever the test is doing
-	// meanwhile, as a browser reads it: the server pings, and closes a
-	// connection whose pongs stop.
-	type reply struct {
-		RequestID string `json:"request_id"`
-		Kind      int    `json:"kind"`
-		Payload   []byte `json:"payload"`
-	}
-
-	replies := make(chan reply, 64)
-	failed := make(chan error, 1)
-
-	go func() {
-		for {
-			var r reply
-			if err := conn.ReadJSON(&r); err != nil {
-				failed <- err
-
-				return
-			}
-
-			replies <- r
-		}
-	}()
-
-	// next is the next answer to request, and whether it is its last.
-	next := func(request string) ([]byte, bool) {
-		for {
-			select {
-			case r := <-replies:
-				// a chunk is 1; anything else is an answer's last.
-				if r.RequestID == request {
-					return r.Payload, r.Kind != 1
-				}
-			case err := <-failed:
-				t.Fatalf("following the snippet: %v", err)
-			case <-ctx.Done():
-				t.Fatalf("following the snippet: %v", ctx.Err())
-			}
-		}
-	}
+	f := follow(ctx, t)
 
 	code := fmt.Sprintf(`require("http").createServer((q, s) => s.end("served by e2e %s")).listen(3000, () => console.log("listening"));`, token)
 	if ends {
@@ -269,7 +364,7 @@ func servePort(t *testing.T, runner, token string, ends bool) {
 	}
 
 	id := "e2e-" + random(4)
-	send(id, "runCode", map[string]any{
+	f.send(id, "runCode", map[string]any{
 		"runner": runner,
 		"code":   code,
 		"ports":  []uint{3000},
@@ -277,7 +372,7 @@ func servePort(t *testing.T, runner, token string, ends bool) {
 
 	var answer liveAnswer
 	for answer.State != "running" || len(answer.Endpoints) == 0 {
-		payload, ended := next(id)
+		payload, ended := f.next(id)
 
 		answer = liveAnswer{}
 		if err := json.Unmarshal(payload, &answer); err != nil {
@@ -305,7 +400,7 @@ func servePort(t *testing.T, runner, token string, ends bool) {
 
 	if ends {
 		for {
-			payload, ended := next(id)
+			payload, ended := f.next(id)
 			if !ended {
 				continue
 			}
@@ -319,18 +414,7 @@ func servePort(t *testing.T, runner, token string, ends bool) {
 		}
 	}
 
-	// stopping a snippet is taking its task away, which is answered on its
-	// own: what is left of the run is not followed any further, as the page
-	// does not.
-	stop := "e2e-" + random(4)
-	send(stop, "codeStop", map[string]any{"task_uuid": answer.TaskUUID})
-
-	var stopped struct {
-		Errors map[string]string `json:"errors"`
-	}
-	if payload, _ := next(stop); json.Unmarshal(payload, &stopped) != nil || len(stopped.Errors) > 0 {
-		t.Fatalf("stopping the snippet was answered %q", payload)
-	}
+	f.stop(answer.TaskUUID)
 
 	eventually(t, endpoint.Host, time.Minute, func() (bool, string) {
 		status, body, err := ingressGet(t.Context(), endpoint.Host, "/")

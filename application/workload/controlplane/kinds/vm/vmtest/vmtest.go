@@ -96,6 +96,10 @@ type Workload struct {
 	Nodes     *nodesMemory.Repository
 	Producer  *messagingMock.Recorder
 
+	// Requester is the nodes, as what is asked of them and waited on is
+	// asked: a run's stats among it.
+	Requester *messagingMock.Requester
+
 	Placement *placement.Placement
 	Quota     *quota.Quota
 	Runs      *runs.Runs
@@ -154,10 +158,11 @@ func New(opts ...Option) *Workload {
 	}
 
 	w := &Workload{
-		Memory:   resourcesMemory.NewRepository(),
-		Registry: kind.NewRegistry[kind.ControlPlaneBinding](),
-		Nodes:    nodesMemory.NewRepository(o.nodes...),
-		Producer: &messagingMock.Recorder{},
+		Memory:    resourcesMemory.NewRepository(),
+		Registry:  kind.NewRegistry[kind.ControlPlaneBinding](),
+		Nodes:     nodesMemory.NewRepository(o.nodes...),
+		Producer:  &messagingMock.Recorder{},
+		Requester: &messagingMock.Requester{},
 	}
 
 	for _, v := range o.vms {
@@ -184,7 +189,7 @@ func New(opts ...Option) *Workload {
 
 	w.Placement = placement.New(w.Nodes, w.Records, 4)
 	w.Quota = quota.New(w.Records, Limits)
-	w.Runs = runs.New(w.Resources, w.Registry, w.Dispatcher, Limits, w.Placement, slog.New(slog.DiscardHandler))
+	w.Runs = runs.New(w.Resources, w.Registry, w.Dispatcher, w.Requester, Limits, w.Placement, slog.New(slog.DiscardHandler))
 
 	held := []slugs.Taken{
 		slugs.By(w.Records.GetOneBySlug),
