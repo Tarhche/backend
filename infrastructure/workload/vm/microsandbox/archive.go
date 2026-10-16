@@ -50,9 +50,10 @@ type archiveHeader struct {
 // A VM's disk is flat, and a restore grows it to whatever it is given past
 // the disk it was given. An instance with a main process, a code runner's
 // run, has a managed root disk instead, the layer it writes over its image,
-// which a restore grows only once it is given managedRestoreFloor or more: a
-// VM restored from one with less would keep the run's disk, whatever it says
-// it was given, so that much is the least its archive says.
+// which a restore grows only once it is given 4 GiB and 3 MiB or more: a VM
+// restored from one with less would keep the run's disk, whatever it says it
+// was given, so its archive says it needs managedRestoreFloor, the next whole
+// GiB, at least.
 func restoreDiskOf(spec vm.Spec) uint64 {
 	if !spec.HasMainProcess() {
 		return spec.Resources.Disk

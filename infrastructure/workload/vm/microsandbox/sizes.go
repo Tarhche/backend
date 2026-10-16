@@ -18,16 +18,19 @@ const (
 	managedFloor = 70
 
 	// managedRestoreFloor is the least disk, in bytes, a VM restored from a
-	// snapshot of a managed root disk has to be given for its disk to be the
-	// one it is given: 4 GiB and 3 MiB. microsandbox, as of 0.7.8, records a
-	// managed disk it restores as 4 GiB, its default, whatever the disk was,
-	// and grows it only to more than that: less is refused as a shrink, and
-	// 4 GiB itself as no change. Its guest then grows ext4 into a last 128 MiB
-	// block group only when that group has room for its own metadata, a 2 MiB
-	// inode table and two bitmaps, which the first MiB or two past 4 GiB have
-	// not. A VM restored with less keeps the disk the snapshot was taken of,
-	// the hundred MiB or so of a code runner's run, whatever its record says.
-	managedRestoreFloor = 4099 * mib
+	// snapshot of a managed root disk is given, so that its disk is the one
+	// it is given: 5 GiB. microsandbox, as of 0.7.8, records a managed disk
+	// it restores as 4 GiB, its default, whatever the disk was, and grows it
+	// only to more than that: less is refused as a shrink, and 4 GiB itself
+	// as no change. Its guest then grows ext4 into a last 128 MiB block group
+	// only when that group has room for its own metadata, a 2 MiB inode table
+	// and two bitmaps, which 4 GiB and 1 or 2 MiB have not, so 4 GiB and
+	// 3 MiB is the least it grows to. The floor is the next whole GiB, a size
+	// the dashboard shows as it is and a person can type, and a whole number
+	// of block groups. A VM restored with less than 4 GiB and 3 MiB keeps the
+	// disk the snapshot was taken of, the hundred MiB or so of a code
+	// runner's run, whatever its record says.
+	managedRestoreFloor = 5 << 30
 )
 
 // vcpus is the vCPUs microsandbox is asked for: one at the least, and no more

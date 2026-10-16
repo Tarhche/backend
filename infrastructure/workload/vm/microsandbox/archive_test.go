@@ -123,19 +123,20 @@ func TestRestoreDiskOf(t *testing.T) {
 	})
 
 	// a run's disk is a managed layer, which microsandbox 0.7.8 grows once
-	// it is restored only to 4 GiB and 3 MiB or more, as the KVM suite holds.
-	t.Run("a run's managed disk needs 4 GiB and 3 MiB, or as much as it was given past that", func(t *testing.T) {
+	// it is restored only to 4 GiB and 3 MiB or more, as the KVM suite holds,
+	// and its archive says the next whole GiB.
+	t.Run("a run's managed disk needs 5 GiB, or as much as it was given past that", func(t *testing.T) {
 		t.Parallel()
 
 		run := func(disk uint64) vm.Spec {
 			return vm.Spec{Image: "alpine:3.20", Resources: vm.Resources{Disk: disk}, Command: []string{"sh", "-c", "sleep 600"}}
 		}
 
-		for disk, want := range map[uint64]uint64{0: 4099 << 20, 100 << 20: 4099 << 20, 4 << 30: 4099 << 20, 4099 << 20: 4099 << 20, 4100 << 20: 4100 << 20, 10 << 30: 10 << 30} {
+		for disk, want := range map[uint64]uint64{0: 5 << 30, 100 << 20: 5 << 30, 4 << 30: 5 << 30, 4099 << 20: 5 << 30, 5 << 30: 5 << 30, 6 << 30: 6 << 30, 10 << 30: 10 << 30} {
 			assert.Equal(t, want, restoreDiskOf(run(disk)), "%d", disk)
 		}
 
-		assert.Equal(t, uint64(4099<<20), restoreDiskOf(vm.Spec{Resources: vm.Resources{Disk: 100 << 20}, Entrypoint: []string{"node"}}), "an entrypoint is a main process too")
+		assert.Equal(t, uint64(5<<30), restoreDiskOf(vm.Spec{Resources: vm.Resources{Disk: 100 << 20}, Entrypoint: []string{"node"}}), "an entrypoint is a main process too")
 	})
 }
 

@@ -944,7 +944,7 @@ func TestCodeRunner(t *testing.T) {
 		archive, written := archived(t, e, id)
 		assert.Equal(t, vm.KindMachine, written.Kind)
 		assert.Equal(t, machineImage(), written.Image)
-		assert.Equal(t, uint64(managedRestoreFloor), written.Disk, "the least disk a restore grows the run's to, which is more than the run was given")
+		assert.Equal(t, uint64(5<<30), written.Disk, "the whole GiB past the least disk a restore grows the run's to, which is more than the run was given")
 		assert.Equal(t, vm.InstanceRunning, inspected(t, e, id).State, "a live snapshot leaves the snippet running")
 
 		// restored with the disk the dashboard gives a new machine.
@@ -958,10 +958,10 @@ func TestCodeRunner(t *testing.T) {
 
 		// a run's disk is a managed layer over its image, which microsandbox,
 		// as of 0.7.8, records as 4 GiB once it is restored, whatever it was,
-		// and grows only to 4 GiB and 3 MiB or more. So that is what the
-		// snapshot says a restore needs, which the control plane holds a VM
-		// made from it, or restored onto with it, to, and it is the disk such
-		// a VM then has.
+		// and grows only to 4 GiB and 3 MiB or more. So the snapshot says a
+		// restore needs the next whole GiB, 5 GiB, which the control plane
+		// holds a VM made from it, or restored onto with it, to, and it is the
+		// disk such a VM then has.
 		t.Run("one restored with the least disk it says has that disk", func(t *testing.T) {
 			least := machine("it-run-restored-least", func(spec *vm.Spec) { spec.Resources.Disk = written.Disk })
 			restored(t, e, least, archive)
@@ -982,11 +982,12 @@ func TestCodeRunner(t *testing.T) {
 		// the engine restores one with whatever disk it is asked to, and one
 		// asked for less than the snapshot says, which the control plane
 		// refuses, keeps the run's disk, a hundred MiB or so, whatever its VM
-		// says: 1 GiB, which microsandbox refuses as a shrink; 4 GiB, which it
-		// takes for no change; and a MiB short of what the snapshot says,
-		// whose last block group has no room for its metadata.
+		// says, when it is less than 4 GiB and 3 MiB: 1 GiB, which
+		// microsandbox refuses as a shrink; 4 GiB, which it takes for no
+		// change; and 4 GiB and 2 MiB, whose last block group has no room for
+		// its metadata.
 		t.Run("one restored with less keeps the run's disk", func(t *testing.T) {
-			for _, disk := range []uint64{1 << 30, 4 << 30, written.Disk - mib} {
+			for _, disk := range []uint64{1 << 30, 4 << 30, 4098 << 20} {
 				t.Run(fmt.Sprintf("%d MiB", disk>>20), func(t *testing.T) {
 					small := machine(fmt.Sprintf("it-run-restored-%d", disk>>20), func(spec *vm.Spec) { spec.Resources.Disk = disk })
 					restored(t, e, small, archive)
