@@ -38,8 +38,27 @@ type archiveHeader struct {
 	Kind   vm.Kind `json:"kind"`
 	Image  string  `json:"image"`
 
-	// Disk is the disk, in bytes, the instance was given when it was archived.
+	// Disk is the disk, in bytes, a restore needs at least (restoreDiskOf):
+	// the disk the instance was given when it was archived, or more.
 	Disk uint64 `json:"disk"`
+}
+
+// restoreDiskOf is the disk, in bytes, the archive of an instance given spec
+// says a restore needs at least, which the control plane holds a VM to,
+// whether it is made from the archive or has it restored onto it.
+//
+// A VM's disk is flat, and a restore grows it to whatever it is given past
+// the disk it was given. An instance with a main process, a code runner's
+// run, has a managed root disk instead, the layer it writes over its image,
+// which a restore grows only once it is given managedRestoreFloor or more: a
+// VM restored from one with less would keep the run's disk, whatever it says
+// it was given, so that much is the least its archive says.
+func restoreDiskOf(spec vm.Spec) uint64 {
+	if !spec.HasMainProcess() {
+		return spec.Resources.Disk
+	}
+
+	return max(spec.Resources.Disk, managedRestoreFloor)
 }
 
 // errNotAnArchive is a stream that does not start the way an archive of the

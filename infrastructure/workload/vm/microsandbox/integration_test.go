@@ -944,7 +944,7 @@ func TestCodeRunner(t *testing.T) {
 		archive, written := archived(t, e, id)
 		assert.Equal(t, vm.KindMachine, written.Kind)
 		assert.Equal(t, machineImage(), written.Image)
-		assert.Equal(t, uint64(100<<20), written.Disk, "the disk the run was given")
+		assert.Equal(t, uint64(managedRestoreFloor), written.Disk, "the least disk a restore grows the run's to, which is more than the run was given")
 		assert.Equal(t, vm.InstanceRunning, inspected(t, e, id).State, "a live snapshot leaves the snippet running")
 
 		// restored with the disk the dashboard gives a new machine.
@@ -957,19 +957,44 @@ func TestCodeRunner(t *testing.T) {
 		assert.GreaterOrEqual(t, rootMiB(t, e, kept.ID), int(kept.Resources.Disk>>20)*9/10, "its disk is the one it was restored with, grown past the run's")
 
 		// a run's disk is a managed layer over its image, which microsandbox,
-		// as of 0.7.8, records as 4 GiB once it is restored, whatever it was:
-		// growing it to anything less is refused as a shrink, and the disk is
-		// left the run's, a hundred MiB or so, which the dashboard's VM says
-		// is the disk it was restored with.
-		t.Run("one restored with less than 4 GiB keeps the run's disk", func(t *testing.T) {
-			_, err := archive.Seek(0, io.SeekStart)
-			require.NoError(t, err)
+		// as of 0.7.8, records as 4 GiB once it is restored, whatever it was,
+		// and grows only to 4 GiB and 3 MiB or more. So that is what the
+		// snapshot says a restore needs, which the control plane holds a VM
+		// made from it, or restored onto with it, to, and it is the disk such
+		// a VM then has.
+		t.Run("one restored with the least disk it says has that disk", func(t *testing.T) {
+			least := machine("it-run-restored-least", func(spec *vm.Spec) { spec.Resources.Disk = written.Disk })
+			restored(t, e, least, archive)
 
-			small := machine("it-run-restored-small")
-			restored(t, e, small, archive)
+			assert.Equal(t, "written-by-the-snippet", runOK(t, e, least.ID, "cat /root/kept"))
+			assert.GreaterOrEqual(t, rootMiB(t, e, least.ID), int(least.Resources.Disk>>20)*9/10, "its disk is the one it was restored with, grown past the run's")
 
-			assert.Equal(t, "written-by-the-snippet", runOK(t, e, small.ID, "cat /root/kept"))
-			assert.Less(t, rootMiB(t, e, small.ID), int(small.Resources.Disk>>20)/2, "a restored managed disk grows to less than 4 GiB now, and what is said of a run's snapshot restored with a small disk is no longer so")
+			t.Run("and so has one it is restored onto", func(t *testing.T) {
+				runOK(t, e, least.ID, "echo written-since > /root/since && sync")
+
+				restoredOnto(t, e, least, archive)
+
+				assert.NotEqual(t, 0, run(t, e, least.ID, "test -e /root/since").code, "its disk is the run's again")
+				assert.GreaterOrEqual(t, rootMiB(t, e, least.ID), int(least.Resources.Disk>>20)*9/10, "and the one it was restored with")
+			})
+		})
+
+		// the engine restores one with whatever disk it is asked to, and one
+		// asked for less than the snapshot says, which the control plane
+		// refuses, keeps the run's disk, a hundred MiB or so, whatever its VM
+		// says: 1 GiB, which microsandbox refuses as a shrink; 4 GiB, which it
+		// takes for no change; and a MiB short of what the snapshot says,
+		// whose last block group has no room for its metadata.
+		t.Run("one restored with less keeps the run's disk", func(t *testing.T) {
+			for _, disk := range []uint64{1 << 30, 4 << 30, written.Disk - mib} {
+				t.Run(fmt.Sprintf("%d MiB", disk>>20), func(t *testing.T) {
+					small := machine(fmt.Sprintf("it-run-restored-%d", disk>>20), func(spec *vm.Spec) { spec.Resources.Disk = disk })
+					restored(t, e, small, archive)
+
+					assert.Equal(t, "written-by-the-snippet", runOK(t, e, small.ID, "cat /root/kept"))
+					assert.Less(t, rootMiB(t, e, small.ID), int(disk>>20)/2, "a restored managed disk grows to %d MiB now, and the least disk a run's snapshot says a restore needs can be less", disk>>20)
+				})
+			}
 		})
 	})
 

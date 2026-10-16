@@ -66,7 +66,7 @@ func (e *engine) Snapshot(ctx context.Context, id string, archive io.Writer) (vm
 		Engine: archiveEngine(),
 		Kind:   r.kind(e.dockerImage),
 		Image:  r.Image,
-		Disk:   r.Spec.Resources.Disk,
+		Disk:   restoreDiskOf(r.Spec),
 	}
 
 	written, err := writeHeader(archive, header)
@@ -400,6 +400,9 @@ func (e *engine) restoreFrom(ctx context.Context, i *instance, path string, keep
 
 // grow gives a restored disk the size its record asks for, when that is more
 // than the snapshot had. A flat disk grows while it runs, and never shrinks.
+// A code runner's run's managed disk, restored as a VM's, grows only to
+// managedRestoreFloor or more, which is what its archive says a restore needs
+// (restoreDiskOf); asked for less, it is left as it was.
 func (e *engine) grow(ctx context.Context, i *instance, sb *msb.Sandbox, r *record) {
 	if r.Spec.HasMainProcess() || r.Spec.Resources.Disk == 0 {
 		return

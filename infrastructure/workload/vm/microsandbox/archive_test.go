@@ -111,6 +111,34 @@ func TestArchiveHeader(t *testing.T) {
 	})
 }
 
+func TestRestoreDiskOf(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a vm's flat disk needs as much as it was given", func(t *testing.T) {
+		t.Parallel()
+
+		for _, disk := range []uint64{0, 100 << 20, 1 << 30, 6 << 30} {
+			assert.Equal(t, disk, restoreDiskOf(vm.Spec{Image: "alpine:3.20", Resources: vm.Resources{Disk: disk}}), "%d", disk)
+		}
+	})
+
+	// a run's disk is a managed layer, which microsandbox 0.7.8 grows once
+	// it is restored only to 4 GiB and 3 MiB or more, as the KVM suite holds.
+	t.Run("a run's managed disk needs 4 GiB and 3 MiB, or as much as it was given past that", func(t *testing.T) {
+		t.Parallel()
+
+		run := func(disk uint64) vm.Spec {
+			return vm.Spec{Image: "alpine:3.20", Resources: vm.Resources{Disk: disk}, Command: []string{"sh", "-c", "sleep 600"}}
+		}
+
+		for disk, want := range map[uint64]uint64{0: 4099 << 20, 100 << 20: 4099 << 20, 4 << 30: 4099 << 20, 4099 << 20: 4099 << 20, 4100 << 20: 4100 << 20, 10 << 30: 10 << 30} {
+			assert.Equal(t, want, restoreDiskOf(run(disk)), "%d", disk)
+		}
+
+		assert.Equal(t, uint64(4099<<20), restoreDiskOf(vm.Spec{Resources: vm.Resources{Disk: 100 << 20}, Entrypoint: []string{"node"}}), "an entrypoint is a main process too")
+	})
+}
+
 type countingReader struct {
 	reader io.Reader
 	read   int
