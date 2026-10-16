@@ -1085,6 +1085,44 @@ setInterval(tick, 2000);`}
 		assert.Less(t, took, killTimeout, "what its main process left running held the kill up")
 	})
 
+	// a running snippet's VM is sampled as any VM is, through its runtime,
+	// which is how the dashboard shows what one of the code runner's runs
+	// uses: its CPU, its memory, and its disk, which is never measured from
+	// inside it, since nothing but its snippet runs in it. microsandbox 0.7.8
+	// says nothing of a run's managed layer, neither what of it is used nor
+	// what is free, so its disk is the size its task was given, none of it
+	// said to be used.
+	t.Run("a running snippet is sampled as a vm is, its disk the size its task was given", func(t *testing.T) {
+		request := runCode.Request{Runner: "nodejs-22.14", Code: `setInterval(() => console.log("still sampled"), 1000);`}
+
+		id, err := runtime.Create(ctx, execution("it-task-sampled", request.Image(), nil, []string{"--timeout", strconv.Itoa(int(runCode.LiveCodeTimeout.Seconds())), request.Code}))
+		require.NoError(t, err)
+		t.Cleanup(func() { removed(t, e, id) })
+
+		eventually(t, 30*time.Second, func() bool {
+			lines, err := e.Logs(ctx, id, vm.LogOptions{})
+			require.NoError(t, err)
+
+			return hasLine(lines, vm.LogSourceMain, "still sampled")
+		}, "%s runs", id)
+
+		stats, err := runtime.Stats(ctx, id)
+		require.NoError(t, err)
+
+		t.Logf("%s: %+v", id, stats)
+
+		assert.NotZero(t, stats.MemoryUsed)
+		assert.Equal(t, uint64(256<<20), stats.MemoryLimit, "of the memory its task was given")
+		assert.NotZero(t, stats.DiskTotal, "its disk says how big it is")
+		assert.LessOrEqual(t, stats.DiskUsed, stats.DiskTotal)
+		assert.WithinDuration(t, time.Now(), stats.SampledAt, time.Minute)
+
+		require.NoError(t, runtime.Stop(ctx, id))
+
+		_, err = runtime.Stats(ctx, id)
+		assert.ErrorIs(t, err, vm.ErrNotRunning, "and one that is not running is not sampled")
+	})
+
 	// a Go snippet is the one the code runner gives the most to: its image
 	// builds it before it runs it, with nothing of the standard library built
 	// beforehand, and gives up on it once the code runner's time is out,

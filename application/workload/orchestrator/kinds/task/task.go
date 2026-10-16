@@ -32,7 +32,14 @@
 // what a job has written so far (Run.Output), the ports its VM publishes,
 // which the ingress reaches it on, and those that came up. The outputs of a
 // node's tasks share a budget, what a beat carries of them between them, a
-// task in each of the task kind's heartbeats. A task being reconfigured is
+// task in each of the task kind's heartbeats. What the run of a running task
+// uses is sampled as a VM is, and said as a VM's sample is
+// (taskKind.Status.Stats): on the node's beat, at most every other one and a
+// few at once, given up on when the beat cannot wait for it any longer, and
+// shown as it was last taken in every look between beats, so that a look
+// taken at every prompt is never held up sampling, nor tells of a task again
+// for a new sample alone. A task's stats query samples its run afresh, as a
+// VM's stats query samples the VM. A task being reconfigured is
 // said to be restarting, for as long as that takes and in every look at what
 // the node holds taken meanwhile, however late it is read: its run is a VM
 // that is down halfway through, which would otherwise be said to have ended,
@@ -62,6 +69,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
@@ -88,6 +96,17 @@ const (
 	// ports, as soon as that is seen, as often as the code runner always
 	// looked.
 	prompt = 300 * time.Millisecond
+
+	// sampleEvery is how often the run of a running task is sampled: every
+	// other beat, as often as a VM is.
+	sampleEvery = 2 * time.Second
+
+	// sampleKept is how long a sample is shown when a newer one could not be
+	// taken in time, rather than nothing.
+	sampleKept = 10 * time.Second
+
+	// sampling is how many runs are sampled at once.
+	sampling = 8
 )
 
 // shell is what a terminal is opened with: a busybox image has sh but not
@@ -98,6 +117,7 @@ var shell = []string{"/bin/sh"}
 type Node struct {
 	runtime  task.Runtime
 	nodeName string
+	now      func() time.Time
 
 	lock sync.Mutex
 
@@ -105,6 +125,10 @@ type Node struct {
 	// it ended after: it writes nothing more until it is started again, so it
 	// is read once.
 	outputs map[string]written
+
+	// samples are the last sample of each running run, by run, as of the
+	// start it was taken in.
+	samples map[string]usage
 
 	// reconfiguring are the tasks whose run is being reconfigured, by uuid;
 	// reconfigured, by uuid, the mark at which each was last done with, out
@@ -123,6 +147,14 @@ type written struct {
 	output    string
 }
 
+// usage is the last sample of what a run uses, and the start it was taken in:
+// one started again since, which a reconfigure does, is a VM made afresh,
+// which uses something else.
+type usage struct {
+	startedAt time.Time
+	stats     *vmKind.Stats
+}
+
 var (
 	_ kind.Node[taskKind.Spec, taskKind.Status] = &Node{}
 	_ kind.Attacher                             = &Node{}
@@ -135,7 +167,9 @@ func New(runtime task.Runtime, nodeName string) *Node {
 	return &Node{
 		runtime:       runtime,
 		nodeName:      nodeName,
+		now:           time.Now,
 		outputs:       make(map[string]written),
+		samples:       make(map[string]usage),
 		reconfiguring: make(map[string]bool),
 		reconfigured:  make(map[string]uint64),
 	}
@@ -352,13 +386,12 @@ func (n *Node) delete(ctx context.Context, t taskKind.Task) error {
 	return nil
 }
 
-// Query reads what a task's run has written, as its runtime has it now.
+// Query reads what a task's run has written, and samples what it uses, as its
+// runtime has them now.
 func (n *Node) Query(ctx context.Context, t taskKind.Task, action string, payload any) (any, error) {
-	if action != taskKind.ActionLogs {
+	if action != taskKind.ActionLogs && action != taskKind.ActionStats {
 		return nil, fmt.Errorf("%w: a task has no %q", kind.ErrUnknownAction, action)
 	}
-
-	asked, _ := payload.(taskKind.LogsPayload)
 
 	runs, err := n.runtime.Of(ctx, t.Metadata.UUID)
 	if err != nil {
@@ -369,9 +402,35 @@ func (n *Node) Query(ctx context.Context, t taskKind.Task, action string, payloa
 		return nil, fmt.Errorf("%w: this node holds no run of %q", vm.ErrNotRunning, t.Metadata.UUID)
 	}
 
-	var written bytes.Buffer
-	if err := n.runtime.Logs(ctx, current(runs).ID, &written); err != nil {
+	if action == taskKind.ActionStats {
+		return n.stats(ctx, current(runs))
+	}
+
+	asked, _ := payload.(taskKind.LogsPayload)
+
+	return n.logs(ctx, current(runs), asked)
+}
+
+// stats is a sample of what a task's run uses, as its runtime takes one now,
+// in the shape a VM's stats query answers with: a run that is not running is
+// not sampled, which its runtime says.
+func (n *Node) stats(ctx context.Context, run task.Execution) (*vmKind.Stats, error) {
+	stats, err := n.runtime.Stats(ctx, run.ID)
+	if errors.Is(err, domain.ErrNotExists) {
+		return nil, fmt.Errorf("%w: this node holds nothing of %q", vm.ErrNotRunning, run.ID)
+	} else if err != nil {
 		return nil, err
+	}
+
+	return vmKind.StatsOf(stats), nil
+}
+
+// logs is what a task's run has written, its last lines as many as were asked
+// for, and no more than an answer carries.
+func (n *Node) logs(ctx context.Context, run task.Execution, asked taskKind.LogsPayload) (taskKind.Logs, error) {
+	var written bytes.Buffer
+	if err := n.runtime.Logs(ctx, run.ID, &written); err != nil {
+		return taskKind.Logs{}, err
 	}
 
 	lines := linesOf(written.String())
@@ -392,9 +451,10 @@ func (n *Node) Query(ctx context.Context, t taskKind.Task, action string, payloa
 
 // State is every task this node runs, each as the run of it that runs, or
 // otherwise its latest, with what the jobs among them have written, their
-// outputs fitted between them into the heartbeat's share of them. A task
-// whose run was being reconfigured at any moment of the look is restarting,
-// whatever its run was seen doing.
+// outputs fitted between them into the heartbeat's share of them, and a
+// sample of what each run that runs uses. A task whose run was being
+// reconfigured at any moment of the look is restarting, whatever its run was
+// seen doing, and uses nothing.
 func (n *Node) State(ctx context.Context) (kind.Report[taskKind.Status], error) {
 	mark := n.mark()
 
@@ -422,12 +482,19 @@ func (n *Node) State(ctx context.Context) (kind.Report[taskKind.Status], error) 
 		runs[i] = current(byTask[uuid])
 	}
 
+	// what the runs use is sampled while what the jobs wrote is read, so that
+	// a beat waits on whichever takes longer, and not on both.
+	sampled := make(chan map[string]*vmKind.Stats, 1)
+	go func() { sampled <- n.sample(ctx, runs) }()
+
 	outputs := fitted(n.read(ctx, runs), ReportOutput)
+	samples := <-sampled
 
 	report := kind.Report[taskKind.Status]{Instances: make([]kind.Observed[taskKind.Status], len(runs))}
 	for i, run := range runs {
 		status := statusOf(run)
 		status.Run.Output = outputs[i]
+		status.Stats = samples[run.ID]
 
 		if n.restarting(run.TaskUUID, mark) {
 			status = restarting(status)
@@ -595,11 +662,132 @@ func (n *Node) keep(run task.Execution, output string) {
 	n.outputs[run.ID] = written{startedAt: run.StartedAt, output: output}
 }
 
+// sample is a sample of what each running one of runs uses, by run, as a VM is
+// sampled: taken on the node's beat (kind.BeatOf), at most every other one
+// and a few at once, and given up on when the beat cannot wait for it any
+// longer, the last one kept a while rather than shown as nothing. Every look
+// between beats shows the last one taken, so that a look taken at every
+// prompt is never held up sampling, nor tells of a task again for a new
+// sample alone. Only a running run uses anything worth sampling, and one
+// being reconfigured is a VM going and another coming: it is sampled again
+// once it is done, as of its new start.
+func (n *Node) sample(ctx context.Context, runs []task.Execution) map[string]*vmKind.Stats {
+	now := n.now()
+	_, beating := kind.BeatOf(ctx)
+	samples := make(map[string]*vmKind.Stats, len(runs))
+
+	type sampled struct {
+		id    string
+		stats *vmKind.Stats
+	}
+
+	var due []task.Execution
+
+	n.lock.Lock()
+	for _, run := range runs {
+		last, kept := n.samples[run.ID]
+
+		// a sample taken as of another start is of a VM made afresh since,
+		// and says nothing of the one there now.
+		if kept && !last.startedAt.Equal(run.StartedAt) {
+			delete(n.samples, run.ID)
+
+			kept = false
+		}
+
+		switch {
+		case run.Status != task.StatusRunning || n.reconfiguring[run.TaskUUID]:
+			delete(n.samples, run.ID)
+		case kept && now.Sub(last.stats.SampledAt) < sampleEvery:
+			samples[run.ID] = last.stats
+		case beating:
+			due = append(due, run)
+		default:
+			samples[run.ID] = n.recent(run.ID, now)
+		}
+	}
+	n.lock.Unlock()
+
+	answers := make(chan sampled, len(due))
+	slots := make(chan struct{}, sampling)
+
+	for _, run := range due {
+		go func() {
+			select {
+			case slots <- struct{}{}:
+			case <-ctx.Done():
+				answers <- sampled{id: run.ID}
+
+				return
+			}
+			defer func() { <-slots }()
+
+			stats, err := n.runtime.Stats(ctx, run.ID)
+			if err != nil {
+				// sampled again on the next beat; a run is no less there for
+				// one sample missing.
+				answers <- sampled{id: run.ID}
+
+				return
+			}
+
+			if stats.SampledAt.IsZero() {
+				stats.SampledAt = n.now()
+			}
+
+			answers <- sampled{id: run.ID, stats: vmKind.StatsOf(stats)}
+		}()
+	}
+
+	taken := make(map[string]*vmKind.Stats, len(due))
+
+collecting:
+	for range due {
+		select {
+		case answer := <-answers:
+			taken[answer.id] = answer.stats
+		case <-ctx.Done():
+			// the beat goes without what is still being sampled, and the
+			// last sample of it is shown meanwhile.
+			break collecting
+		}
+	}
+
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	for _, run := range due {
+		if stats := taken[run.ID]; stats != nil {
+			n.samples[run.ID] = usage{startedAt: run.StartedAt, stats: stats}
+			samples[run.ID] = stats
+
+			continue
+		}
+
+		samples[run.ID] = n.recent(run.ID, now)
+	}
+
+	return samples
+}
+
+// recent is the last sample of a run, while it is recent enough to show. It
+// is called with the lock held.
+func (n *Node) recent(executionID string, now time.Time) *vmKind.Stats {
+	last, kept := n.samples[executionID]
+	if !kept || now.Sub(last.stats.SampledAt) > sampleKept {
+		return nil
+	}
+
+	return last.stats
+}
+
+// forget lets go of what was kept of a run: what it wrote, and what it used.
 func (n *Node) forget(executionID string) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
 	delete(n.outputs, executionID)
+	delete(n.samples, executionID)
 }
 
 // forgetAllBut lets go of what was kept of the runs this node no longer
@@ -609,6 +797,10 @@ func (n *Node) forgetAllBut(held []task.Execution) {
 	defer n.lock.Unlock()
 
 	maps.DeleteFunc(n.outputs, func(id string, _ written) bool {
+		return !slices.ContainsFunc(held, func(run task.Execution) bool { return run.ID == id })
+	})
+
+	maps.DeleteFunc(n.samples, func(id string, _ usage) bool {
 		return !slices.ContainsFunc(held, func(run task.Execution) bool { return run.ID == id })
 	})
 
@@ -644,10 +836,12 @@ func applied(outcome kind.Outcome[taskKind.Status], t taskKind.Task) kind.Outcom
 
 // restarting is a task's status as its run is seen halfway through being
 // reconfigured: restarting, rather than having ended with what it exited
-// with, or failed, which its VM, stopped for the moment, would say of it.
+// with, or failed, which its VM, stopped for the moment, would say of it; and
+// using nothing, as a VM that is not running does.
 func restarting(status taskKind.Status) taskKind.Status {
 	status.State = taskKind.Restarting
 	status.Reason = ""
+	status.Stats = nil
 
 	if status.Run != nil {
 		status.Run.ExitCode = 0

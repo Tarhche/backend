@@ -7,6 +7,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // Execution is one run of a task, as whatever runs it holds one: what it was
@@ -133,6 +134,14 @@ type Runtime interface {
 	Kill(ctx context.Context, executionID string) error
 	Delete(ctx context.Context, executionID string) error
 	Inspect(ctx context.Context, executionID string) (Execution, error)
+
+	// Stats is a sample of what the run executionID names uses now, as a VM
+	// is sampled: its CPU, its memory, its disk and what it sent and
+	// received. A run that is not running uses nothing worth sampling
+	// (vm.ErrNotRunning), and one that is not there has nothing to sample
+	// (domain.ErrNotExists).
+	Stats(ctx context.Context, executionID string) (vm.Stats, error)
+
 	Logs(ctx context.Context, executionID string, writer io.Writer) error
 	StreamLogs(ctx context.Context, executionID string, since time.Time, emit func(LogLine) error) error
 	Exec(ctx context.Context, executionID string, options ExecOptions) (ExecSession, error)

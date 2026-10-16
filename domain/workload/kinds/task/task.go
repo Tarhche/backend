@@ -28,7 +28,11 @@
 // Its status is what its node last said of it: its state, and its run, which
 // is the VM its node holds of it, read off the VM itself (Run). A job's
 // output rides its run, so whoever follows a task from its node's
-// heartbeats, the code runner, answers from it alone.
+// heartbeats, the code runner, answers from it alone. What its run uses while
+// it runs is sampled by its node as a VM is, and said as a VM's sample is
+// (Stats), which is how the dashboard shows the code runner's runs among
+// anybody's VMs with what each uses; and sampled afresh by its own query
+// (ActionStats), as a VM's is.
 //
 // Its states are today's: created, scheduled, running, restarting,
 // stopping, stopped, completed and failed, deleting while its node takes it
@@ -114,9 +118,11 @@ const (
 	ActionDelete = "delete"
 
 	// ActionState is what a task is doing, as its node says; ActionLogs reads
-	// what its run has written (LogsPayload).
+	// what its run has written (LogsPayload), and ActionStats samples what
+	// its running run uses, as a VM's is, from its node as it is now.
 	ActionState = "state"
 	ActionLogs  = "logs"
+	ActionStats = "stats"
 
 	// ActionAttach opens a terminal in a running task: anybody's, signed in
 	// or not, for a task of the guest's, and its owner's alone otherwise.
@@ -290,6 +296,13 @@ type Status struct {
 	// Run is the run of it its node holds: nothing for a task no node has run
 	// yet.
 	Run *Run `json:"run,omitempty"`
+
+	// Stats is the last sample of what its run uses, while it runs, as a
+	// VM's is (vmKind.Status.Stats): nothing while it is not running, being
+	// restarted among it, and nothing until its node has sampled it. Its node
+	// says it of every task it holds, nothing among it, so that what it said
+	// while the run ran is written over once it does not.
+	Stats *vmKind.Stats `json:"stats"`
 
 	// Applied is the config its node last gave the run it holds, which it
 	// says whenever it makes a run or reconfigures one, and nothing else
@@ -506,6 +519,7 @@ func Descriptor() kind.Descriptor {
 			command(ActionDelete, nil, Deleted, "delete"),
 			{Name: ActionState, Runs: kind.OnNode, Mode: kind.ModeQuery, Permission: "show", Payload: kind.NoPayload},
 			{Name: ActionLogs, Runs: kind.OnNode, Mode: kind.ModeQuery, AllowedIn: []kind.State{Running, Restarting, Stopping, Stopped, Completed, Failed}, Permission: "logs", Payload: kind.Payload[LogsPayload]()},
+			{Name: ActionStats, Runs: kind.OnNode, Mode: kind.ModeQuery, AllowedIn: []kind.State{Running}, Permission: "show", Payload: kind.NoPayload},
 			{Name: ActionAttach, Runs: kind.OnNode, Mode: kind.ModeStream, AllowedIn: []kind.State{Running}, Permission: "attach", Public: true, Payload: kind.NoPayload},
 		},
 	}

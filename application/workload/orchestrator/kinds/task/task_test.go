@@ -3,8 +3,12 @@ package task
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +20,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
@@ -474,6 +479,102 @@ func (p *pausing) OnNode(ctx context.Context, nodeName string) ([]task.Execution
 	return held, err
 }
 
+// beat is ctx asking for what the node holds on one of its beats, as its
+// heartbeat asks for it (kind.WithBeat), rather than between them.
+func beat(ctx context.Context) context.Context {
+	return kind.WithBeat(ctx, time.Now())
+}
+
+// clock is the time as a test moves it on.
+type clock struct {
+	lock sync.Mutex
+	at   time.Time
+}
+
+func (c *clock) now() time.Time {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return c.at
+}
+
+func (c *clock) pass(d time.Duration) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.at = c.at.Add(d)
+}
+
+// failingStats is a runtime that cannot sample anything.
+type failingStats struct {
+	task.Runtime
+}
+
+func (failingStats) Stats(context.Context, string) (vm.Stats, error) {
+	return vm.Stats{}, errors.New("the engine is busy")
+}
+
+// counting is a runtime that counts the samples it is asked for.
+type counting struct {
+	task.Runtime
+
+	lock  sync.Mutex
+	asked int
+}
+
+func (c *counting) Stats(ctx context.Context, executionID string) (vm.Stats, error) {
+	c.lock.Lock()
+	c.asked++
+	c.lock.Unlock()
+
+	return c.Runtime.Stats(ctx, executionID)
+}
+
+func (c *counting) calls() int {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return c.asked
+}
+
+// stalling is a runtime whose samples are not answered until they are let go
+// of, as an engine slow to answer takes them, and which says the most it was
+// asked for at once.
+type stalling struct {
+	task.Runtime
+
+	release chan struct{}
+
+	lock   sync.Mutex
+	asking int
+	peak   int
+}
+
+func (s *stalling) Stats(context.Context, string) (vm.Stats, error) {
+	s.lock.Lock()
+	s.asking++
+	s.peak = max(s.peak, s.asking)
+	s.lock.Unlock()
+
+	defer func() {
+		s.lock.Lock()
+		s.asking--
+		s.lock.Unlock()
+	}()
+
+	<-s.release
+
+	return vm.Stats{}, errors.New("answered too late")
+}
+
+// most is the most samples it was asked for at once.
+func (s *stalling) most() int {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.peak
+}
+
 func TestNode_delete(t *testing.T) {
 	t.Parallel()
 
@@ -675,6 +776,237 @@ func TestNode_State(t *testing.T) {
 		assert.Equal(t, taskKind.Running, report.Instances[1].Status.State)
 		assert.Empty(t, report.Instances[1].Status.Run.Ports, "one whose policy lets nothing in publishes nothing")
 	})
+
+	t.Run("a running task's run is sampled on the node's beat, as a vm is, and one that ended uses nothing", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+
+		f.created(t, snippet("task-1", live))
+		require.NoError(t, f.engine.SetStats(f.run(t, "task-1").ID, vm.Stats{CPUPercent: 130, MemoryUsed: 64 << 20, DiskUsed: 10 << 20, NetworkRx: 1, NetworkTx: 2}))
+
+		f.created(t, snippet("task-2"))
+		require.NoError(t, f.engine.Exit(f.run(t, "task-2").ID, 0))
+
+		report, err := f.node.State(beat(ctx))
+		require.NoError(t, err)
+		require.Len(t, report.Instances, 2)
+
+		running := report.Instances[0].Status.Stats
+		require.NotNil(t, running, "a running one is sampled")
+		assert.Equal(t, 100.0, running.CPUPercent, "its cpu held to 0 to 100, as a vm's is")
+		assert.Equal(t, uint64(64<<20), running.MemoryUsed)
+		assert.Equal(t, uint64(200<<20), running.MemoryLimit, "of the memory its vm was given")
+		assert.Equal(t, uint64(10<<20), running.DiskUsed)
+		assert.Equal(t, uint64(100<<20), running.DiskTotal, "and of its disk")
+		assert.Equal(t, uint64(1), running.NetworkRx)
+		assert.Equal(t, uint64(2), running.NetworkTx)
+		assert.False(t, running.SampledAt.IsZero())
+
+		assert.Nil(t, report.Instances[1].Status.Stats, "one that has ended is not sampled")
+
+		require.NoError(t, f.engine.Exit(f.run(t, "task-1").ID, 0))
+
+		report, err = f.node.State(beat(ctx))
+		require.NoError(t, err)
+		assert.Nil(t, report.Instances[0].Status.Stats, "nor is one once it has, whatever it used before")
+	})
+
+	t.Run("a look between beats never samples a run, and shows the sample the last beat took", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+		f.created(t, snippet("task-1", live))
+		run := f.run(t, "task-1")
+		require.NoError(t, f.engine.SetStats(run.ID, vm.Stats{CPUPercent: 10}))
+
+		report, err := f.node.State(ctx)
+		require.NoError(t, err)
+		assert.Nil(t, report.Instances[0].Status.Stats, "nothing is shown before its node has sampled it")
+
+		_, err = f.node.State(beat(ctx))
+		require.NoError(t, err)
+
+		require.NoError(t, f.engine.SetStats(run.ID, vm.Stats{CPUPercent: 20}))
+
+		report, err = f.node.State(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, report.Instances[0].Status.Stats)
+		assert.Equal(t, 10.0, report.Instances[0].Status.Stats.CPUPercent, "a look at a prompt is never held up sampling, nor tells of the task again for it")
+	})
+
+	t.Run("a running task's run is sampled every other beat, and its sample shown in between", func(t *testing.T) {
+		t.Parallel()
+
+		c := &clock{at: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)}
+		f := onNode(memory.WithClock(c.now))
+		f.node.now = c.now
+
+		f.created(t, snippet("task-1", live))
+		run := f.run(t, "task-1")
+		require.NoError(t, f.engine.SetStats(run.ID, vm.Stats{CPUPercent: 10}))
+
+		report, err := f.node.State(beat(ctx))
+		require.NoError(t, err)
+		assert.Equal(t, 10.0, report.Instances[0].Status.Stats.CPUPercent)
+
+		require.NoError(t, f.engine.SetStats(run.ID, vm.Stats{CPUPercent: 20}))
+
+		c.pass(time.Second)
+
+		report, err = f.node.State(beat(ctx))
+		require.NoError(t, err)
+		assert.Equal(t, 10.0, report.Instances[0].Status.Stats.CPUPercent, "not sampled again yet")
+
+		c.pass(time.Second)
+
+		report, err = f.node.State(beat(ctx))
+		require.NoError(t, err)
+		assert.Equal(t, 20.0, report.Instances[0].Status.Stats.CPUPercent)
+	})
+
+	t.Run("a sample that cannot be taken shows the last one a while, and then none", func(t *testing.T) {
+		t.Parallel()
+
+		c := &clock{at: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)}
+		f := onNode(memory.WithClock(c.now))
+		f.node.now = c.now
+
+		f.created(t, snippet("task-1", live))
+		require.NoError(t, f.engine.SetStats(f.run(t, "task-1").ID, vm.Stats{CPUPercent: 10}))
+
+		_, err := f.node.State(beat(ctx))
+		require.NoError(t, err)
+
+		f.node.runtime = failingStats{Runtime: f.runtime}
+
+		c.pass(5 * time.Second)
+
+		report, err := f.node.State(beat(ctx))
+		require.NoError(t, err)
+		require.NotNil(t, report.Instances[0].Status.Stats)
+		assert.Equal(t, 10.0, report.Instances[0].Status.Stats.CPUPercent)
+
+		c.pass(10 * time.Second)
+
+		report, err = f.node.State(beat(ctx))
+		require.NoError(t, err)
+		assert.Nil(t, report.Instances[0].Status.Stats)
+
+		report, err = f.node.State(ctx)
+		require.NoError(t, err)
+		assert.Nil(t, report.Instances[0].Status.Stats, "and between beats as well")
+	})
+
+	t.Run("a run being reconfigured uses nothing, and what it used before is not what it uses once it is done", func(t *testing.T) {
+		t.Parallel()
+
+		engine := &halting{Engine: memory.New(), down: make(chan struct{}), release: make(chan struct{})}
+		sampled := &counting{}
+		sampled.Runtime = vmruntime.New(engine, slog.New(slog.DiscardHandler))
+		node := New(sampled, nodeName)
+
+		_, err := node.Execute(ctx, snippet("task-1", live), taskKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		runs, err := sampled.Of(ctx, "task-1")
+		require.NoError(t, err)
+		require.Len(t, runs, 1)
+		require.NoError(t, engine.SetStats(runs[0].ID, vm.Stats{CPUPercent: 10}))
+
+		report, err := node.State(beat(ctx))
+		require.NoError(t, err)
+		require.NotNil(t, report.Instances[0].Status.Stats)
+
+		changed := func(t *taskKind.Task) {
+			live(t)
+			t.Spec.Limits.Memory = 300 << 20
+			t.Status.State = taskKind.Restarting
+		}
+
+		done := make(chan error, 1)
+		go func() {
+			_, err := node.Execute(ctx, snippet("task-1", changed), taskKind.ActionReconfigure, nil)
+			done <- err
+		}()
+
+		<-engine.down
+
+		asked := sampled.calls()
+
+		report, err = node.State(beat(ctx))
+		require.NoError(t, err)
+		assert.Equal(t, taskKind.Restarting, report.Instances[0].Status.State)
+		assert.Nil(t, report.Instances[0].Status.Stats, "a vm going, and another coming, which is not running yet")
+		assert.Equal(t, asked, sampled.calls(), "and is not sampled while it is")
+
+		require.NoError(t, engine.SetStats(runs[0].ID, vm.Stats{CPUPercent: 20}))
+
+		time.Sleep(time.Millisecond)
+		close(engine.release)
+		require.NoError(t, <-done)
+
+		report, err = node.State(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, taskKind.Running, report.Instances[0].Status.State)
+		assert.Nil(t, report.Instances[0].Status.Stats, "what was sampled before is of the vm that went")
+
+		report, err = node.State(beat(ctx))
+		require.NoError(t, err)
+		require.NotNil(t, report.Instances[0].Status.Stats, "the one made afresh is sampled at the next beat, however soon")
+		assert.Equal(t, 20.0, report.Instances[0].Status.Stats.CPUPercent)
+		assert.Equal(t, uint64(300<<20), report.Instances[0].Status.Stats.MemoryLimit, "of what it was given since")
+	})
+
+	t.Run("runs are sampled a few at once, and a beat that cannot wait any longer goes without them", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode(memory.WithCapacity(64, 64<<30, 64<<30))
+
+		for i := range sampling + 4 {
+			f.created(t, snippet(fmt.Sprintf("task-%02d", i), live))
+		}
+
+		stalled := &stalling{Runtime: f.runtime, release: make(chan struct{})}
+		f.node.runtime = stalled
+
+		defer close(stalled.release)
+
+		report, err := f.node.State(ctx)
+		require.NoError(t, err)
+		assert.Len(t, report.Instances, sampling+4)
+		assert.Zero(t, stalled.most(), "a look between beats asks for no sample")
+
+		looking, cancel := context.WithCancel(beat(ctx))
+		defer cancel()
+
+		looked := make(chan kind.Report[taskKind.Status], 1)
+		go func() {
+			report, err := f.node.State(looking)
+			assert.NoError(t, err)
+			looked <- report
+		}()
+
+		require.Eventually(t, func() bool { return stalled.most() == sampling }, 5*time.Second, time.Millisecond)
+
+		// a moment more, in which no more are asked for.
+		time.Sleep(20 * time.Millisecond)
+		assert.Equal(t, sampling, stalled.most(), "no more than a few at once")
+
+		// the beat can wait no longer.
+		cancel()
+
+		select {
+		case report := <-looked:
+			require.Len(t, report.Instances, sampling+4)
+
+			for _, instance := range report.Instances {
+				assert.Nil(t, instance.Status.Stats, "%s goes without what is still being sampled", instance.UUID)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the beat was held up past its time by what was still being sampled")
+		}
+	})
 }
 
 func TestNode_Query(t *testing.T) {
@@ -682,24 +1014,95 @@ func TestNode_Query(t *testing.T) {
 
 	ctx := context.Background()
 
-	f := onNode()
-	f.created(t, snippet("task-1"))
+	t.Run("what a task's run wrote, its last lines as many as are asked for", func(t *testing.T) {
+		t.Parallel()
 
-	run := f.run(t, "task-1")
-	for _, line := range []string{"one", "two", "three"} {
-		require.NoError(t, f.engine.Log(run.ID, vm.LogSourceMain, line))
-	}
+		f := onNode()
+		f.created(t, snippet("task-1"))
 
-	answer, err := f.node.Query(ctx, snippet("task-1"), taskKind.ActionLogs, taskKind.LogsPayload{Tail: 2})
-	require.NoError(t, err)
-	assert.Equal(t, taskKind.Logs{Lines: []string{"two", "three"}, Truncated: true}, answer)
+		run := f.run(t, "task-1")
+		for _, line := range []string{"one", "two", "three"} {
+			require.NoError(t, f.engine.Log(run.ID, vm.LogSourceMain, line))
+		}
 
-	answer, err = f.node.Query(ctx, snippet("task-1"), taskKind.ActionLogs, taskKind.LogsPayload{})
-	require.NoError(t, err)
-	assert.Equal(t, taskKind.Logs{Lines: []string{"one", "two", "three"}}, answer)
+		answer, err := f.node.Query(ctx, snippet("task-1"), taskKind.ActionLogs, taskKind.LogsPayload{Tail: 2})
+		require.NoError(t, err)
+		assert.Equal(t, taskKind.Logs{Lines: []string{"two", "three"}, Truncated: true}, answer)
 
-	_, err = f.node.Query(ctx, snippet("task-9"), taskKind.ActionLogs, taskKind.LogsPayload{})
-	assert.ErrorIs(t, err, vm.ErrNotRunning)
+		answer, err = f.node.Query(ctx, snippet("task-1"), taskKind.ActionLogs, taskKind.LogsPayload{})
+		require.NoError(t, err)
+		assert.Equal(t, taskKind.Logs{Lines: []string{"one", "two", "three"}}, answer)
+
+		_, err = f.node.Query(ctx, snippet("task-9"), taskKind.ActionLogs, taskKind.LogsPayload{})
+		assert.ErrorIs(t, err, vm.ErrNotRunning)
+	})
+
+	t.Run("a sample of what its running run uses, as a vm's, its cpu held to 0 to 100", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+		f.created(t, snippet("task-1", live))
+		require.NoError(t, f.engine.SetStats(f.run(t, "task-1").ID, vm.Stats{CPUPercent: 130, MemoryUsed: 64 << 20}))
+
+		answer, err := f.node.Query(ctx, snippet("task-1", live), taskKind.ActionStats, nil)
+		require.NoError(t, err)
+
+		stats := answer.(*vmKind.Stats)
+		assert.Equal(t, 100.0, stats.CPUPercent)
+		assert.Equal(t, uint64(64<<20), stats.MemoryUsed)
+		assert.Equal(t, uint64(200<<20), stats.MemoryLimit)
+		assert.Equal(t, uint64(100<<20), stats.DiskTotal)
+		assert.False(t, stats.SampledAt.IsZero())
+	})
+
+	t.Run("one whose run is not running, and one this node holds no run of, are not sampled", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+		f.created(t, snippet("task-1"))
+		require.NoError(t, f.engine.Exit(f.run(t, "task-1").ID, 0))
+
+		_, err := f.node.Query(ctx, snippet("task-1"), taskKind.ActionStats, nil)
+		assert.ErrorIs(t, err, vm.ErrNotRunning)
+
+		_, err = f.node.Query(ctx, snippet("task-9"), taskKind.ActionStats, nil)
+		assert.ErrorIs(t, err, vm.ErrNotRunning)
+	})
+
+	t.Run("its stats are asked of its node as a kind's query is, and answered as a vm's are", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+		f.created(t, snippet("task-1", live))
+		require.NoError(t, f.engine.SetStats(f.run(t, "task-1").ID, vm.Stats{CPUPercent: 25, MemoryUsed: 64 << 20}))
+
+		resource, err := kind.Encode(snippet("task-1", live))
+		require.NoError(t, err)
+
+		binding := kind.BindNode[taskKind.Spec, taskKind.Status](taskKind.Descriptor(), f.node)
+
+		answer, err := binding.Query(ctx, kind.Query{Kind: taskKind.Name, UUID: "task-1", Action: taskKind.ActionStats, Resource: resource})
+		require.NoError(t, err)
+
+		var fields map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(answer, &fields))
+		assert.ElementsMatch(t, []string{"cpu_percent", "memory_used", "memory_limit", "disk_used", "disk_total", "network_rx", "network_tx", "sampled_at"}, slices.Collect(maps.Keys(fields)))
+
+		var stats vmKind.Stats
+		require.NoError(t, json.Unmarshal(answer, &stats))
+		assert.Equal(t, 25.0, stats.CPUPercent)
+		assert.Equal(t, uint64(64<<20), stats.MemoryUsed)
+	})
+
+	t.Run("and nothing else is asked of one on its node", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+		f.created(t, snippet("task-1"))
+
+		_, err := f.node.Query(ctx, snippet("task-1"), taskKind.ActionState, nil)
+		assert.ErrorIs(t, err, kind.ErrUnknownAction)
+	})
 }
 
 func TestNode_Endpoint(t *testing.T) {

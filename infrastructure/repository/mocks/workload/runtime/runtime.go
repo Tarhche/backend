@@ -73,6 +73,12 @@ func (m *MockRuntime) Inspect(ctx context.Context, taskUUID string) (task.Execut
 	return args.Get(0).(task.Execution), args.Error(1)
 }
 
+func (m *MockRuntime) Stats(ctx context.Context, taskUUID string) (vm.Stats, error) {
+	args := m.Called(ctx, taskUUID)
+
+	return args.Get(0).(vm.Stats), args.Error(1)
+}
+
 func (m *MockRuntime) Logs(ctx context.Context, taskUUID string, writer io.Writer) error {
 	return m.Called(ctx, taskUUID, writer).Error(0)
 }

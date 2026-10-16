@@ -4,15 +4,18 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 func TestDescriptor(t *testing.T) {
@@ -77,6 +80,24 @@ func TestDescriptor(t *testing.T) {
 		t.Parallel()
 
 		assert.True(t, d.Endpoints)
+	})
+
+	t.Run("what its run uses is sampled by its node while it runs, for whoever may see a vm, as a vm's is", func(t *testing.T) {
+		t.Parallel()
+
+		stats, found := d.Action(ActionStats)
+		require.True(t, found)
+
+		sampled, _ := vmKind.Descriptor().Action(vmKind.ActionStats)
+		assert.Equal(t, sampled.Name, stats.Name)
+		assert.Equal(t, kind.OnNode, stats.Runs)
+		assert.Equal(t, kind.ModeQuery, stats.Mode)
+		assert.Equal(t, []kind.State{Running}, stats.AllowedIn)
+		assert.Equal(t, sampled.Payload.Type(), stats.Payload.Type(), "it is asked nothing")
+
+		admin, self := d.Permissions(stats.Permission)
+		assert.Equal(t, "workload.vms.show", admin)
+		assert.Equal(t, "self.workload.vms.show", self)
 	})
 
 	t.Run("it is changed while it runs, by whoever may change a vm, and given what it is changed to by the workload alone", func(t *testing.T) {
@@ -313,6 +334,36 @@ func TestStatus_JSON(t *testing.T) {
 		assert.NotContains(t, fields, "retries")
 		assert.NotContains(t, fields, "applied", "nor of a config it was given, unless it gave one")
 		assert.Contains(t, fields, "run")
+	})
+
+	t.Run("what its run uses is written as a vm's sample is, and nothing as nothing, which is written over what it said before", func(t *testing.T) {
+		t.Parallel()
+
+		sample := vmKind.StatsOf(vm.Stats{CPUPercent: 12.5, MemoryUsed: 1, MemoryLimit: 2, DiskUsed: 3, DiskTotal: 4, NetworkRx: 5, NetworkTx: 6, SampledAt: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)})
+
+		fieldsOf := func(t *testing.T, status any) map[string]json.RawMessage {
+			t.Helper()
+
+			payload, err := json.Marshal(status)
+			require.NoError(t, err)
+
+			var fields map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(payload, &fields))
+
+			return fields
+		}
+
+		sampled := fieldsOf(t, Status{Status: kind.Status{State: Running}, Run: &Run{Name: "request", Kind: task.KindJob}, Stats: sample})
+		asAVM := fieldsOf(t, vmKind.Status{Status: kind.Status{State: vmKind.Running}, Stats: sample})
+		assert.JSONEq(t, string(asAVM["stats"]), string(sampled["stats"]), "in a vm's words")
+
+		ended := fieldsOf(t, Status{Status: kind.Status{State: Completed}, Run: &Run{Name: "request", Kind: task.KindJob}})
+		require.Contains(t, ended, "stats", "said, rather than left out, so that a record keeping what it said before has it written over")
+		assert.JSONEq(t, `null`, string(ended["stats"]))
+
+		var read Status
+		require.NoError(t, json.Unmarshal([]byte(`{"state":"running","stats":`+string(sampled["stats"])+`}`), &read))
+		assert.Equal(t, sample, read.Stats)
 	})
 
 	t.Run("a run is a job's unless it says it is a service's", func(t *testing.T) {

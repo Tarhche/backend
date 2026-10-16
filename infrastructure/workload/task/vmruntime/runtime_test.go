@@ -433,6 +433,51 @@ func TestRuntime_Reconfigure(t *testing.T) {
 	})
 }
 
+func TestRuntime_Stats(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a running run uses what its vm does, as its engine samples it, of what its task was limited to", func(t *testing.T) {
+		t.Parallel()
+
+		e := memory.New()
+		r := runtimeOn(e)
+
+		id, err := r.Create(t.Context(), snippet(nil))
+		require.NoError(t, err)
+
+		require.NoError(t, e.SetStats(id, vm.Stats{CPUPercent: 40, MemoryUsed: 64 << 20, DiskUsed: 10 << 20, NetworkRx: 1, NetworkTx: 2}))
+
+		stats, err := r.Stats(t.Context(), id)
+		require.NoError(t, err)
+
+		assert.Equal(t, 40.0, stats.CPUPercent)
+		assert.Equal(t, uint64(64<<20), stats.MemoryUsed)
+		assert.Equal(t, uint64(200<<20), stats.MemoryLimit, "the memory its vm was given")
+		assert.Equal(t, uint64(10<<20), stats.DiskUsed)
+		assert.Equal(t, uint64(100<<20), stats.DiskTotal, "and its disk")
+		assert.Equal(t, uint64(1), stats.NetworkRx)
+		assert.Equal(t, uint64(2), stats.NetworkTx)
+		assert.False(t, stats.SampledAt.IsZero())
+	})
+
+	t.Run("one that is not running is not sampled, and one that is not there has nothing to sample", func(t *testing.T) {
+		t.Parallel()
+
+		e := memory.New()
+		r := runtimeOn(e)
+
+		id, err := r.Create(t.Context(), snippet(nil))
+		require.NoError(t, err)
+		require.NoError(t, e.Exit(id, 0))
+
+		_, err = r.Stats(t.Context(), id)
+		assert.ErrorIs(t, err, vm.ErrNotRunning)
+
+		_, err = r.Stats(t.Context(), "no-such-run")
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+}
+
 func TestRuntime_Logs(t *testing.T) {
 	t.Parallel()
 

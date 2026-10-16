@@ -206,6 +206,15 @@ func (r *Runtime) Inspect(ctx context.Context, executionID string) (task.Executi
 	return executionOf(instance), nil
 }
 
+// Stats is a sample of what a run's VM uses, as its engine samples any VM it
+// holds: its CPU, 0 to 100 of all the vCPUs it was given, its memory, its
+// disk, as much as its engine can say of a disk nothing is measured from
+// inside of, and what it sent and received since it booted. A run that is
+// not running is not sampled, which its engine says.
+func (r *Runtime) Stats(ctx context.Context, executionID string) (vm.Stats, error) {
+	return r.engine.Stats(ctx, executionID)
+}
+
 // Logs writes what a run's command wrote, a line at a time. What the kernel
 // and the engine say while the VM boots is the VM's, not the task's.
 func (r *Runtime) Logs(ctx context.Context, executionID string, writer io.Writer) error {
