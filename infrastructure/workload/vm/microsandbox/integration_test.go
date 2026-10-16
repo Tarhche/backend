@@ -973,6 +973,63 @@ func TestCodeRunner(t *testing.T) {
 		})
 	})
 
+	// a run is given what its task is changed to as a VM is: its engine cannot
+	// change the network, the ports or the resources of one that runs, so it
+	// is stopped and its VM made afresh from its image with them, which runs
+	// its snippet again from the start, with a log of its own. A snippet that
+	// could not reach out reaches the public internet once it is given egress,
+	// as the code runner's are, in the code runner's image, under its script.
+	t.Run("a reconfigured snippet runs again from the start, and reaches out once it may", func(t *testing.T) {
+		request := runCode.Request{Runner: "nodejs-22.14", Code: `const tick = () => fetch("http://example.com")
+  .then((response) => console.log("example.com answered " + response.status))
+  .catch(() => console.log("example.com was not reached"));
+tick();
+setInterval(tick, 2000);`}
+
+		isolated := execution("it-task-reconfigured", request.Image(), nil, []string{"--timeout", strconv.Itoa(int(runCode.LiveCodeTimeout.Seconds())), request.Code})
+		isolated.NetworkPolicy = network.PolicyIsolated
+
+		id, err := runtime.Create(ctx, isolated)
+		require.NoError(t, err)
+		t.Cleanup(func() { removed(t, e, id) })
+
+		eventually(t, 2*time.Minute, func() bool {
+			lines, err := e.Logs(ctx, id, vm.LogOptions{})
+			require.NoError(t, err)
+
+			return hasLine(lines, vm.LogSourceMain, "example.com was not reached")
+		}, "%s, isolated, reaches nothing", id)
+
+		before := inspected(t, e, id)
+
+		public := *isolated
+		public.NetworkPolicy = network.PolicyPublic
+
+		started := time.Now()
+		require.NoError(t, runtime.Reconfigure(ctx, id, &public))
+		t.Logf("%s: reconfigured in %s", id, time.Since(started).Round(time.Millisecond))
+
+		after := inspected(t, e, id)
+		assert.Equal(t, vm.InstanceRunning, after.State)
+		assert.True(t, after.StartedAt.After(before.StartedAt), "booted again, at %s after %s", after.StartedAt, before.StartedAt)
+
+		var lines []vm.LogLine
+
+		eventually(t, 2*time.Minute, func() bool {
+			lines, err = e.Logs(ctx, id, vm.LogOptions{})
+			require.NoError(t, err)
+
+			return hasLine(lines, vm.LogSourceMain, "example.com answered 200")
+		}, "%s, given egress, reaches the public internet", id)
+
+		assert.False(t, hasLine(lines, vm.LogSourceMain, "example.com was not reached"), "its log is the run's since its snippet ran again: %v", lines)
+
+		reconfigured, err := runtime.Inspect(ctx, id)
+		require.NoError(t, err)
+		assert.Equal(t, "it-task-reconfigured", reconfigured.TaskUUID, "and it is the task's run still, labelled as it was made")
+		assert.Equal(t, task.StatusRunning, reconfigured.Status)
+	})
+
 	// a snippet that runs on, as the code runner runs it: in its image, under
 	// its script, which runs the snippet under timeout. One is killed when its
 	// reader stops it or once it outlives its ttl, and is not held up.

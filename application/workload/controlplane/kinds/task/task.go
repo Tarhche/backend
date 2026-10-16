@@ -1,6 +1,7 @@
 // Package task is the task kind's control-plane strategy: what a task is
 // admitted as, what it is asked for when what it is doing is not what it was
-// asked to be, and what is readied before its commands are sent.
+// asked to be, what is changed of it in the control plane, and what is
+// readied before its commands are sent.
 //
 // A task is admitted with what it asked for checked, as tasks always were,
 // and what it left out filled in: a job, isolated, worth the retries its kind
@@ -19,12 +20,21 @@
 //	job       any       running past its ttl         kill
 //	service   running   failed or stopped            create, while retries are left
 //	any       stopped   running                      stop
+//	any       running   running, its config not      reconfigure
+//	                    what its node last gave it
 //
 // A job's ttl is counted from when its run started, as its node says, so one
 // that never starts is never stopped for it. A task whose node fell silent is
 // failed as node_lost by the reconcile loop, and left to its node, which says
 // what became of it once it speaks again; a job its node never comes back for
 // is deleted after a while.
+//
+// A running task is changed in the control plane (taskKind.ActionUpdate): its
+// name, which is its record's alone, and its ports, network policy and
+// limits, held to what a task is admitted with, its disk to only growing;
+// that its node has not given its run those is what has it reconfigured, at
+// once, which runs its program again from the start. Its ttl counts from its
+// run's new start then, as it counts from any run's.
 //
 // A task's log, which a service ships a line at a time, goes with it: it is
 // deleted as the task's delete is sent.
@@ -33,6 +43,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -62,7 +73,7 @@ const (
 	nodesLimit = 10
 
 	// maxNameLength keeps a name to something a listing can show.
-	maxNameLength = 100
+	maxNameLength = taskKind.MaxNameLength
 )
 
 // Dependencies are what the strategy places tasks with and reads them
@@ -183,15 +194,65 @@ func (s *Tasks) Reconcile(_ context.Context, t taskKind.Task) ([]kind.Intent, er
 
 	case expected == taskKind.Stopped && (state == taskKind.Running || state == taskKind.Restarting):
 		return intent(taskKind.ActionStop, "it runs while it was expected stopped")
+
+	case reconfigured(t):
+		return intent(taskKind.ActionReconfigure, "its ports, network policy or limits are not what its node last gave its run")
 	}
 
 	return nil, nil
 }
 
-// Apply refuses every action, since a task has none that runs in the
-// control plane.
-func (s *Tasks) Apply(_ context.Context, _ taskKind.Task, action string, _ any) (taskKind.Task, domain.ValidationErrors, error) {
-	return taskKind.Task{}, nil, fmt.Errorf("%w: a task has no %q run in the control plane", kind.ErrUnknownAction, action)
+// reconfigured reports whether a running task is to be given the ports,
+// network policy and limits its spec now has: its node last gave its run
+// others. One whose run its node has said nothing of having been given
+// anything has nothing to compare with, and is made with its spec when it is
+// next made.
+func reconfigured(t taskKind.Task) bool {
+	if t.Status.Applied == nil || t.Status.State != taskKind.Running {
+		return false
+	}
+
+	return !t.Status.Applied.Equal(t.Spec.Config())
+}
+
+// Apply carries out a task's update (taskKind.ActionUpdate): its name, which
+// is its record's alone, and its ports, network policy and limits, which its
+// node is then asked to give its run. What is wrong with it is said field by
+// field, and nothing changes then: limits are held to what a task is admitted
+// with, and its disk to only growing, as a VM's does, since a disk is not
+// taken back from under whatever is written on it.
+func (s *Tasks) Apply(_ context.Context, t taskKind.Task, action string, payload any) (taskKind.Task, domain.ValidationErrors, error) {
+	if action != taskKind.ActionUpdate {
+		return taskKind.Task{}, nil, fmt.Errorf("%w: a task has no %q run in the control plane", kind.ErrUnknownAction, action)
+	}
+
+	update, _ := payload.(taskKind.UpdatePayload)
+
+	if update.Name != nil {
+		t.Metadata.Name = strings.TrimSpace(*update.Name)
+	}
+
+	spec := t.Spec
+
+	if update.Ports != nil {
+		spec.Ports = normalized(*update.Ports)
+	}
+
+	if update.NetworkPolicy != nil {
+		spec.NetworkPolicy = *update.NetworkPolicy
+	}
+
+	if update.Limits != nil {
+		spec.Limits = *update.Limits
+
+		if spec.Limits.Disk < t.Spec.Limits.Disk {
+			return taskKind.Task{}, domain.ValidationErrors{"limits.disk": "disk_cannot_shrink"}, nil
+		}
+	}
+
+	t.Spec = spec
+
+	return t, nil, nil
 }
 
 // Prepare readies a task's commands before they are sent. A task on no node
@@ -302,31 +363,11 @@ func validate(asked taskKind.Task) domain.ValidationErrors {
 		invalid["image"] = "required_field"
 	}
 
-	if spec.Limits.CPU <= 0 {
-		invalid["limits.cpu"] = "required_field"
-	}
-
-	switch {
-	case spec.Limits.Memory == 0:
-		invalid["limits.memory"] = "required_field"
-
-	// a VM cannot be made with less. Every task is asked for through here,
-	// so this is where it is told so, rather than on whichever node it would
-	// have been given to.
-	case spec.Limits.Memory < task.MinMemory:
-		invalid["limits.memory"] = "memory_below_minimum"
-
-	// nor kept with more than a record keeps as a whole number.
-	case spec.Limits.Memory > kind.MaxInteger:
-		invalid["limits.memory"] = "too_large"
-	}
-
-	switch {
-	case spec.Limits.Disk == 0:
-		invalid["limits.disk"] = "required_field"
-	case spec.Limits.Disk > kind.MaxInteger:
-		invalid["limits.disk"] = "too_large"
-	}
+	// a VM cannot be made with less memory than task.MinMemory, nor kept with
+	// more than a record keeps as a whole number: every task is asked for
+	// through here, so this is where it is told so, rather than on whichever
+	// node it would have been given to.
+	maps.Copy(invalid, spec.Limits.Validate())
 
 	if len(spec.Kind) > 0 && !spec.Kind.IsValid() {
 		invalid["kind"] = "invalid_value"

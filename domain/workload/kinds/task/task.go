@@ -15,6 +15,16 @@
 // run started rather than from when it was asked for: a job past its ttl is
 // stopped, and one that never starts is never stopped for it.
 //
+// What its node gives its run of it, its ports, its network policy and its
+// limits (Config), can be changed while it runs (ActionUpdate), in the
+// control plane, which then has its node give them to its run
+// (ActionReconfigure). An engine cannot change them on a VM that runs, so its
+// run is stopped and its VM made afresh with them, which runs its program
+// again from the start: a job's output, its start and its deadline start
+// again with it, as a VM somebody changed reboots. The code runner's runs are
+// changed so from the dashboard, where they are shown as VMs. The rest of its
+// spec never changes.
+//
 // Its status is what its node last said of it: its state, and its run, which
 // is the VM its node holds of it, read off the VM itself (Run). A job's
 // output rides its run, so whoever follows a task from its node's
@@ -27,7 +37,10 @@
 package task
 
 import (
+	"maps"
+	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -57,8 +70,10 @@ const (
 
 	Running kind.State = "running"
 
-	// Restarting is a task whose run is being restarted in place, as its
-	// node says.
+	// Restarting is a task whose run is being given what the task now has
+	// (ActionReconfigure): its VM is stopped and made afresh, and its program
+	// run again from the start. Its node says it is restarting for as long as
+	// that takes, and it is over only once its command is answered.
 	Restarting kind.State = "restarting"
 
 	Stopping kind.State = "stopping"
@@ -106,7 +121,22 @@ const (
 	// ActionAttach opens a terminal in a running task: anybody's, signed in
 	// or not, for a task of the guest's, and its owner's alone otherwise.
 	ActionAttach = "attach"
+
+	// ActionUpdate changes a running task in the control plane
+	// (UpdatePayload): its name, which is its record's alone, and its ports,
+	// network policy and limits, which its node is then asked to give its run
+	// (ActionReconfigure).
+	ActionUpdate = "update"
+
+	// ActionReconfigure gives a task's run the ports, network policy and
+	// limits the task now has, which runs its program again from the start in
+	// a VM made afresh with them. It is the workload's own to ask for, once a
+	// task's config was changed.
+	ActionReconfigure = "reconfigure"
 )
+
+// MaxNameLength keeps a task's name to something a listing can show.
+const MaxNameLength = 100
 
 // Limits are what a task's VM is held to: cores, of which its VM is given
 // whole vCPUs, rounded up, and bytes of memory and disk, as they are
@@ -122,7 +152,42 @@ func (l Limits) ResourceLimits() task.ResourceLimits {
 	return task.ResourceLimits{Cpu: l.CPU, Memory: l.Memory, Disk: l.Disk}
 }
 
-// Spec is what a task is asked for as. It never changes.
+// Validate is what is wrong with limits a task is asked for, or changed to,
+// under the fields they are asked with: cores above nothing, and memory and
+// disk asked for, but never more than a record keeps as a whole number.
+//
+// A VM cannot be made with less memory than task.MinMemory. Every task is
+// asked for, and changed, through the control plane, so that is where it is
+// told so, rather than on whichever node it would have been given to.
+func (l Limits) Validate() domain.ValidationErrors {
+	invalid := make(domain.ValidationErrors)
+
+	if l.CPU <= 0 {
+		invalid["limits.cpu"] = "required_field"
+	}
+
+	switch {
+	case l.Memory == 0:
+		invalid["limits.memory"] = "required_field"
+	case l.Memory < task.MinMemory:
+		invalid["limits.memory"] = "memory_below_minimum"
+	case l.Memory > kind.MaxInteger:
+		invalid["limits.memory"] = "too_large"
+	}
+
+	switch {
+	case l.Disk == 0:
+		invalid["limits.disk"] = "required_field"
+	case l.Disk > kind.MaxInteger:
+		invalid["limits.disk"] = "too_large"
+	}
+
+	return invalid
+}
+
+// Spec is what a task is asked for as. Its ports, network policy and limits
+// are what its node gives its run (Config), and are changed while it runs
+// (ActionUpdate); nothing else of it ever changes.
 type Spec struct {
 	// Kind is a job, which runs once, or a service, which keeps running. A
 	// spec that names none is a job.
@@ -138,8 +203,9 @@ type Spec struct {
 	Ports []port.Port `json:"ports,omitempty"`
 
 	// NetworkPolicy is how much of the network it reaches: none, isolated,
-	// which serves its ports and calls nothing, or public. None names the
-	// default, isolated.
+	// which serves its ports and calls nothing, public, which serves them and
+	// calls out, or outbound, which calls out and serves nothing. None names
+	// the default, isolated.
 	NetworkPolicy network.Policy `json:"network_policy,omitempty"`
 
 	// Interactive says it is watched and reached while it runs, rather than
@@ -188,6 +254,29 @@ func (s Spec) Policy() network.Policy {
 	return s.NetworkPolicy
 }
 
+// Config is what of a task's spec its node gives the run it makes, and can
+// give again to one that runs already: its ports, network policy and limits.
+func (s Spec) Config() Config {
+	return Config{Ports: slices.Clone(s.Ports), NetworkPolicy: s.Policy(), Limits: s.Limits}
+}
+
+// Config is a task's ports, network policy and limits: what its node gives
+// the run it makes, and can give again to one that runs already, by making
+// its VM afresh.
+type Config struct {
+	Ports         []port.Port    `json:"ports"`
+	NetworkPolicy network.Policy `json:"network_policy"`
+	Limits        Limits         `json:"limits"`
+}
+
+// Equal reports whether two configs give a task's run the same: a policy
+// that names nothing is the default one, as a spec's is.
+func (c Config) Equal(other Config) bool {
+	policy := func(p network.Policy) network.Policy { return Spec{NetworkPolicy: p}.Policy() }
+
+	return slices.Equal(c.Ports, other.Ports) && policy(c.NetworkPolicy) == policy(other.NetworkPolicy) && c.Limits == other.Limits
+}
+
 // Status is what a task is doing: its state, and its run, as its node last
 // said.
 type Status struct {
@@ -201,6 +290,14 @@ type Status struct {
 	// Run is the run of it its node holds: nothing for a task no node has run
 	// yet.
 	Run *Run `json:"run,omitempty"`
+
+	// Applied is the config its node last gave the run it holds, which it
+	// says whenever it makes a run or reconfigures one, and nothing else
+	// does, so a heartbeat leaves it as it was: a task whose spec says
+	// otherwise is to be reconfigured. Nothing is a task whose run was made
+	// before its node said it, which is given what its spec says when it is
+	// next made.
+	Applied *Config `json:"applied,omitempty"`
 }
 
 // Run is one run of a task, as the node holding it says.
@@ -265,6 +362,61 @@ type Endpoint struct {
 // from the end. It rides every heartbeat of its task, which has to fit in one
 // message.
 const MaxOutput = 256 << 10
+
+// UpdatePayload is what changes about a running task: anything it leaves out
+// stays as it is. Its name is its record's alone; its ports, network policy
+// and limits are its node's to give its run, which runs its program again
+// from the start (ActionReconfigure). Its image, command, environment and ttl
+// never change, and its disk only grows.
+//
+// Its ports are kept under a policy that serves none, as a VM's are while its
+// ingress is denied, and are served again once one lets anything in: a task
+// asked for with ports nothing can reach is refused, since it is asked for by
+// mistake, and one changed to reach nothing for a while is not.
+type UpdatePayload struct {
+	Name          *string         `json:"name,omitempty"`
+	Ports         *[]port.Port    `json:"ports,omitempty"`
+	NetworkPolicy *network.Policy `json:"network_policy,omitempty"`
+	Limits        *Limits         `json:"limits,omitempty"`
+}
+
+var _ domain.Validatable = &UpdatePayload{}
+
+// Validate is what is wrong with an update, that it alone tells, under the
+// fields it names: whether it shrinks a disk is the control plane's to say,
+// which knows the disk it has.
+func (p *UpdatePayload) Validate() domain.ValidationErrors {
+	invalid := make(domain.ValidationErrors)
+
+	if p.Name != nil {
+		switch name := strings.TrimSpace(*p.Name); {
+		case len(name) == 0:
+			invalid["name"] = "required_field"
+		case len(name) > MaxNameLength:
+			invalid["name"] = "invalid_name"
+		}
+	}
+
+	if p.Ports != nil && slices.ContainsFunc(*p.Ports, func(p port.Port) bool { return p == 0 || p > math.MaxUint16 }) {
+		invalid["ports"] = "invalid_value"
+	}
+
+	if p.NetworkPolicy != nil && !p.NetworkPolicy.IsValid() {
+		invalid["network_policy"] = "invalid_network_policy"
+	}
+
+	if p.Limits != nil {
+		maps.Copy(invalid, p.Limits.Validate())
+	}
+
+	return invalid
+}
+
+// Changes reports whether an update changes what a task's node gives its run:
+// its ports, network policy or limits.
+func (p UpdatePayload) Changes() bool {
+	return p.Ports != nil || p.NetworkPolicy != nil || p.Limits != nil
+}
 
 // LogsPayload narrows what is read of a task's log.
 type LogsPayload struct {
@@ -349,6 +501,8 @@ func Descriptor() kind.Descriptor {
 			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Created, Failed, Stopped}, Desires: Running, Internal: true, Timeout: kind.TimeoutPull, Payload: kind.NoPayload},
 			command(ActionStop, stoppable, Stopped, "manage"),
 			command(ActionKill, slices.Clone(stoppable), Stopped, "manage"),
+			{Name: ActionUpdate, Runs: kind.OnControlPlane, Mode: kind.ModeCommand, AllowedIn: []kind.State{Running}, Permission: "update", Payload: kind.Payload[UpdatePayload]()},
+			{Name: ActionReconfigure, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Running}, Internal: true, Payload: kind.NoPayload},
 			command(ActionDelete, nil, Deleted, "delete"),
 			{Name: ActionState, Runs: kind.OnNode, Mode: kind.ModeQuery, Permission: "show", Payload: kind.NoPayload},
 			{Name: ActionLogs, Runs: kind.OnNode, Mode: kind.ModeQuery, AllowedIn: []kind.State{Running, Restarting, Stopping, Stopped, Completed, Failed}, Permission: "logs", Payload: kind.Payload[LogsPayload]()},
@@ -361,9 +515,14 @@ func Descriptor() kind.Descriptor {
 //
 // A command is waited on in flight until its own answer, or its node, says
 // where it got: scheduled ends in the run running, or already ended,
-// stopping in it having ended, and deleting in the task being gone. At rest,
-// a task is what its node says. A running task its node no longer holds has
-// failed; a stopped one its node holds nothing of has stopped.
+// stopping in it having ended, restarting in the run running again, or
+// already ended, and deleting in the task being gone. A reconfigure is over
+// only once it is answered: a run runs before its reconfigure as it does
+// after it, and halfway through it is a VM that is down, which says nothing
+// of how the program ended, so what its node is seen doing meanwhile moves
+// nothing. At rest, a task is what its node says. A running task its node no
+// longer holds has failed; a stopped one its node holds nothing of has
+// stopped.
 func Machine() kind.Machine {
 	transitions := []kind.Transition{
 		{From: kind.Any, On: kind.OnAction(ActionDelete), To: Deleting},
@@ -372,6 +531,7 @@ func Machine() kind.Machine {
 		{From: Running, On: kind.OnObserved(kind.Missing), To: Failed},
 		{From: Restarting, On: kind.OnObserved(kind.Missing), To: Failed},
 		{From: Stopping, On: kind.OnObserved(kind.Missing), To: Stopped},
+		{From: Running, On: kind.OnAction(ActionReconfigure), To: Restarting},
 	}
 
 	asked := func(action string, to kind.State, from ...kind.State) {
@@ -392,12 +552,14 @@ func Machine() kind.Machine {
 
 	arrives(Scheduled, Running, Restarting, Stopped, Completed)
 	arrives(Stopping, Stopped, Completed)
+	arrives(Restarting, Running, Stopped, Completed)
 
 	return kind.Machine{
 		Initial:     Created,
 		States:      []kind.State{Created, Scheduled, Running, Restarting, Stopping, Stopped, Completed, Failed, Deleting, Deleted},
 		Transitions: transitions,
 		Terminal:    []kind.State{Stopped, Completed, Failed, Deleted},
-		InFlight:    []kind.State{Scheduled, Stopping, Deleting},
+		InFlight:    []kind.State{Scheduled, Restarting, Stopping, Deleting},
+		Answered:    []kind.State{Restarting},
 	}
 }

@@ -16,6 +16,12 @@ const (
 
 	// PolicyPublic is PolicyIsolated that also reaches the public internet.
 	PolicyPublic Policy = "public"
+
+	// PolicyOutbound reaches the public internet and serves nothing: nothing
+	// reaches the task, so no port of it is exposed. It is a VM whose ingress
+	// is denied and whose egress is allowed, the one way of a VM's network no
+	// other policy is.
+	PolicyOutbound Policy = "outbound"
 )
 
 // DefaultPolicy is what a spec that names no policy runs under. Isolated is the
@@ -25,7 +31,7 @@ const DefaultPolicy = PolicyIsolated
 // IsValid reports whether p is one of the known policies.
 func (p Policy) IsValid() bool {
 	switch p {
-	case PolicyNone, PolicyIsolated, PolicyPublic:
+	case PolicyNone, PolicyIsolated, PolicyPublic, PolicyOutbound:
 		return true
 	default:
 		return false
@@ -39,7 +45,7 @@ func (p Policy) AllowsPorts() bool {
 
 // ReachesInternet reports whether a task under this policy routes out.
 func (p Policy) ReachesInternet() bool {
-	return p == PolicyPublic
+	return p == PolicyPublic || p == PolicyOutbound
 }
 
 func (p Policy) String() string {
@@ -51,9 +57,9 @@ func (p Policy) String() string {
 //
 // No network is nothing either way. An isolated task still serves its ports,
 // so the ingress reaches it, but it calls nothing; a public one calls out as
-// well. A policy that names nothing is the default one, and one nobody knows
-// is given nothing at all, which is the safe answer to a question nobody
-// asked.
+// well, and an outbound one calls out and is reached by nothing. A policy
+// that names nothing is the default one, and one nobody knows is given
+// nothing at all, which is the safe answer to a question nobody asked.
 func (p Policy) VMNetwork() vm.Network {
 	policy := p
 	if len(policy) == 0 {
@@ -65,7 +71,26 @@ func (p Policy) VMNetwork() vm.Network {
 		return vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny}
 	case PolicyPublic:
 		return vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow}
+	case PolicyOutbound:
+		return vm.Network{Ingress: vm.AccessDeny, Egress: vm.AccessAllow}
 	default:
 		return vm.Network{Ingress: vm.AccessDeny, Egress: vm.AccessDeny}
+	}
+}
+
+// PolicyOf is the policy a task runs under in a VM given network: VMNetwork
+// the other way round, which each of the four ways a VM's network can be open
+// is the network of one policy. A way that is not allowed is denied, as a VM
+// whose way says nothing is given nothing that way by its engine.
+func PolicyOf(network vm.Network) Policy {
+	switch ingress, egress := network.Ingress == vm.AccessAllow, network.Egress == vm.AccessAllow; {
+	case ingress && egress:
+		return PolicyPublic
+	case ingress:
+		return PolicyIsolated
+	case egress:
+		return PolicyOutbound
+	default:
+		return PolicyNone
 	}
 }

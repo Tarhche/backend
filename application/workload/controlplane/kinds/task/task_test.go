@@ -281,7 +281,14 @@ func TestTasks_Reconcile(t *testing.T) {
 		"a service whose node fell silent is left to its node": {task: in(taskKind.Failed, taskKind.Running, service, func(t *taskKind.Task) {
 			t.Status.Reason, t.Status.Since = reconcileResources.ReasonNodeLost, now.Add(-time.Hour)
 		})},
-		"a service that runs is left to run": {task: in(taskKind.Running, taskKind.Running, service)},
+		"a service that runs is left to run":                                      {task: in(taskKind.Running, taskKind.Running, service)},
+		"one whose config is not what its node last gave its run is reconfigured": {task: in(taskKind.Running, taskKind.Running, started(time.Second), applied(func(c *taskKind.Config) { c.Ports = []port.Port{3000} })), want: taskKind.ActionReconfigure},
+		"and left to run once it is":                                              {task: in(taskKind.Running, taskKind.Running, started(time.Second), applied())},
+		"a policy that names nothing is the default one it was given":             {task: in(taskKind.Running, taskKind.Running, started(time.Second), applied(func(c *taskKind.Config) { c.NetworkPolicy = "" }))},
+		"nor is one whose node never said what it gave its run":                   {task: in(taskKind.Running, taskKind.Running, started(time.Second), func(t *taskKind.Task) { t.Spec.Ports = []port.Port{9000} })},
+		"one past its ttl is killed rather than reconfigured":                     {task: in(taskKind.Running, taskKind.Running, started(61*time.Second), applied(func(c *taskKind.Config) { c.Ports = nil })), want: taskKind.ActionKill},
+		"and one expected stopped is stopped":                                     {task: in(taskKind.Running, taskKind.Stopped, started(time.Second), applied(func(c *taskKind.Config) { c.Ports = nil })), want: taskKind.ActionStop},
+		"and one that ended is not reconfigured, it goes":                         {task: in(taskKind.Completed, taskKind.Running, applied(func(c *taskKind.Config) { c.Ports = nil })), want: taskKind.ActionDelete},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -364,8 +371,66 @@ func TestTasks_Prepare(t *testing.T) {
 func TestTasks_Apply(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := strategy(nil).tasks.Apply(context.Background(), in(taskKind.Running, taskKind.Running), "rename", nil)
-	assert.True(t, errors.Is(err, kind.ErrUnknownAction))
+	ctx := context.Background()
+
+	name := func(n string) *string { return &n }
+	ports := func(p ...port.Port) *[]port.Port { return &p }
+	policy := func(p network.Policy) *network.Policy { return &p }
+
+	t.Run("an update changes what it names, and leaves the rest", func(t *testing.T) {
+		t.Parallel()
+
+		running := in(taskKind.Running, taskKind.Running, started(time.Second))
+
+		updated, invalid, err := strategy(nil).tasks.Apply(ctx, running, taskKind.ActionUpdate, taskKind.UpdatePayload{
+			Name:          name("  a run, renamed  "),
+			Ports:         ports(8080, 3000, 8080),
+			NetworkPolicy: policy(network.PolicyOutbound),
+			Limits:        &taskKind.Limits{CPU: 3, Memory: 1 << 30, Disk: 1 << 30},
+		})
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, "a run, renamed", updated.Metadata.Name)
+		assert.Equal(t, []port.Port{3000, 8080}, updated.Spec.Ports, "sorted, each once")
+		assert.Equal(t, network.PolicyOutbound, updated.Spec.NetworkPolicy, "its ports kept, though nothing reaches them for now")
+		assert.Equal(t, taskKind.Limits{CPU: 3, Memory: 1 << 30, Disk: 1 << 30}, updated.Spec.Limits)
+
+		assert.Equal(t, running.Spec.Image, updated.Spec.Image)
+		assert.Equal(t, running.Spec.Command, updated.Spec.Command)
+		assert.Equal(t, running.Spec.TTL, updated.Spec.TTL)
+		assert.Equal(t, running.Status, updated.Status, "what its node says of it is its node's to say")
+	})
+
+	t.Run("one that names nothing changes nothing", func(t *testing.T) {
+		t.Parallel()
+
+		running := in(taskKind.Running, taskKind.Running, started(time.Second))
+
+		updated, invalid, err := strategy(nil).tasks.Apply(ctx, running, taskKind.ActionUpdate, taskKind.UpdatePayload{})
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+		assert.Equal(t, running, updated)
+	})
+
+	t.Run("its disk only grows", func(t *testing.T) {
+		t.Parallel()
+
+		running := in(taskKind.Running, taskKind.Running, started(time.Second))
+
+		_, invalid, err := strategy(nil).tasks.Apply(ctx, running, taskKind.ActionUpdate, taskKind.UpdatePayload{
+			Limits: &taskKind.Limits{CPU: 2, Memory: 512 << 20, Disk: 256 << 20},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"limits.disk": "disk_cannot_shrink"}, invalid)
+	})
+
+	t.Run("nothing else is done to a task in the control plane", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := strategy(nil).tasks.Apply(ctx, in(taskKind.Running, taskKind.Running), "rename", nil)
+		assert.True(t, errors.Is(err, kind.ErrUnknownAction))
+	})
 }
 
 // The strategy is bound to the kind as the control plane binds it.
@@ -392,6 +457,41 @@ func TestBinding(t *testing.T) {
 		"limits.memory": "required_field",
 		"limits.disk":   "required_field",
 	}, invalid)
+
+	t.Run("an update is held to what an update may say before the strategy is handed it", func(t *testing.T) {
+		t.Parallel()
+
+		running, err := kind.Encode(in(taskKind.Running, taskKind.Running, started(time.Second)))
+		require.NoError(t, err)
+
+		_, invalid, err := binding.Apply(context.Background(), running, taskKind.ActionUpdate, []byte(`{"limits": {"cpu": 2, "memory": 1024, "disk": 1024}, "network_policy": "host"}`))
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"limits.memory": "memory_below_minimum", "network_policy": "invalid_network_policy"}, invalid)
+
+		changed, invalid, err := binding.Apply(context.Background(), running, taskKind.ActionUpdate, []byte(`{"ports": [9000]}`))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+		assert.Equal(t, running.Metadata.Generation+1, changed.Metadata.Generation, "its spec changed")
+
+		renamed, invalid, err := binding.Apply(context.Background(), running, taskKind.ActionUpdate, []byte(`{"name": "renamed"}`))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+		assert.Equal(t, running.Metadata.Generation, renamed.Metadata.Generation, "its spec is as it was")
+	})
+}
+
+// applied has a task's node have said it gave its run the config its spec
+// says, as change leaves it.
+func applied(change ...func(c *taskKind.Config)) func(t *taskKind.Task) {
+	return func(t *taskKind.Task) {
+		config := t.Spec.Config()
+
+		for _, c := range change {
+			c(&config)
+		}
+
+		t.Status.Applied = &config
+	}
 }
 
 // picking is a scheduler that picks the first node, and counts its turns.

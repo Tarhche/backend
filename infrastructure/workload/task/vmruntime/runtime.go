@@ -108,8 +108,42 @@ func (r *Runtime) matching(ctx context.Context, match func(labels map[string]str
 // network is what the task's policy maps to, and its ports are published only
 // when that lets anything reach it. Its disk is thrown away with it.
 func (r *Runtime) Create(ctx context.Context, execution *task.Execution) (string, error) {
-	spec := vm.Spec{
-		ID:         executionID(execution),
+	created, err := r.engine.Create(ctx, specOf(executionID(execution), execution))
+	if err != nil {
+		return "", err
+	}
+
+	r.logger.Info("task vm created", "execution", created.ID, "task", execution.TaskUUID, "image", execution.Image)
+
+	return created.ID, nil
+}
+
+// Reconfigure gives a run the limits, ports and network execution says, as
+// Create gives a run them, by reconfiguring its VM: its engine cannot change
+// any of them on a VM that runs, and a run's VM keeps no disk across a boot,
+// so a running one is stopped and booted afresh from its image with them,
+// which runs its command again from the start, with an empty log, a new start
+// and a deadline counted from it. One that is down takes them when it next
+// boots. What it runs and what it is labelled with are what it was made with,
+// which an engine keeps on the VM, whatever execution says of them.
+func (r *Runtime) Reconfigure(ctx context.Context, executionID string, execution *task.Execution) error {
+	if _, err := r.engine.Reconfigure(ctx, specOf(executionID, execution)); err != nil {
+		return err
+	}
+
+	r.logger.Info("task vm reconfigured", "execution", executionID, "task", execution.TaskUUID)
+
+	return nil
+}
+
+// specOf is the VM the run of execution that the engine calls id is: given
+// the task's limits, whole vCPUs, rounded up from the cores it asked for, and
+// its memory and disk in bytes, as they were asked for; its network, the one
+// the task's policy maps to; its ports, published only when that lets
+// anything reach it; and its command, labelled with what it runs.
+func specOf(id string, execution *task.Execution) vm.Spec {
+	return vm.Spec{
+		ID:         id,
 		Image:      execution.Image,
 		Resources:  execution.ResourceLimits.VMResources(),
 		Ports:      portsOf(execution),
@@ -120,15 +154,6 @@ func (r *Runtime) Create(ctx context.Context, execution *task.Execution) (string
 		Env:        slices.Clone(execution.Environment),
 		WorkingDir: execution.WorkingDirectory,
 	}
-
-	created, err := r.engine.Create(ctx, spec)
-	if err != nil {
-		return "", err
-	}
-
-	r.logger.Info("task vm created", "execution", created.ID, "task", execution.TaskUUID, "image", execution.Image)
-
-	return created.ID, nil
 }
 
 // Start boots a run that is down. One that is running is what was asked for,

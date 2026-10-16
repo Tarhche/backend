@@ -2,13 +2,16 @@ package task
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
+	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
@@ -75,6 +78,26 @@ func TestDescriptor(t *testing.T) {
 
 		assert.True(t, d.Endpoints)
 	})
+
+	t.Run("it is changed while it runs, by whoever may change a vm, and given what it is changed to by the workload alone", func(t *testing.T) {
+		t.Parallel()
+
+		update, found := d.Action(ActionUpdate)
+		require.True(t, found)
+		assert.Equal(t, kind.OnControlPlane, update.Runs)
+		assert.Equal(t, kind.ModeCommand, update.Mode)
+		assert.Equal(t, []kind.State{Running}, update.AllowedIn)
+
+		admin, self := d.Permissions(update.Permission)
+		assert.Equal(t, "workload.vms.update", admin)
+		assert.Equal(t, "self.workload.vms.update", self)
+
+		reconfigure, found := d.Action(ActionReconfigure)
+		require.True(t, found)
+		assert.Equal(t, kind.OnNode, reconfigure.Runs)
+		assert.True(t, reconfigure.Internal)
+		assert.Equal(t, []kind.State{Running}, reconfigure.AllowedIn)
+	})
 }
 
 func TestMachine(t *testing.T) {
@@ -107,6 +130,10 @@ func TestMachine(t *testing.T) {
 		"nor one being run by a node that has not run it":    {from: Scheduled, on: kind.OnObserved(kind.Missing), to: Scheduled},
 		"one that has ended is not missing, it is ended":     {from: Completed, on: kind.OnObserved(kind.Missing), to: Completed},
 		"one admitted and not run yet is missing everywhere": {from: Created, on: kind.OnObserved(kind.Missing), to: Created},
+		"a running one is reconfigured, which restarts it":   {from: Running, on: kind.OnAction(ActionReconfigure), to: Restarting},
+		"and runs again":                                     {from: Restarting, on: kind.OnObserved(Running), to: Running},
+		"or has ended by the time it is answered":            {from: Restarting, on: kind.OnObserved(Completed), to: Completed},
+		"or is stopped while it restarts":                    {from: Restarting, on: kind.OnAction(ActionStop), to: Stopping},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -115,6 +142,13 @@ func TestMachine(t *testing.T) {
 			assert.Equal(t, tt.to, to)
 		})
 	}
+
+	t.Run("a restart is waited on until it is answered, whatever its node says meanwhile", func(t *testing.T) {
+		t.Parallel()
+
+		assert.True(t, m.IsInFlight(Restarting))
+		assert.True(t, m.IsAnswered(Restarting))
+	})
 
 	t.Run("a stopped, completed or failed task has ended, and nothing else has", func(t *testing.T) {
 		t.Parallel()
@@ -185,6 +219,81 @@ func TestSpec(t *testing.T) {
 
 		assert.Equal(t, task.ResourceLimits{Cpu: 1.5, Memory: 512 << 20, Disk: 100 << 20}, Limits{CPU: 1.5, Memory: 512 << 20, Disk: 100 << 20}.ResourceLimits())
 	})
+
+	t.Run("its config is what its node gives its run, a policy that names nothing the default one", func(t *testing.T) {
+		t.Parallel()
+
+		s := Spec{Ports: []port.Port{3000}, Limits: Limits{CPU: 2, Memory: 200 << 20, Disk: 100 << 20}}
+
+		assert.Equal(t, Config{Ports: []port.Port{3000}, NetworkPolicy: network.PolicyIsolated, Limits: s.Limits}, s.Config())
+		assert.True(t, s.Config().Equal(Config{Ports: []port.Port{3000}, Limits: s.Limits}))
+		assert.True(t, Spec{}.Config().Equal(Config{Ports: []port.Port{}, NetworkPolicy: network.PolicyIsolated}), "no ports are none")
+
+		for name, other := range map[string]Config{
+			"another port":   {Ports: []port.Port{3001}, Limits: s.Limits},
+			"another policy": {Ports: []port.Port{3000}, NetworkPolicy: network.PolicyPublic, Limits: s.Limits},
+			"other limits":   {Ports: []port.Port{3000}, Limits: Limits{CPU: 2, Memory: 300 << 20, Disk: 100 << 20}},
+		} {
+			assert.False(t, s.Config().Equal(other), name)
+		}
+	})
+}
+
+func TestLimits_Validate(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		limits Limits
+		want   domain.ValidationErrors
+	}{
+		"what a snippet is given":     {limits: Limits{CPU: 2, Memory: 200 << 20, Disk: 100 << 20}, want: domain.ValidationErrors{}},
+		"nothing at all":              {limits: Limits{}, want: domain.ValidationErrors{"limits.cpu": "required_field", "limits.memory": "required_field", "limits.disk": "required_field"}},
+		"less memory than a vm takes": {limits: Limits{CPU: 1, Memory: task.MinMemory - 1, Disk: 1}, want: domain.ValidationErrors{"limits.memory": "memory_below_minimum"}},
+		"more than a record keeps":    {limits: Limits{CPU: 1, Memory: kind.MaxInteger + 1, Disk: kind.MaxInteger + 1}, want: domain.ValidationErrors{"limits.memory": "too_large", "limits.disk": "too_large"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, tt.limits.Validate())
+		})
+	}
+}
+
+func TestUpdatePayload(t *testing.T) {
+	t.Parallel()
+
+	name := func(n string) *string { return &n }
+	ports := func(p ...port.Port) *[]port.Port { return &p }
+	policy := func(p network.Policy) *network.Policy { return &p }
+
+	for title, tt := range map[string]struct {
+		payload UpdatePayload
+		want    domain.ValidationErrors
+	}{
+		"nothing changes nothing":    {payload: UpdatePayload{}, want: domain.ValidationErrors{}},
+		"a name, ports and a policy": {payload: UpdatePayload{Name: name("a run"), Ports: ports(3000, 8080), NetworkPolicy: policy(network.PolicyOutbound)}, want: domain.ValidationErrors{}},
+		"no name":                    {payload: UpdatePayload{Name: name("  ")}, want: domain.ValidationErrors{"name": "required_field"}},
+		"a name no listing shows":    {payload: UpdatePayload{Name: name(strings.Repeat("a", MaxNameLength+1))}, want: domain.ValidationErrors{"name": "invalid_name"}},
+		"port zero":                  {payload: UpdatePayload{Ports: ports(0)}, want: domain.ValidationErrors{"ports": "invalid_value"}},
+		"a port past the last":       {payload: UpdatePayload{Ports: ports(65536)}, want: domain.ValidationErrors{"ports": "invalid_value"}},
+		"a policy nobody knows":      {payload: UpdatePayload{NetworkPolicy: policy("host")}, want: domain.ValidationErrors{"network_policy": "invalid_network_policy"}},
+		"limits held to theirs":      {payload: UpdatePayload{Limits: &Limits{CPU: 1, Memory: task.MinMemory - 1, Disk: 1}}, want: domain.ValidationErrors{"limits.memory": "memory_below_minimum"}},
+	} {
+		t.Run(title, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, tt.payload.Validate())
+		})
+	}
+
+	t.Run("its name is its record's, and the rest its run's", func(t *testing.T) {
+		t.Parallel()
+
+		assert.False(t, UpdatePayload{Name: name("renamed")}.Changes())
+		assert.True(t, UpdatePayload{Ports: ports()}.Changes())
+		assert.True(t, UpdatePayload{NetworkPolicy: policy(network.PolicyPublic)}.Changes())
+		assert.True(t, UpdatePayload{Limits: &Limits{}}.Changes())
+	})
 }
 
 // A status travels as JSON, beside every other kind's, and what the control
@@ -202,6 +311,7 @@ func TestStatus_JSON(t *testing.T) {
 		require.NoError(t, json.Unmarshal(payload, &fields))
 
 		assert.NotContains(t, fields, "retries")
+		assert.NotContains(t, fields, "applied", "nor of a config it was given, unless it gave one")
 		assert.Contains(t, fields, "run")
 	})
 

@@ -17,17 +17,29 @@
 //     be started is taken away again, so nothing is left of it to report;
 //   - stop and kill stop every run of it: a VM has no grace period to cut
 //     short, so the two end it alike;
+//   - reconfigure gives the run that speaks for it the ports, network policy
+//     and limits the task now has, which its runtime does by stopping it and
+//     making its VM afresh with them, running its program again from the
+//     start;
 //   - delete takes every run of it away, stopping a running one first.
+//
+// What a create made a run with, and what a reconfigure gave one, is said in
+// what it came to (taskKind.Status.Applied), and nowhere else: that is how
+// the control plane knows a change of a task reached its run.
 //
 // Its state is every task this node runs, each as the run of it that runs, or
 // otherwise its latest: what its program is doing, and the run itself, with
 // what a job has written so far (Run.Output), the ports its VM publishes,
 // which the ingress reaches it on, and those that came up. The outputs of a
 // node's tasks share a budget, what a beat carries of them between them, a
-// task in each of the task kind's heartbeats. A task's terminal is a shell
-// inside its running run, anybody's for a task of the guest's, as the page a
-// snippet runs on is, and its owner's alone otherwise; its ports are wherever
-// its run was published.
+// task in each of the task kind's heartbeats. A task being reconfigured is
+// said to be restarting, for as long as that takes and in every look at what
+// the node holds taken meanwhile, however late it is read: its run is a VM
+// that is down halfway through, which would otherwise be said to have ended,
+// and whoever follows the task from its heartbeats, a snippet's reader, would
+// be told it had. A task's terminal is a shell inside its running run,
+// anybody's for a task of the guest's, as the page a snippet runs on is, and
+// its owner's alone otherwise; its ports are wherever its run was published.
 package task
 
 import (
@@ -89,9 +101,26 @@ type Node struct {
 
 	lock sync.Mutex
 
-	// outputs are what each run that has ended wrote, by run: it writes
-	// nothing more, so it is read once.
-	outputs map[string]string
+	// outputs are what each run that has ended wrote, by run, as of the start
+	// it ended after: it writes nothing more until it is started again, so it
+	// is read once.
+	outputs map[string]written
+
+	// reconfiguring are the tasks whose run is being reconfigured, by uuid;
+	// reconfigured, by uuid, the mark at which each was last done with, out
+	// of marks, which counts every reconfigure done with on this node. A
+	// look at what the node holds that began at a mark said nothing true of
+	// a task done with since, which was halfway through being reconfigured
+	// whenever the look saw it.
+	reconfiguring map[string]bool
+	reconfigured  map[string]uint64
+	marks         uint64
+}
+
+// written is what a run that ended wrote, and the start it ended after.
+type written struct {
+	startedAt time.Time
+	output    string
 }
 
 var (
@@ -103,7 +132,13 @@ var (
 
 // New is the strategy that runs the tasks nodeName holds on runtime.
 func New(runtime task.Runtime, nodeName string) *Node {
-	return &Node{runtime: runtime, nodeName: nodeName, outputs: make(map[string]string)}
+	return &Node{
+		runtime:       runtime,
+		nodeName:      nodeName,
+		outputs:       make(map[string]written),
+		reconfiguring: make(map[string]bool),
+		reconfigured:  make(map[string]uint64),
+	}
 }
 
 // Execute carries out one of a task's commands, and is what it left the task
@@ -116,6 +151,8 @@ func (n *Node) Execute(ctx context.Context, t taskKind.Task, action string, _ an
 		return n.stop(ctx, t, n.runtime.Stop)
 	case taskKind.ActionKill:
 		return n.stop(ctx, t, n.runtime.Kill)
+	case taskKind.ActionReconfigure:
+		return n.reconfigure(ctx, t)
 	case taskKind.ActionDelete:
 		return kind.Outcome[taskKind.Status]{}, n.delete(ctx, t)
 	}
@@ -181,7 +218,7 @@ func (n *Node) create(ctx context.Context, t taskKind.Task) (kind.Outcome[taskKi
 		return failed(t, err)
 	}
 
-	return n.outcome(ctx, started), nil
+	return applied(n.outcome(ctx, started), t), nil
 }
 
 // stop stops every run of a task, by how. A task that has no run here has
@@ -210,6 +247,85 @@ func (n *Node) stop(ctx context.Context, t taskKind.Task, how func(ctx context.C
 	}
 
 	return n.outcome(ctx, stopped), nil
+}
+
+// reconfigure gives the run that speaks for a task the ports, network policy
+// and limits the task now has, which its runtime does by stopping it and
+// making its VM afresh with them, running its program again from the start:
+// a job's output, its start and its deadline start again. What the run was
+// made as, its name among it, stays: it is still what the task's reader is
+// answered under. One that ended in the meantime is given them for nothing,
+// and has ended still. A task this node holds no run of has nothing to give
+// them to, and is not running.
+//
+// The task is said to be restarting until its run is up again, as long as
+// that takes, and what was kept of what the run wrote before is let go of.
+func (n *Node) reconfigure(ctx context.Context, t taskKind.Task) (kind.Outcome[taskKind.Status], error) {
+	runs, err := n.runtime.Of(ctx, t.Metadata.UUID)
+	if err != nil {
+		return kind.Outcome[taskKind.Status]{}, err
+	}
+
+	if len(runs) == 0 {
+		return kind.Outcome[taskKind.Status]{}, fmt.Errorf("%w: this node holds no run of %q", vm.ErrNotRunning, t.Metadata.UUID)
+	}
+
+	run := current(runs)
+
+	n.begin(t.Metadata.UUID)
+	defer n.end(t.Metadata.UUID)
+
+	execution := executionOf(t, run.Attempt, n.nodeName)
+	if err := n.runtime.Reconfigure(ctx, run.ID, &execution); err != nil {
+		return kind.Outcome[taskKind.Status]{}, err
+	}
+
+	n.forget(run.ID)
+
+	reconfigured, err := n.runtime.Inspect(ctx, run.ID)
+	if err != nil {
+		return kind.Outcome[taskKind.Status]{}, err
+	}
+
+	return applied(n.outcome(ctx, reconfigured), t), nil
+}
+
+// begin says a task's run is being reconfigured.
+func (n *Node) begin(uuid string) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	n.reconfiguring[uuid] = true
+}
+
+// end says a task's run is done being reconfigured, as of the next mark.
+func (n *Node) end(uuid string) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	n.marks++
+
+	delete(n.reconfiguring, uuid)
+	n.reconfigured[uuid] = n.marks
+}
+
+// mark is where the reconfigures done with on this node stand now, which a
+// look at what it holds is taken as of.
+func (n *Node) mark() uint64 {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	return n.marks
+}
+
+// restarting reports whether a look at what the node holds that began at
+// mark saw the run of the task uuid names halfway through being reconfigured,
+// or may have: it is being reconfigured now, or was done with since.
+func (n *Node) restarting(uuid string, mark uint64) bool {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	return n.reconfiguring[uuid] || n.reconfigured[uuid] > mark
 }
 
 // delete takes every run of a task away. A running one is stopped first, so
@@ -276,8 +392,12 @@ func (n *Node) Query(ctx context.Context, t taskKind.Task, action string, payloa
 
 // State is every task this node runs, each as the run of it that runs, or
 // otherwise its latest, with what the jobs among them have written, their
-// outputs fitted between them into the heartbeat's share of them.
+// outputs fitted between them into the heartbeat's share of them. A task
+// whose run was being reconfigured at any moment of the look is restarting,
+// whatever its run was seen doing.
 func (n *Node) State(ctx context.Context) (kind.Report[taskKind.Status], error) {
+	mark := n.mark()
+
 	held, err := n.runtime.OnNode(ctx, n.nodeName)
 	if err != nil {
 		return kind.Report[taskKind.Status]{}, err
@@ -308,6 +428,10 @@ func (n *Node) State(ctx context.Context) (kind.Report[taskKind.Status], error) 
 	for i, run := range runs {
 		status := statusOf(run)
 		status.Run.Output = outputs[i]
+
+		if n.restarting(run.TaskUUID, mark) {
+			status = restarting(status)
+		}
 
 		report.Instances[i] = kind.Observed[taskKind.Status]{UUID: run.TaskUUID, Status: status}
 	}
@@ -417,7 +541,7 @@ func (n *Node) read(ctx context.Context, runs []task.Execution) []string {
 			continue
 		}
 
-		if output, kept := n.kept(run.ID); kept {
+		if output, kept := n.kept(run); kept {
 			outputs[i] = output
 
 			continue
@@ -439,7 +563,7 @@ func (n *Node) read(ctx context.Context, runs []task.Execution) []string {
 			outputs[i] = last(written.String(), taskKind.MaxOutput)
 
 			if run.Status.Ended() {
-				n.keep(run.ID, outputs[i])
+				n.keep(run, outputs[i])
 			}
 		})
 	}
@@ -449,20 +573,26 @@ func (n *Node) read(ctx context.Context, runs []task.Execution) []string {
 	return outputs
 }
 
-func (n *Node) kept(executionID string) (string, bool) {
+// kept is what a run that ended wrote, as it was read once it had ended
+// after the start it says: one started again since, which a reconfigure
+// does, has written something else.
+func (n *Node) kept(run task.Execution) (string, bool) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
-	output, kept := n.outputs[executionID]
+	kept, found := n.outputs[run.ID]
+	if !found || !kept.startedAt.Equal(run.StartedAt) {
+		return "", false
+	}
 
-	return output, kept
+	return kept.output, true
 }
 
-func (n *Node) keep(executionID string, output string) {
+func (n *Node) keep(run task.Execution, output string) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
-	n.outputs[executionID] = output
+	n.outputs[run.ID] = written{startedAt: run.StartedAt, output: output}
 }
 
 func (n *Node) forget(executionID string) {
@@ -473,13 +603,17 @@ func (n *Node) forget(executionID string) {
 }
 
 // forgetAllBut lets go of what was kept of the runs this node no longer
-// holds.
+// holds, and of when the tasks it holds no run of were last reconfigured.
 func (n *Node) forgetAllBut(held []task.Execution) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
-	maps.DeleteFunc(n.outputs, func(id string, _ string) bool {
+	maps.DeleteFunc(n.outputs, func(id string, _ written) bool {
 		return !slices.ContainsFunc(held, func(run task.Execution) bool { return run.ID == id })
+	})
+
+	maps.DeleteFunc(n.reconfigured, func(uuid string, _ uint64) bool {
+		return !slices.ContainsFunc(held, func(run task.Execution) bool { return run.TaskUUID == uuid })
 	})
 }
 
@@ -497,6 +631,29 @@ func failed(t taskKind.Task, err error) (kind.Outcome[taskKind.Status], error) {
 			Interactive: t.Spec.Interactive,
 		},
 	}}, err
+}
+
+// applied is an outcome that says the run it is of was given what t's spec
+// says: made with it, or reconfigured with it.
+func applied(outcome kind.Outcome[taskKind.Status], t taskKind.Task) kind.Outcome[taskKind.Status] {
+	config := t.Spec.Config()
+	outcome.Status.Applied = &config
+
+	return outcome
+}
+
+// restarting is a task's status as its run is seen halfway through being
+// reconfigured: restarting, rather than having ended with what it exited
+// with, or failed, which its VM, stopped for the moment, would say of it.
+func restarting(status taskKind.Status) taskKind.Status {
+	status.State = taskKind.Restarting
+	status.Reason = ""
+
+	if status.Run != nil {
+		status.Run.ExitCode = 0
+	}
+
+	return status
 }
 
 // executionOf is the run a task is made as, labelled with what it is, which

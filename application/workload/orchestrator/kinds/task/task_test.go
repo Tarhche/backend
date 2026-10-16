@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -147,6 +148,10 @@ func TestNode_create(t *testing.T) {
 
 		require.NotNil(t, outcome.Status.Run)
 		assert.Equal(t, taskKind.Running, outcome.Status.State)
+
+		config := snippet("task-1", live).Spec.Config()
+		assert.Equal(t, &config, outcome.Status.Applied, "it says what it made the run with")
+
 		assert.Equal(t, &taskKind.Run{
 			ID:          run.ID,
 			Name:        "request-task-1",
@@ -172,6 +177,7 @@ func TestNode_create(t *testing.T) {
 
 		assert.Equal(t, first.ID, f.run(t, "task-1").ID, "the same run")
 		assert.Equal(t, taskKind.Running, again.Status.State)
+		assert.Nil(t, again.Status.Applied, "and nothing is said of what it was made with, which this create did not give it")
 	})
 
 	t.Run("its next attempt is a run anew, and what is left of the last goes", func(t *testing.T) {
@@ -253,6 +259,219 @@ func TestNode_stop(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, taskKind.Stopped, outcome.Status.State)
 	})
+}
+
+func TestNode_reconfigure(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// changed is a live snippet changed while it runs: renamed, serving
+	// another port beside its own, reaching out, and given more of
+	// everything.
+	changed := func(t *taskKind.Task) {
+		live(t)
+		t.Metadata.Name = "renamed"
+		t.Spec.Ports = []port.Port{3000, 8080}
+		t.Spec.NetworkPolicy = network.PolicyPublic
+		t.Spec.Limits = taskKind.Limits{CPU: 3, Memory: 300 << 20, Disk: 200 << 20}
+		t.Status.State = taskKind.Restarting
+	}
+
+	t.Run("a running task's run is made afresh with what the task now has, and runs its program again", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+		f.created(t, snippet("task-1", live))
+
+		before := f.run(t, "task-1")
+		require.NoError(t, f.engine.Log(before.ID, vm.LogSourceMain, "written before"))
+
+		time.Sleep(time.Millisecond)
+
+		outcome, err := f.node.Execute(ctx, snippet("task-1", changed), taskKind.ActionReconfigure, nil)
+		require.NoError(t, err)
+
+		after := f.run(t, "task-1")
+		assert.Equal(t, before.ID, after.ID, "the same run")
+		assert.Equal(t, task.StatusRunning, after.Status)
+		assert.True(t, after.StartedAt.After(before.StartedAt), "started again")
+
+		spec, err := f.engine.Spec(after.ID)
+		require.NoError(t, err)
+		assert.Equal(t, vm.Resources{CPUs: 3, Memory: 300 << 20, Disk: 200 << 20}, spec.Resources)
+		assert.Equal(t, []port.Port{3000, 8080}, spec.Ports)
+		assert.Equal(t, vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow}, spec.Network)
+		assert.Equal(t, []string{"--timeout", "30", "console.log(1)"}, spec.Command, "it runs what it ran")
+		assert.Equal(t, "request-task-1", spec.Labels["workload.task.name"], "and is labelled as it was made")
+
+		assert.Equal(t, taskKind.Running, outcome.Status.State)
+		require.NotNil(t, outcome.Status.Run)
+		assert.Equal(t, "request-task-1", outcome.Status.Run.Name, "whose reader it still answers")
+		assert.Equal(t, after.StartedAt, outcome.Status.Run.StartedAt)
+		assert.Equal(t, after.StartedAt.Add(2*time.Minute), outcome.Status.Run.Deadline, "its deadline counted from its new start")
+		assert.Equal(t, []port.Port{3000, 8080}, outcome.Status.Run.Ports)
+
+		config := snippet("task-1", changed).Spec.Config()
+		assert.Equal(t, &config, outcome.Status.Applied, "it says what it gave the run")
+	})
+
+	t.Run("one whose run ended meanwhile is given it all the same, and has ended still", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+		f.created(t, snippet("task-1", live))
+		require.NoError(t, f.engine.Exit(f.run(t, "task-1").ID, 0))
+
+		outcome, err := f.node.Execute(ctx, snippet("task-1", changed), taskKind.ActionReconfigure, nil)
+		require.NoError(t, err)
+		assert.Equal(t, taskKind.Completed, outcome.Status.State)
+		assert.NotNil(t, outcome.Status.Applied)
+
+		spec, err := f.engine.Spec(f.run(t, "task-1").ID)
+		require.NoError(t, err)
+		assert.Equal(t, []port.Port{3000, 8080}, spec.Ports)
+	})
+
+	t.Run("one this node holds no run of has nothing to give it to", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := onNode().node.Execute(ctx, snippet("task-1", changed), taskKind.ActionReconfigure, nil)
+		assert.ErrorIs(t, err, vm.ErrNotRunning)
+	})
+
+	t.Run("while it is carried out the task is restarting, whatever its run is seen doing", func(t *testing.T) {
+		t.Parallel()
+
+		engine := &halting{Engine: memory.New(), down: make(chan struct{}), release: make(chan struct{})}
+		node := New(vmruntime.New(engine, slog.New(slog.DiscardHandler)), nodeName)
+
+		_, err := node.Execute(ctx, snippet("task-1", live), taskKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		done := make(chan error, 1)
+		go func() {
+			_, err := node.Execute(ctx, snippet("task-1", changed), taskKind.ActionReconfigure, nil)
+			done <- err
+		}()
+
+		<-engine.down
+
+		report, err := node.State(ctx)
+		require.NoError(t, err)
+		require.Len(t, report.Instances, 1)
+		assert.Equal(t, taskKind.Restarting, report.Instances[0].Status.State, "not completed, which its vm, down for now, would say")
+		assert.Zero(t, report.Instances[0].Status.Run.ExitCode)
+
+		close(engine.release)
+		require.NoError(t, <-done)
+
+		report, err = node.State(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, taskKind.Running, report.Instances[0].Status.State, "and running once it is up again")
+	})
+
+	t.Run("and so it is in a look taken while it was, and read once it was done", func(t *testing.T) {
+		t.Parallel()
+
+		engine := &halting{Engine: memory.New(), down: make(chan struct{}), release: make(chan struct{})}
+		runtime := &pausing{Runtime: vmruntime.New(engine, slog.New(slog.DiscardHandler)), listed: make(chan struct{}), release: make(chan struct{})}
+		node := New(runtime, nodeName)
+
+		_, err := node.Execute(ctx, snippet("task-1", live), taskKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		reconfigured := make(chan error, 1)
+		go func() {
+			_, err := node.Execute(ctx, snippet("task-1", changed), taskKind.ActionReconfigure, nil)
+			reconfigured <- err
+		}()
+
+		<-engine.down
+
+		looked := make(chan kind.Report[taskKind.Status], 1)
+		go func() {
+			report, err := node.State(ctx)
+			assert.NoError(t, err)
+			looked <- report
+		}()
+
+		// the look saw its run down, and is read only once it is up again.
+		<-runtime.listed
+		close(engine.release)
+		require.NoError(t, <-reconfigured)
+		close(runtime.release)
+
+		report := <-looked
+		require.Len(t, report.Instances, 1)
+		assert.Equal(t, taskKind.Restarting, report.Instances[0].Status.State, "its reader is not told it ended")
+
+		report, err = node.State(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, taskKind.Running, report.Instances[0].Status.State, "and a look taken after it was done says what its run does")
+	})
+}
+
+// halting is an engine whose first reconfigure stops the instance it is
+// asked of, and keeps it down until it is let go of, before it boots it
+// again with what it was given: a reconfigure caught halfway through, as an
+// engine that cannot change a running VM carries one out.
+type halting struct {
+	*memory.Engine
+
+	down    chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (h *halting) Reconfigure(ctx context.Context, spec vm.Spec) (vm.Instance, error) {
+	halted := false
+
+	h.once.Do(func() {
+		halted = true
+
+		if err := h.Engine.Stop(ctx, spec.ID); err != nil {
+			panic(err)
+		}
+
+		close(h.down)
+		<-h.release
+	})
+
+	if !halted {
+		return h.Engine.Reconfigure(ctx, spec)
+	}
+
+	if _, err := h.Engine.Reconfigure(ctx, spec); err != nil {
+		return vm.Instance{}, err
+	}
+
+	if err := h.Engine.Start(ctx, spec.ID); err != nil {
+		return vm.Instance{}, err
+	}
+
+	return h.Engine.Inspect(ctx, spec.ID)
+}
+
+// pausing is a runtime whose first look at what a node holds is taken, and
+// then held back until it is let go of: a look read long after it was taken.
+type pausing struct {
+	task.Runtime
+
+	listed  chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (p *pausing) OnNode(ctx context.Context, nodeName string) ([]task.Execution, error) {
+	held, err := p.Runtime.OnNode(ctx, nodeName)
+
+	p.once.Do(func() {
+		close(p.listed)
+		<-p.release
+	})
+
+	return held, err
 }
 
 func TestNode_delete(t *testing.T) {
@@ -365,6 +584,33 @@ func TestNode_State(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, gone.Instances)
 		assert.Empty(t, f.node.outputs, "what was kept of a run goes with it")
+	})
+
+	t.Run("and read again once its run is started again, which writes something else", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+		f.created(t, snippet("task-1"))
+
+		run := f.run(t, "task-1")
+		require.NoError(t, f.engine.Log(run.ID, vm.LogSourceMain, "the first time"))
+		require.NoError(t, f.engine.Exit(run.ID, 0))
+
+		first, err := f.node.State(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "the first time\n", first.Instances[0].Status.Run.Output)
+
+		time.Sleep(time.Millisecond)
+
+		// started again, as a reconfigure of a run that ended does when it
+		// next boots, and ended again having written more.
+		require.NoError(t, f.engine.Restart(ctx, run.ID))
+		require.NoError(t, f.engine.Log(run.ID, vm.LogSourceMain, "the second time"))
+		require.NoError(t, f.engine.Exit(run.ID, 0))
+
+		second, err := f.node.State(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "the first time\nthe second time\n", second.Instances[0].Status.Run.Output)
 	})
 
 	t.Run("a run of no task, and one of another node, are nobody's here", func(t *testing.T) {

@@ -115,6 +115,7 @@ func TestRuntime_Create(t *testing.T) {
 		{policy: network.PolicyNone, want: vm.Network{Ingress: vm.AccessDeny, Egress: vm.AccessDeny}},
 		{policy: network.PolicyIsolated, want: vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny}},
 		{policy: network.PolicyPublic, want: vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow}},
+		{policy: network.PolicyOutbound, want: vm.Network{Ingress: vm.AccessDeny, Egress: vm.AccessAllow}},
 	} {
 		t.Run("a "+string(tt.policy)+" task's VM is given the network its policy maps to", func(t *testing.T) {
 			t.Parallel()
@@ -375,6 +376,59 @@ func TestRuntime_Lifecycle(t *testing.T) {
 		require.NoError(t, r.Delete(t.Context(), id))
 
 		_, err = r.Inspect(t.Context(), id)
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+}
+
+func TestRuntime_Reconfigure(t *testing.T) {
+	t.Parallel()
+
+	// changed is the run's task changed while it runs: given more of
+	// everything, another port, a policy that reaches out, and a name, which
+	// is the record's alone.
+	changed := func(execution *task.Execution) {
+		execution.TaskName = "renamed"
+		execution.ResourceLimits = task.ResourceLimits{Cpu: 2.5, Memory: 400 << 20, Disk: 300 << 20}
+		execution.ExposedPorts = port.PortSet{8080: {}, 3000: {}, 9000: {}}
+		execution.PortBindings = port.PortMap{}
+		execution.NetworkPolicy = network.PolicyPublic
+		execution.Command = []string{"something else"}
+	}
+
+	t.Run("a running run's vm is booted again with what its task now has, and runs what it ran", func(t *testing.T) {
+		t.Parallel()
+
+		e := memory.New()
+		r := runtimeOn(e)
+
+		id, err := r.Create(t.Context(), snippet(nil))
+		require.NoError(t, err)
+
+		before, err := e.Inspect(t.Context(), id)
+		require.NoError(t, err)
+
+		time.Sleep(time.Millisecond)
+
+		require.NoError(t, r.Reconfigure(t.Context(), id, snippet(changed)))
+
+		spec, err := e.Spec(id)
+		require.NoError(t, err)
+		assert.Equal(t, vm.Resources{CPUs: 3, Memory: 400 << 20, Disk: 300 << 20}, spec.Resources, "whole vCPUs, rounded up, and bytes")
+		assert.Equal(t, []port.Port{3000, 8080, 9000}, spec.Ports)
+		assert.Equal(t, vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow}, spec.Network)
+		assert.Equal(t, []string{"--timeout", "30", "fmt.Println(1)"}, spec.Command, "what it runs is what it was made with")
+		assert.Equal(t, "a-request-id", spec.Labels[labelName], "and so is what it is labelled with")
+
+		after, err := e.Inspect(t.Context(), id)
+		require.NoError(t, err)
+		assert.Equal(t, vm.InstanceRunning, after.State)
+		assert.True(t, after.StartedAt.After(before.StartedAt), "booted again")
+	})
+
+	t.Run("one that is not there is not reconfigured", func(t *testing.T) {
+		t.Parallel()
+
+		err := runtimeOn(memory.New()).Reconfigure(t.Context(), "no-such-run", snippet(changed))
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 }

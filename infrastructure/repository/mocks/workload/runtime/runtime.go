@@ -55,6 +55,10 @@ func (m *MockRuntime) Restart(ctx context.Context, taskUUID string) error {
 	return m.Called(ctx, taskUUID).Error(0)
 }
 
+func (m *MockRuntime) Reconfigure(ctx context.Context, executionID string, c *task.Execution) error {
+	return m.Called(ctx, executionID, c).Error(0)
+}
+
 func (m *MockRuntime) Kill(ctx context.Context, taskUUID string) error {
 	return m.Called(ctx, taskUUID).Error(0)
 }

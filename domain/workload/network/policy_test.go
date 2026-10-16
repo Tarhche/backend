@@ -20,6 +20,7 @@ func TestPolicy(t *testing.T) {
 		{policy: PolicyNone, valid: true, ports: false, internet: false},
 		{policy: PolicyIsolated, valid: true, ports: true, internet: false},
 		{policy: PolicyPublic, valid: true, ports: true, internet: true},
+		{policy: PolicyOutbound, valid: true, ports: false, internet: true},
 		{policy: Policy(""), valid: false},
 		{policy: Policy("host"), valid: false},
 		{policy: Policy("ISOLATED"), valid: false},
@@ -60,6 +61,11 @@ func TestPolicy_VMNetwork(t *testing.T) {
 			want:   vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
 		},
 		{
+			name:   "an outbound task calls out, and nothing reaches it",
+			policy: PolicyOutbound,
+			want:   vm.Network{Ingress: vm.AccessDeny, Egress: vm.AccessAllow},
+		},
+		{
 			name:   "a policy that names nothing is the default one",
 			policy: Policy(""),
 			want:   DefaultPolicy.VMNetwork(),
@@ -78,4 +84,23 @@ func TestPolicy_VMNetwork(t *testing.T) {
 			assert.Equal(t, tt.want, tt.policy.VMNetwork())
 		})
 	}
+}
+
+func TestPolicyOf(t *testing.T) {
+	t.Parallel()
+
+	t.Run("each way a vm's network is open is one policy's network", func(t *testing.T) {
+		t.Parallel()
+
+		for _, policy := range []Policy{PolicyNone, PolicyIsolated, PolicyPublic, PolicyOutbound} {
+			assert.Equal(t, policy, PolicyOf(policy.VMNetwork()), policy)
+		}
+	})
+
+	t.Run("a way that says nothing is denied", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t, PolicyOutbound, PolicyOf(vm.Network{Egress: vm.AccessAllow}))
+		assert.Equal(t, PolicyNone, PolicyOf(vm.Network{}))
+	})
 }

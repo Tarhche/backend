@@ -8,7 +8,7 @@ var english = map[string]string{
 	"too_many_requests":                 "too many requests are waiting for a reply",
 	"stream_is_not_open":                "the stream is not open",
 	"ports_require_network":             "a container with no network cannot expose ports",
-	"invalid_network_policy":            "the network access must be one of: none, isolated, public",
+	"invalid_network_policy":            "the network access must be one of: none, isolated, public, outbound",
 	"container_is_not_running":          "the container is not running",
 	"memory_below_minimum":              "a task needs at least 6 MiB of memory",
 	"ttl_requires_a_job":                "only a job can be given a time to live; a service runs until it is stopped",

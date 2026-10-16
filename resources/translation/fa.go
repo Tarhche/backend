@@ -8,7 +8,7 @@ var farsi = map[string]string{
 	"too_many_requests":                 "تعداد درخواست‌های در انتظار پاسخ بیش از حد مجاز است",
 	"stream_is_not_open":                "جریان داده باز نیست",
 	"ports_require_network":             "کانتینر بدون شبکه نمی‌تواند پورتی منتشر کند",
-	"invalid_network_policy":            "دسترسی شبکه باید یکی از این موارد باشد: none، isolated، public",
+	"invalid_network_policy":            "دسترسی شبکه باید یکی از این موارد باشد: none، isolated، public، outbound",
 	"container_is_not_running":          "کانتینر در حال اجرا نیست",
 	"memory_below_minimum":              "حافظهٔ هر تسک باید دست‌کم ۶ مگابایت باشد",
 	"ttl_requires_a_job":                "فقط برای یک job می‌توان طول عمر تعیین کرد؛ یک سرویس تا زمانی که متوقف شود اجرا می‌ماند",

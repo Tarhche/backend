@@ -121,6 +121,15 @@ type Runtime interface {
 	Start(ctx context.Context, executionID string) error
 	Stop(ctx context.Context, executionID string) error
 	Restart(ctx context.Context, executionID string) error
+
+	// Reconfigure gives the run executionID names the ports, network policy
+	// and limits execution says, which a VM that runs cannot be given in
+	// place: one that runs is stopped, and its VM made afresh with them,
+	// which runs its command again from the start; one that is down takes
+	// them when it next boots. Everything else the run was made with, what it
+	// runs and what it is labelled with, stays as it was.
+	Reconfigure(ctx context.Context, executionID string, execution *Execution) error
+
 	Kill(ctx context.Context, executionID string) error
 	Delete(ctx context.Context, executionID string) error
 	Inspect(ctx context.Context, executionID string) (Execution, error)
