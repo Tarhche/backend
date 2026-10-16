@@ -63,8 +63,9 @@ type VM struct {
 	// task's (/tasks/{uuid}/attach on the workload's ingress, anybody's);
 	// snapshotted, as whoever takes the snapshot; and changed, its name,
 	// ports, network and resources, which runs its snippet again from the
-	// start. It is not started, restarted or restored, and its lifetime is its
-	// snippet's. It is left out for every other VM.
+	// start. Its stats are what its snippet's VM uses, sampled as any VM's
+	// are while it runs. It is not started, restarted or restored, and its
+	// lifetime is its snippet's. It is left out for every other VM.
 	ManagedBy string `json:"managed_by,omitempty" enums:"code-runner"`
 }
 

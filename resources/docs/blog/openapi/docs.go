@@ -9724,7 +9724,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "managed_by": {
-                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM is\nstopped, deleted, read and opened a terminal in, its terminal being its\ntask's (/tasks/{uuid}/attach on the workload's ingress, anybody's);\nsnapshotted, as whoever takes the snapshot; and changed, its name,\nports, network and resources, which runs its snippet again from the\nstart. It is not started, restarted or restored, and its lifetime is its\nsnippet's. It is left out for every other VM.",
+                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM is\nstopped, deleted, read and opened a terminal in, its terminal being its\ntask's (/tasks/{uuid}/attach on the workload's ingress, anybody's);\nsnapshotted, as whoever takes the snapshot; and changed, its name,\nports, network and resources, which runs its snippet again from the\nstart. Its stats are what its snippet's VM uses, sampled as any VM's\nare while it runs. It is not started, restarted or restored, and its\nlifetime is its snippet's. It is left out for every other VM.",
                     "type": "string",
                     "enum": [
                         "code-runner"
@@ -11607,7 +11607,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "managed_by": {
-                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM is\nstopped, deleted, read and opened a terminal in, its terminal being its\ntask's (/tasks/{uuid}/attach on the workload's ingress, anybody's);\nsnapshotted, as whoever takes the snapshot; and changed, its name,\nports, network and resources, which runs its snippet again from the\nstart. It is not started, restarted or restored, and its lifetime is its\nsnippet's. It is left out for every other VM.",
+                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM is\nstopped, deleted, read and opened a terminal in, its terminal being its\ntask's (/tasks/{uuid}/attach on the workload's ingress, anybody's);\nsnapshotted, as whoever takes the snapshot; and changed, its name,\nports, network and resources, which runs its snippet again from the\nstart. Its stats are what its snippet's VM uses, sampled as any VM's\nare while it runs. It is not started, restarted or restored, and its\nlifetime is its snippet's. It is left out for every other VM.",
                     "type": "string",
                     "enum": [
                         "code-runner"
