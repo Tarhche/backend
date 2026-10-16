@@ -16,7 +16,7 @@ func NewCreateHandler(useCase *createSnapshot.UseCase) *createHandler {
 }
 
 // @Summary		Take a snapshot
-// @Description	take a snapshot of one of the caller's own VMs, which is running or stopped; it is being created until its archive is stored
+// @Description	take a snapshot of one of the caller's own VMs, which is running or stopped, or of a code runner's snippet while it runs, as the caller's own: it outlives the snippet, and is restored as a new VM. It is being created until its archive is stored
 // @Tags			dashboard workload snapshots
 // @Accept			json
 // @Produce		json

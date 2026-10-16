@@ -984,9 +984,13 @@ definitions:
         description: |-
           ManagedBy is code-runner for a snippet the code runner is running, in a
           VM of its own for as long as it runs: the guest's, listed only among
-          everybody's VMs, and gone once the snippet has ended. Such a VM can be
-          stopped, deleted and read, and nothing else. It is left out for every
-          other VM.
+          everybody's VMs, and gone once the snippet has ended. Such a VM is
+          stopped, deleted, read and opened a terminal in, its terminal being its
+          task's (/tasks/{uuid}/attach on the workload's ingress, anybody's);
+          snapshotted, as whoever takes the snapshot; and changed, its name,
+          ports, network and resources, which runs its snippet again from the
+          start. It is not started, restarted or restored, and its lifetime is its
+          snippet's. It is left out for every other VM.
         enum:
         - code-runner
         type: string
@@ -2265,9 +2269,13 @@ definitions:
         description: |-
           ManagedBy is code-runner for a snippet the code runner is running, in a
           VM of its own for as long as it runs: the guest's, listed only among
-          everybody's VMs, and gone once the snippet has ended. Such a VM can be
-          stopped, deleted and read, and nothing else. It is left out for every
-          other VM.
+          everybody's VMs, and gone once the snippet has ended. Such a VM is
+          stopped, deleted, read and opened a terminal in, its terminal being its
+          task's (/tasks/{uuid}/attach on the workload's ingress, anybody's);
+          snapshotted, as whoever takes the snapshot; and changed, its name,
+          ports, network and resources, which runs its snippet again from the
+          start. It is not started, restarted or restored, and its lifetime is its
+          snippet's. It is left out for every other VM.
         enum:
         - code-runner
         type: string
@@ -4921,7 +4929,10 @@ paths:
       - application/json
       description: 'change what the request carries and leave the rest: name, lifetime_seconds,
         ports, network and resources (sent whole). A change to the ports, the network
-        or the resources restarts a VM that is not stopped; the disk only grows'
+        or the resources restarts a VM that is not stopped; the disk only grows. A
+        code runner''s snippet, while it runs, is changed as its task: such a change
+        runs it again from the start, and its lifetime is its snippet''s, which is
+        not changed'
       parameters:
       - description: VM UUID
         in: path
@@ -7038,7 +7049,10 @@ paths:
       - application/json
       description: 'change what the request carries and leave the rest: name, lifetime_seconds,
         ports, network and resources (sent whole). A change to the ports, the network
-        or the resources restarts a VM that is not stopped; the disk only grows'
+        or the resources restarts a VM that is not stopped; the disk only grows. A
+        code runner''s snippet, while it runs, is changed as its task: such a change
+        runs it again from the start, and its lifetime is its snippet''s, which is
+        not changed'
       parameters:
       - description: VM UUID
         in: path
@@ -7875,8 +7889,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: take a snapshot of one of the caller's own VMs, which is running
-        or stopped; it is being created until its archive is stored
+      description: 'take a snapshot of one of the caller''s own VMs, which is running
+        or stopped, or of a code runner''s snippet while it runs, as the caller''s
+        own: it outlives the snippet, and is restored as a new VM. It is being created
+        until its archive is stored'
       parameters:
       - description: VM UUID
         in: path

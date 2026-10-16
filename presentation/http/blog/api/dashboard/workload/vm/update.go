@@ -17,7 +17,7 @@ func NewUpdateHandler(useCase *updateVM.UseCase, owner workload.Owner) *updateHa
 }
 
 // @Summary		Change a VM
-// @Description	change what the request carries and leave the rest: name, lifetime_seconds, ports, network and resources (sent whole). A change to the ports, the network or the resources restarts a VM that is not stopped; the disk only grows
+// @Description	change what the request carries and leave the rest: name, lifetime_seconds, ports, network and resources (sent whole). A change to the ports, the network or the resources restarts a VM that is not stopped; the disk only grows. A code runner's snippet, while it runs, is changed as its task: such a change runs it again from the start, and its lifetime is its snippet's, which is not changed
 // @Tags			dashboard workload vms
 // @Accept			json
 // @Produce		json

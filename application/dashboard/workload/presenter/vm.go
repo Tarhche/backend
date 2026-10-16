@@ -58,9 +58,13 @@ type VM struct {
 
 	// ManagedBy is code-runner for a snippet the code runner is running, in a
 	// VM of its own for as long as it runs: the guest's, listed only among
-	// everybody's VMs, and gone once the snippet has ended. Such a VM can be
-	// stopped, deleted and read, and nothing else. It is left out for every
-	// other VM.
+	// everybody's VMs, and gone once the snippet has ended. Such a VM is
+	// stopped, deleted, read and opened a terminal in, its terminal being its
+	// task's (/tasks/{uuid}/attach on the workload's ingress, anybody's);
+	// snapshotted, as whoever takes the snapshot; and changed, its name,
+	// ports, network and resources, which runs its snippet again from the
+	// start. It is not started, restarted or restored, and its lifetime is its
+	// snippet's. It is left out for every other VM.
 	ManagedBy string `json:"managed_by,omitempty" enums:"code-runner"`
 }
 

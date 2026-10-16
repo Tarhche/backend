@@ -914,7 +914,7 @@ func vmTools() []tool {
 		}, "One of this session owner's own VMs, with the addresses its ports are served on."),
 		both(tool{
 			name:        "dashboard_vm_update",
-			description: "Change a VM, whoever owns it: only what is sent changes. Changing its ports, network or resources (sent whole) restarts it unless it is stopped; its disk only grows, and its kind and image never change.",
+			description: "Change a VM, whoever owns it: only what is sent changes. Changing its ports, network or resources (sent whole) restarts it unless it is stopped; its disk only grows, and its kind and image never change. A code runner's snippet is changed as its task is: a change runs it again from the start, and its lifetime, which is its snippet's, is not changed.",
 			route:       "PATCH /api/dashboard/workload/vms/{uuid}",
 			params:      []Parameter{vmUUID()},
 			body:        body[dashboardUpdateVM.Request](),
@@ -930,27 +930,27 @@ func vmTools() []tool {
 		}, "Delete one of this session owner's own VMs and its disk. Its snapshots stay. The stacks and the containers in a Docker VM make it again, under its uuid and as it was, unless cascade is asked, which deletes them with it."),
 		both(tool{
 			name:        "dashboard_vm_start",
-			description: "Start a stopped VM, whoever owns it.",
+			description: "Start a stopped VM, whoever owns it. A code runner's snippet is the code runner's to start, and is refused.",
 			route:       "POST /api/dashboard/workload/vms/{uuid}/start",
 			params:      []Parameter{vmUUID()},
 			idempotent:  true,
 		}, "Start one of this session owner's own VMs."),
 		both(tool{
 			name:        "dashboard_vm_stop",
-			description: "Stop a VM, whoever owns it. Its disk is kept, and is as it was left when it starts again only if the disk is persistent. A code runner's snippet stopped is gone once it has; it can only be stopped, deleted and read.",
+			description: "Stop a VM, whoever owns it. Its disk is kept, and is as it was left when it starts again only if the disk is persistent. A code runner's snippet stopped is gone once it has, and is never started, restarted or restored.",
 			route:       "POST /api/dashboard/workload/vms/{uuid}/stop",
 			params:      []Parameter{vmUUID()},
 			idempotent:  true,
 		}, "Stop one of this session owner's own VMs."),
 		both(tool{
 			name:        "dashboard_vm_restart",
-			description: "Stop a VM, whoever owns it, and start it again in place.",
+			description: "Stop a VM, whoever owns it, and start it again in place. A code runner's snippet is refused.",
 			route:       "POST /api/dashboard/workload/vms/{uuid}/restart",
 			params:      []Parameter{vmUUID()},
 		}, "Restart one of this session owner's own VMs."),
 		both(tool{
 			name:        "dashboard_vm_restore",
-			description: "Replace a VM's disk with a snapshot's, whoever owns it: one of its owner's snapshots, of the same kind and engine and no larger than its disk. The VM is stopped, restored and started again, keeping its uuid, its slug and its ports.",
+			description: "Replace a VM's disk with a snapshot's, whoever owns it: one of its owner's snapshots, of the same kind and engine and no larger than its disk. The VM is stopped, restored and started again, keeping its uuid, its slug and its ports. A code runner's snippet is never restored onto.",
 			route:       "POST /api/dashboard/workload/vms/{uuid}/restore",
 			params:      []Parameter{vmUUID()},
 			body:        body[dashboardRestoreVM.Request](),
@@ -958,7 +958,7 @@ func vmTools() []tool {
 		}, "Replace the disk of one of this session owner's own VMs with one of their snapshots'. What was on the disk is gone."),
 		both(tool{
 			name:        "dashboard_vm_logs",
-			description: "The tail of what a VM has written, whoever owns it, read from its node as it is now, or what a code runner's snippet has printed so far. Opening a terminal in a VM is a stream on the workload's ingress rather than a tool.",
+			description: "The tail of what a VM has written, whoever owns it, read from its node as it is now, or what a code runner's snippet has printed so far. Opening a terminal in a VM, or in a code runner's snippet, whose terminal is its task's, is a stream on the workload's ingress rather than a tool.",
 			route:       "GET /api/dashboard/workload/vms/{uuid}/logs",
 			params:      append([]Parameter{vmUUID()}, logParams()...),
 			readOnly:    true,
@@ -979,7 +979,7 @@ func snapshotTools() []tool {
 		}, "A page of this session owner's own snapshots, narrowed to one VM's with vm."),
 		[]tool{{
 			name:        "dashboard_snapshot_create",
-			description: "Take a snapshot of one of this session owner's own VMs, which has to be running or stopped. It is being created until its archive is stored.",
+			description: "Take a snapshot of one of this session owner's own VMs, which has to be running or stopped, or of a code runner's snippet while it runs, which is then theirs: it outlives the snippet, and is restored as a new VM of theirs. It is being created until its archive is stored.",
 			route:       "POST /api/dashboard/workload/vms/{uuid}/snapshots",
 			params:      []Parameter{vmUUID()},
 			body:        body[dashboardCreateSnapshot.Request](),

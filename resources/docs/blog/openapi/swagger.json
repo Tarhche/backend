@@ -3216,7 +3216,7 @@
                 }
             },
             "patch": {
-                "description": "change what the request carries and leave the rest: name, lifetime_seconds, ports, network and resources (sent whole). A change to the ports, the network or the resources restarts a VM that is not stopped; the disk only grows",
+                "description": "change what the request carries and leave the rest: name, lifetime_seconds, ports, network and resources (sent whole). A change to the ports, the network or the resources restarts a VM that is not stopped; the disk only grows. A code runner's snippet, while it runs, is changed as its task: such a change runs it again from the start, and its lifetime is its snippet's, which is not changed",
                 "consumes": [
                     "application/json"
                 ],
@@ -6262,7 +6262,7 @@
                 }
             },
             "patch": {
-                "description": "change what the request carries and leave the rest: name, lifetime_seconds, ports, network and resources (sent whole). A change to the ports, the network or the resources restarts a VM that is not stopped; the disk only grows",
+                "description": "change what the request carries and leave the rest: name, lifetime_seconds, ports, network and resources (sent whole). A change to the ports, the network or the resources restarts a VM that is not stopped; the disk only grows. A code runner's snippet, while it runs, is changed as its task: such a change runs it again from the start, and its lifetime is its snippet's, which is not changed",
                 "consumes": [
                     "application/json"
                 ],
@@ -7475,7 +7475,7 @@
         },
         "/dashboard/workload/vms/{uuid}/snapshots": {
             "post": {
-                "description": "take a snapshot of one of the caller's own VMs, which is running or stopped; it is being created until its archive is stored",
+                "description": "take a snapshot of one of the caller's own VMs, which is running or stopped, or of a code runner's snippet while it runs, as the caller's own: it outlives the snippet, and is restored as a new VM. It is being created until its archive is stored",
                 "consumes": [
                     "application/json"
                 ],
@@ -9721,7 +9721,7 @@
                     "type": "integer"
                 },
                 "managed_by": {
-                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM can be\nstopped, deleted and read, and nothing else. It is left out for every\nother VM.",
+                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM is\nstopped, deleted, read and opened a terminal in, its terminal being its\ntask's (/tasks/{uuid}/attach on the workload's ingress, anybody's);\nsnapshotted, as whoever takes the snapshot; and changed, its name,\nports, network and resources, which runs its snippet again from the\nstart. It is not started, restarted or restored, and its lifetime is its\nsnippet's. It is left out for every other VM.",
                     "type": "string",
                     "enum": [
                         "code-runner"
@@ -11604,7 +11604,7 @@
                     "type": "integer"
                 },
                 "managed_by": {
-                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM can be\nstopped, deleted and read, and nothing else. It is left out for every\nother VM.",
+                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM is\nstopped, deleted, read and opened a terminal in, its terminal being its\ntask's (/tasks/{uuid}/attach on the workload's ingress, anybody's);\nsnapshotted, as whoever takes the snapshot; and changed, its name,\nports, network and resources, which runs its snippet again from the\nstart. It is not started, restarted or restored, and its lifetime is its\nsnippet's. It is left out for every other VM.",
                     "type": "string",
                     "enum": [
                         "code-runner"
