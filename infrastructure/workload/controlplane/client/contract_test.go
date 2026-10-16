@@ -472,9 +472,13 @@ func TestContract_Runs(t *testing.T) {
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, domain.ValidationErrors{"vm": runs.CodeRefused}, refused.ValidationErrors)
 
-	_, err = c.UpdateVM(ctx, "", "run", workloadControlPlane.VMUpdate{Name: new("renamed")})
+	renamed, err := c.UpdateVM(ctx, "", "run", workloadControlPlane.VMUpdate{Name: new("renamed")})
+	require.NoError(t, err)
+	assert.Equal(t, "renamed", renamed.Name, "a run is changed as its task is")
+
+	_, err = c.UpdateVM(ctx, "", "run", workloadControlPlane.VMUpdate{Lifetime: new(time.Hour)})
 	require.ErrorAs(t, err, &refused)
-	assert.Equal(t, domain.ValidationErrors{"vm": runs.CodeRefused}, refused.ValidationErrors)
+	assert.Equal(t, domain.ValidationErrors{"lifetime_seconds": runs.CodeRefused}, refused.ValidationErrors, "but for its lifetime, which is its snippet's")
 
 	require.NoError(t, c.StopVM(ctx, "", "run"))
 

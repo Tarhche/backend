@@ -19,6 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/code/stop"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMs"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/updateVM"
 	getresourceendpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getResourceEndpoint"
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
@@ -30,6 +31,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // codeRunner is the blog's code runner in front of the workload: what asks for
@@ -451,5 +453,104 @@ func TestALiveSnippet(t *testing.T) {
 
 		_, err = reached(t, ingress, taskKind.Name, slug, "the ingress hearing it is gone", func(_ kind.Location, err error) bool { return errors.Is(err, domain.ErrNotExists) })
 		assert.ErrorIs(t, err, domain.ErrNotExists, "and the ingress finds it nowhere")
+	})
+}
+
+// TestALiveSnippetChanged changes a live snippet's settings from the
+// dashboard, as a VM's are: its ports and resources, which its task's node
+// gives its run by making its VM afresh with them, which runs the snippet
+// again from the start. Its reader is followed through it and never told it
+// ended, and is answered under its request still; the ingress reaches it on
+// the ports it was changed to; and its lifetime is its snippet's, which is
+// not changed.
+func TestALiveSnippetChanged(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	programs := newSnippets()
+	w.programs.are(programs.run)
+
+	runner := w.codeRunner(t)
+	ingress := w.ingress(t)
+
+	code := `require("http").createServer((q, s) => s.end("changed")).listen(3000)`
+
+	runner.ask(t, runCode.Request{ID: "request-changed", Code: code, Runner: "nodejs-22.14", Ports: []port.Port{3000}, Terminal: true})
+
+	running := w.task(t, "request-changed", "running, its run given what it asked for", func(tk taskKind.Task) bool {
+		return tk.Status.State == taskKind.Running && tk.Status.Run != nil && tk.Status.Applied != nil
+	})
+
+	changes := updateVM.NewUseCase(w.client, w.validator, w.translator, w.owners, ingressDomain)
+
+	t.Run("its lifetime is its snippet's, and is not changed", func(t *testing.T) {
+		hour := int64(3600)
+
+		refused, err := changes.Execute(ctx, &updateVM.Request{UUID: running.Metadata.UUID, LifetimeSeconds: &hour})
+		require.NoError(t, err)
+		assert.NotEmpty(t, refused.ValidationErrors["lifetime_seconds"])
+
+		stored, err := w.resources.GetOne(ctx, taskKind.Name, running.Metadata.UUID)
+		require.NoError(t, err)
+		assert.Nil(t, stored.Pending, "and nothing was asked of it")
+	})
+
+	t.Run("changed, it runs again with what it was changed to, its reader never told it ended", func(t *testing.T) {
+		// its disk, 100 MiB, is less than a VM is given at least, and is sent
+		// as it was: what it leaves as it was is not held to it.
+		changed, err := changes.Execute(ctx, &updateVM.Request{
+			UUID:      running.Metadata.UUID,
+			Ports:     &[]uint{8080, 3000},
+			Resources: &input.Resources{CPUs: 2, Memory: 300 << 20, Disk: runCode.DefaultMaxDiskSize},
+		})
+		require.NoError(t, err)
+		require.Empty(t, changed.ValidationErrors)
+		require.NotNil(t, changed.VM)
+		assert.Equal(t, vm.ManagedByCodeRunner, changed.ManagedBy)
+		assert.Equal(t, []uint{3000, 8080}, changed.Ports)
+
+		again := w.task(t, "request-changed", "running again, given what it was changed to", func(tk taskKind.Task) bool {
+			return tk.Status.State == taskKind.Running && tk.Status.Run != nil && tk.Status.Run.StartedAt.After(running.Status.Run.StartedAt) &&
+				tk.Status.Applied != nil && tk.Status.Applied.Equal(tk.Spec.Config())
+		})
+
+		assert.Equal(t, running.Status.Run.ID, again.Status.Run.ID, "the same run, its vm made afresh")
+		assert.Equal(t, taskKind.Limits{CPU: 2, Memory: 300 << 20, Disk: runCode.DefaultMaxDiskSize}, again.Spec.Limits)
+
+		spec, err := w.engine.Spec(again.Status.Run.ID)
+		require.NoError(t, err)
+		assert.Equal(t, vm.Resources{CPUs: 2, Memory: 300 << 20, Disk: runCode.DefaultMaxDiskSize}, spec.Resources)
+		assert.Equal(t, []port.Port{3000, 8080}, spec.Ports)
+		assert.Equal(t, code, spec.Command[len(spec.Command)-1], "it runs what it ran")
+
+		followed, _ := runner.answered(t, "request-changed", "followed once it runs again", func(response answerCodeRun.Response, _ domain.ReplyKind) bool {
+			return response.State == "running" && response.Deadline != nil && response.Deadline.Equal(again.Status.Run.StartedAt.Add(runCode.LiveTTL))
+		})
+		assert.Equal(t, running.Metadata.UUID, followed.TaskUUID)
+
+		for _, reply := range runner.replies.Replies() {
+			if reply.RequestID != "request-changed" {
+				continue
+			}
+
+			assert.NotEqual(t, domain.ReplyEOF, reply.Kind, "its reader was told it ended: %s", reply.Payload)
+		}
+
+		location, err := reached(t, ingress, taskKind.Name, running.Metadata.Slug, "the ingress hearing its new ports", func(location kind.Location, err error) bool {
+			return err == nil && slices.Equal(location.Ports, []port.Port{3000, 8080})
+		})
+		require.NoError(t, err)
+		assert.Equal(t, nodeName, location.Node)
+	})
+
+	t.Run("stopped by its reader, it is taken away all the same", func(t *testing.T) {
+		payload, err := json.Marshal(stop.Request{ID: "request-stop-changed", TaskUUID: running.Metadata.UUID})
+		require.NoError(t, err)
+
+		require.NoError(t, runner.stop.Handle(ctx, payload))
+
+		w.taskGone(t, running.Metadata.UUID)
 	})
 }

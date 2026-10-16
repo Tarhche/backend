@@ -8,11 +8,24 @@
 // code runner. Only a listing of anybody's VMs has them, since no user's uuid
 // is the guest's, and nobody's own listing ever does.
 //
-// A run can be stopped, deleted and read, which is asking its task for its
-// stop and its delete, as the task kind is asked anything, and reading what
-// it wrote. Everything else a VM can be asked to do is refused as
-// CodeRefused, under vm: a run is the code runner's to start, and it is gone
-// once it has ended.
+// A run is what any VM is to whoever reads the dashboard, but for what only a
+// VM somebody asked for can be. It can be stopped and deleted, which is
+// asking its task for its stop and its delete, as the task kind is asked
+// anything, and read, which is reading what it wrote. It is changed as a VM
+// is (vmKind.UpdatePayload): its name, which is its task's record's, and its
+// ports, network and resources, which are its task's ports, network policy
+// (network.PolicyOf) and limits, held to what one VM may be given at most and
+// to its node's room. Its task is asked for its update (taskKind.UpdatePayload),
+// and its node then gives its run what it was changed to, by booting its VM
+// afresh, which runs its snippet again from the start, as a VM somebody
+// changed reboots. Its lifetime is its snippet's own timeout as much as its
+// task's ttl, so a change to it is refused as CodeRefused, under the lifetime
+// it is asked with; a start, a restart and a restore are refused so too,
+// under vm: a run is the code runner's to start, and it is gone once it has
+// ended. Its terminal is its task's, a stream anybody opens on the ingress
+// (GET /tasks/{uuid}/attach), and its snapshots are the snapshot kind's,
+// taken of it as of a VM, by whoever asks for one: neither is asked of it
+// here.
 package runs
 
 import (
@@ -20,15 +33,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
+	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/quota"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
@@ -37,14 +54,20 @@ import (
 
 const (
 	// CodeRefused is what a run is refused with when it is asked to be
-	// started, restarted, changed or restored, which only a VM somebody asked
-	// for can be.
+	// started, restarted or restored, or kept for longer than its snippet
+	// runs, which only a VM somebody asked for can be.
 	CodeRefused = "managed_by_code_runner"
 
 	// tries is how many times a run is read and asked again when something
 	// else wrote its task in the meantime.
 	tries = 3
 )
+
+// Room says whether the node holding a VM has room for it to be given
+// resources instead of what it has now (placement.Placement).
+type Room interface {
+	Fits(ctx context.Context, v vmKind.VM, resources vmKind.Resources) (bool, error)
+}
 
 // Runs are the code runner's runs, read from its tasks.
 type Runs struct {
@@ -54,15 +77,24 @@ type Runs struct {
 	// any task is, through dispatcher.
 	registry   *kind.Registry[kind.ControlPlaneBinding]
 	dispatcher *dispatch.Dispatcher
+
+	// limits are what one VM may be given, which a run changed is held to at
+	// most, and room what its node has room for.
+	limits quota.Limits
+	room   Room
+
+	logger *slog.Logger
 }
 
 var _ kind.Extras = &Runs{}
 
 // New is the code runner's runs, read from the tasks resources keeps and
 // asked for their commands through dispatcher, as the task kind in registry
-// says.
-func New(resources resource.Repository, registry *kind.Registry[kind.ControlPlaneBinding], dispatcher *dispatch.Dispatcher) *Runs {
-	return &Runs{resources: resources, registry: registry, dispatcher: dispatcher}
+// says, a run changed held to the most limits let one VM be given and to what
+// room says its node has room for, and what could not be asked of one once it
+// was changed told to logger.
+func New(resources resource.Repository, registry *kind.Registry[kind.ControlPlaneBinding], dispatcher *dispatch.Dispatcher, limits quota.Limits, room Room, logger *slog.Logger) *Runs {
+	return &Runs{resources: resources, registry: registry, dispatcher: dispatcher, limits: limits, room: room, logger: logger}
 }
 
 // All is every run there is now, as VMs, newest first.
@@ -98,13 +130,16 @@ func (r *Runs) One(ctx context.Context, uuid string) (kind.Raw, error) {
 }
 
 // Act asks a run for what a VM is asked: a stop is its task's stop, a delete
-// its task's delete, and anything else is refused as CodeRefused.
-func (r *Runs) Act(ctx context.Context, run kind.Raw, action string, _ []byte) (kind.Raw, bool, domain.ValidationErrors, error) {
+// its task's delete, an update its task's update (update), and anything else
+// is refused as CodeRefused.
+func (r *Runs) Act(ctx context.Context, run kind.Raw, action string, payload []byte) (kind.Raw, bool, domain.ValidationErrors, error) {
 	switch action {
 	case vmKind.ActionStop:
 		return r.ask(ctx, run.Metadata.UUID, taskKind.ActionStop)
 	case vmKind.ActionDelete:
 		return r.ask(ctx, run.Metadata.UUID, taskKind.ActionDelete)
+	case vmKind.ActionUpdate:
+		return r.update(ctx, run.Metadata.UUID, payload)
 	}
 
 	if _, err := r.record(ctx, run.Metadata.UUID); err != nil {
@@ -193,6 +228,200 @@ func (r *Runs) ask(ctx context.Context, uuid string, action string) (kind.Raw, b
 	}
 }
 
+// update changes a run as a VM is changed: what a VM's update asks of it,
+// as its task's update says it (changed), asked of its task as the task kind
+// is asked any of its commands, and followed at once by what the task kind
+// asks of its task as it now is, its reconfigure when its ports, network or
+// resources were changed, which its node then carries out. It is the run as
+// that left it: restarting, while its node gives its run what it was changed
+// to. What is refused is said under the fields a VM's update is asked with.
+//
+// Only a run that runs is changed: one on its way anywhere, restarting among
+// it, is refused as invalid_state_transition, and nothing changes.
+func (r *Runs) update(ctx context.Context, uuid string, payload []byte) (kind.Raw, bool, domain.ValidationErrors, error) {
+	var asked vmKind.UpdatePayload
+	if len(payload) > 0 {
+		if err := json.Unmarshal(payload, &asked); err != nil {
+			return kind.Raw{}, false, domain.ValidationErrors{"payload": "invalid_value"}, nil
+		}
+	}
+
+	if invalid := asked.Validate(); len(invalid) > 0 {
+		return kind.Raw{}, false, invalid, nil
+	}
+
+	binding, registered := r.registry.Lookup(taskKind.Name)
+	if !registered {
+		return kind.Raw{}, false, nil, fmt.Errorf("%w: %q", kind.ErrUnknownKind, taskKind.Name)
+	}
+
+	for try := 1; ; try++ {
+		record, err := r.record(ctx, uuid)
+		if err != nil {
+			return kind.Raw{}, false, nil, err
+		}
+
+		t, err := kind.Decode[taskKind.Spec, taskKind.Status](record.Raw)
+		if err != nil {
+			return kind.Raw{}, false, nil, err
+		}
+
+		update, refused, err := r.changed(ctx, t, asked)
+		if err != nil || len(refused) > 0 {
+			return kind.Raw{}, false, refused, err
+		}
+
+		changes, err := json.Marshal(update)
+		if err != nil {
+			return kind.Raw{}, false, nil, err
+		}
+
+		applied, invalid, err := r.dispatcher.Ask(ctx, binding, record, taskKind.ActionUpdate, changes, true)
+		if errors.Is(err, resource.ErrConflict) && try < tries {
+			continue
+		} else if err != nil {
+			return kind.Raw{}, false, nil, err
+		}
+
+		if len(invalid) > 0 {
+			return kind.Raw{}, false, asVM(invalid), nil
+		}
+
+		// what could not be asked is the reconcile loop's to ask again, and
+		// no reason to answer the change it followed with a failure.
+		followed, err := r.dispatcher.Follow(ctx, binding, applied.Record)
+		if err != nil {
+			r.logger.ErrorContext(ctx, "could not ask a run just changed for what its task kind asks", "error", err, "uuid", uuid)
+		}
+
+		delivered, err := r.dispatcher.Deliver(ctx, followed, 0)
+		if err != nil {
+			return kind.Raw{}, false, nil, err
+		}
+
+		after, err := manifest(resource.Record{Raw: delivered.Resource})
+
+		return after, false, nil, err
+	}
+}
+
+// changed is the update of its task a VM's update of a run is, or why it
+// cannot be, under the field of the VM's update that asked for it.
+//
+// Its name is its task's, and its ports are its task's, as they are. Its
+// network is its task's policy, the one the network asked for maps to,
+// either way that names nothing staying as it is. Its resources are its
+// task's limits: cores where its vCPUs change, and otherwise the cores it
+// had, of which its vCPUs are the whole number up; memory and disk as they
+// are. A resource it changes is held to what one VM may be given at most, and
+// all of them to its node's room; one it leaves as it was is held to
+// nothing, and neither is any to the least a VM may be given, which the code
+// runner gives its runs less than (a hundred MiB of disk to a VM's GiB), and
+// which the task kind holds them to its own least of (task.MinMemory). Its
+// lifetime is its snippet's, and a change of it is refused.
+func (r *Runs) changed(ctx context.Context, t taskKind.Task, asked vmKind.UpdatePayload) (taskKind.UpdatePayload, domain.ValidationErrors, error) {
+	if asked.Lifetime != nil && *asked.Lifetime != t.Spec.TTL {
+		return taskKind.UpdatePayload{}, domain.ValidationErrors{"lifetime_seconds": CodeRefused}, nil
+	}
+
+	update := taskKind.UpdatePayload{Name: asked.Name, Ports: asked.Ports}
+
+	if asked.Network != nil {
+		wanted := t.Spec.Policy().VMNetwork()
+
+		if len(asked.Network.Ingress) > 0 {
+			wanted.Ingress = asked.Network.Ingress
+		}
+
+		if len(asked.Network.Egress) > 0 {
+			wanted.Egress = asked.Network.Egress
+		}
+
+		if policy := network.PolicyOf(wanted); policy != t.Spec.Policy() {
+			update.NetworkPolicy = &policy
+		}
+	}
+
+	if asked.Resources == nil {
+		return update, nil, nil
+	}
+
+	had := vmKind.ResourcesOf(t.Spec.Limits.ResourceLimits().VMResources())
+	wanted := *asked.Resources
+
+	if refused := r.bounded(had, wanted); len(refused) > 0 {
+		return taskKind.UpdatePayload{}, refused, nil
+	}
+
+	limits := t.Spec.Limits
+
+	if wanted.CPUs != had.CPUs {
+		limits.CPU = float64(wanted.CPUs)
+	}
+
+	limits.Memory, limits.Disk = wanted.Memory, wanted.Disk
+
+	if limits == t.Spec.Limits {
+		return update, nil, nil
+	}
+
+	fits, err := r.room.Fits(ctx, Manifest(t), wanted)
+	if err != nil {
+		return taskKind.UpdatePayload{}, nil, err
+	}
+
+	if !fits {
+		return taskKind.UpdatePayload{}, domain.ValidationErrors{"resources": controlPlaneVMs.ReasonNoCapacity}, nil
+	}
+
+	update.Limits = &limits
+
+	return update, nil, nil
+}
+
+// bounded is what is wrong with the resources a run would be given in place
+// of what it had: each it changes past what one VM may be given, or to
+// nothing. What one VM may be given at least is not a run's to be held to.
+func (r *Runs) bounded(had vmKind.Resources, wanted vmKind.Resources) domain.ValidationErrors {
+	refused := r.limits.Bounds("", vm.KindMachine, wanted)
+
+	for field, changes := range map[string]bool{
+		"resources.cpus":   wanted.CPUs != had.CPUs,
+		"resources.memory": wanted.Memory != had.Memory,
+		"resources.disk":   wanted.Disk != had.Disk,
+	} {
+		if !changes || refused[field] == quota.CodeTooSmall {
+			delete(refused, field)
+		}
+	}
+
+	return refused
+}
+
+// asVM is what a run's task was refused, under the fields of the VM's update
+// that asked for them: its limits are its resources, its network policy its
+// network, and a command it may not be asked where it is is the VM's.
+func asVM(invalid domain.ValidationErrors) domain.ValidationErrors {
+	fields := map[string]string{
+		"limits.cpu":     "resources.cpus",
+		"limits.memory":  "resources.memory",
+		"limits.disk":    "resources.disk",
+		"network_policy": "network",
+		"action":         "vm",
+	}
+
+	said := make(domain.ValidationErrors, len(invalid))
+	for field, code := range invalid {
+		if vmField, renamed := fields[field]; renamed {
+			field = vmField
+		}
+
+		said[field] = code
+	}
+
+	return said
+}
+
 // Query reads what a run has written, as a VM's log, and refuses anything
 // else as CodeRefused.
 func (r *Runs) Query(ctx context.Context, run kind.Raw, action string, payload []byte) ([]byte, domain.ValidationErrors, error) {
@@ -231,8 +460,8 @@ func (r *Runs) record(ctx context.Context, uuid string) (resource.Record, error)
 	return r.resources.GetOneByOwner(ctx, taskKind.Name, task.GuestOwnerUUID, uuid)
 }
 
-// refusal is what a run is refused anything but a stop, a delete and a read
-// with.
+// refusal is what a run is refused a start, a restart and a restore with,
+// and anything else nobody asks of a VM.
 func refusal() domain.ValidationErrors {
 	return domain.ValidationErrors{"vm": CodeRefused}
 }

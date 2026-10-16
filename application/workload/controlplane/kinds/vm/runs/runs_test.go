@@ -17,6 +17,7 @@ import (
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
+	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
@@ -412,7 +413,7 @@ func TestRuns_Act(t *testing.T) {
 		assert.ErrorIs(t, err, domain.ErrNotExists, "there is nothing to take away")
 	})
 
-	for _, action := range []string{vmKind.ActionStart, vmKind.ActionRestart, vmKind.ActionUpdate, vmKind.ActionRestore, vmKind.ActionReconfigure} {
+	for _, action := range []string{vmKind.ActionStart, vmKind.ActionRestart, vmKind.ActionRestore, vmKind.ActionReconfigure} {
 		t.Run("a run is refused a "+action, func(t *testing.T) {
 			t.Parallel()
 
@@ -428,6 +429,240 @@ func TestRuns_Act(t *testing.T) {
 			assert.Equal(t, taskKind.Running, stored.Status.State)
 		})
 	}
+}
+
+func TestRuns_Act_update(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// running is one of the code runner's runs that came up a moment ago,
+	// whose node said it gave its run what its task says: isolated, two
+	// cores, 200 MiB of memory and 100 MiB of disk, less than a VM is given
+	// at least.
+	running := func(change ...func(t *taskKind.Task)) taskKind.Task {
+		r := vmtest.Run("run")
+		r.Spec.Ports = []port.Port{3000}
+
+		config := r.Spec.Config()
+		r.Status.Applied = &config
+
+		for _, c := range change {
+			c(&r)
+		}
+
+		return r
+	}
+
+	updated := func(t *testing.T, w *vmtest.Workload, r taskKind.Task, payload string) (vmKind.VM, domain.ValidationErrors) {
+		t.Helper()
+
+		after, gone, refused, err := w.Runs.Act(ctx, raw(t, r), vmKind.ActionUpdate, []byte(payload))
+		require.NoError(t, err)
+		assert.False(t, gone)
+
+		if len(refused) > 0 {
+			return vmKind.VM{}, refused
+		}
+
+		v, err := kind.Decode[vmKind.Spec, vmKind.Status](after)
+		require.NoError(t, err)
+
+		return v, nil
+	}
+
+	commands := func(t *testing.T, w *vmtest.Workload) []kind.ActOnResource {
+		t.Helper()
+
+		sent, err := messagingMock.Produced[kind.ActOnResource](w.Producer, kind.ActOnResourceName)
+		require.NoError(t, err)
+
+		return sent
+	}
+
+	t.Run("a run changed is its task changed, whose node is asked at once to give its run what it was changed to", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(running()))
+
+		after, refused := updated(t, w, running(), `{"name": " a run, renamed ", "ports": [8080, 3000], "network": {"egress": "allow"}, "resources": {"cpus": 3, "memory": 314572800, "disk": 209715200}}`)
+		require.Empty(t, refused)
+
+		assert.Equal(t, vmKind.Restarting, after.Status.State, "while its node makes its vm afresh")
+		assert.Equal(t, "a run, renamed", after.Metadata.Name)
+		assert.Equal(t, []port.Port{3000, 8080}, after.Spec.Ports)
+		assert.Equal(t, vmKind.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow}, after.Spec.Network)
+		assert.Equal(t, vmKind.Resources{CPUs: 3, Memory: 300 * vmtest.MiB, Disk: 200 * vmtest.MiB}, after.Spec.Resources)
+
+		stored, record, _ := w.StoredTask("run")
+		assert.Equal(t, "a run, renamed", stored.Metadata.Name)
+		assert.Equal(t, []port.Port{3000, 8080}, stored.Spec.Ports)
+		assert.Equal(t, network.PolicyPublic, stored.Spec.NetworkPolicy, "isolated, allowed to reach out")
+		assert.Equal(t, taskKind.Limits{CPU: 3, Memory: 300 * vmtest.MiB, Disk: 200 * vmtest.MiB}, stored.Spec.Limits)
+		assert.Equal(t, taskKind.Restarting, stored.Status.State)
+		require.NotNil(t, record.Pending)
+		assert.Equal(t, taskKind.ActionReconfigure, record.Pending.Action)
+
+		sent := commands(t, w)
+		require.Len(t, sent, 1)
+		assert.Equal(t, taskKind.Name, sent[0].Kind)
+		assert.Equal(t, "run", sent[0].UUID)
+		assert.Equal(t, taskKind.ActionReconfigure, sent[0].Action)
+		assert.Equal(t, vmtest.Node, sent[0].Node)
+	})
+
+	t.Run("a name alone is its record's, and its node is asked nothing", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(running()))
+
+		after, refused := updated(t, w, running(), `{"name": "renamed"}`)
+		require.Empty(t, refused)
+		assert.Equal(t, vmKind.Running, after.Status.State)
+		assert.Equal(t, "renamed", after.Metadata.Name)
+		assert.Empty(t, commands(t, w))
+	})
+
+	t.Run("its cores stay what they were unless its vcpus change", func(t *testing.T) {
+		t.Parallel()
+
+		halves := func(t *taskKind.Task) {
+			t.Spec.Limits.CPU = 1.5
+			config := t.Spec.Config()
+			t.Status.Applied = &config
+		}
+
+		w := vmtest.New(vmtest.WithTasks(running(halves)))
+
+		_, refused := updated(t, w, running(halves), `{"resources": {"cpus": 2, "memory": 314572800, "disk": 104857600}}`)
+		require.Empty(t, refused)
+
+		stored, _, _ := w.StoredTask("run")
+		assert.Equal(t, taskKind.Limits{CPU: 1.5, Memory: 300 * vmtest.MiB, Disk: 100 * vmtest.MiB}, stored.Spec.Limits)
+	})
+
+	t.Run("a network either way names nothing stays as it was, and any of the four a vm's can be is one policy's", func(t *testing.T) {
+		t.Parallel()
+
+		for payload, want := range map[string]network.Policy{
+			`{"network": {"ingress": "deny"}}`:                    network.PolicyNone,
+			`{"network": {"egress": "allow"}}`:                    network.PolicyPublic,
+			`{"network": {"ingress": "deny", "egress": "allow"}}`: network.PolicyOutbound,
+			`{"network": {"ingress": "allow"}}`:                   network.PolicyIsolated,
+		} {
+			w := vmtest.New(vmtest.WithTasks(running()))
+
+			_, refused := updated(t, w, running(), payload)
+			require.Empty(t, refused, payload)
+
+			stored, _, _ := w.StoredTask("run")
+			assert.Equal(t, want, stored.Spec.Policy(), payload)
+			assert.Equal(t, []port.Port{3000}, stored.Spec.Ports, "its ports are kept, served once it lets anything in: %s", payload)
+		}
+	})
+
+	t.Run("its lifetime as it was is no change, and any other is refused", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(running()))
+
+		_, refused := updated(t, w, running(), `{"lifetime": 60000000000}`)
+		assert.Empty(t, refused, "a minute, its ttl")
+
+		_, refused = updated(t, w, running(), `{"lifetime": 3600000000000}`)
+		assert.Equal(t, domain.ValidationErrors{"lifetime_seconds": runs.CodeRefused}, refused)
+
+		stored, _, _ := w.StoredTask("run")
+		assert.Equal(t, time.Minute, stored.Spec.TTL)
+	})
+
+	for name, tt := range map[string]struct {
+		task    taskKind.Task
+		nodes   []node.Node
+		payload string
+		want    domain.ValidationErrors
+	}{
+		"a payload that is not one": {
+			task:    running(),
+			payload: `{"ports": "many"}`,
+			want:    domain.ValidationErrors{"payload": "invalid_value"},
+		},
+		"what a vm's update refuses": {
+			task:    running(),
+			payload: `{"ports": [0], "network": {"egress": "maybe"}}`,
+			want:    domain.ValidationErrors{"ports": "invalid_port", "network.egress": "invalid_access"},
+		},
+		"more vcpus than one vm may be given": {
+			task:    running(),
+			payload: `{"resources": {"cpus": 5, "memory": 209715200, "disk": 104857600}}`,
+			want:    domain.ValidationErrors{"resources.cpus": "too_large"},
+		},
+		"less memory than a task's vm takes": {
+			task:    running(),
+			payload: `{"resources": {"cpus": 2, "memory": 1048576, "disk": 104857600}}`,
+			want:    domain.ValidationErrors{"resources.memory": "memory_below_minimum"},
+		},
+		"a disk that shrinks": {
+			task:    running(),
+			payload: `{"resources": {"cpus": 2, "memory": 209715200, "disk": 52428800}}`,
+			want:    domain.ValidationErrors{"resources.disk": "disk_cannot_shrink"},
+		},
+		"more than its node has room for": {
+			task: running(),
+			nodes: []node.Node{func() node.Node {
+				n := vmtest.Alive(vmtest.Node)
+				n.Capacity.Memory = vmtest.GiB
+				n.Capacity.Allocated = vm.Resources{CPUs: 2, Memory: 200 * vmtest.MiB, Disk: 100 * vmtest.MiB}
+
+				return n
+			}()},
+			payload: `{"resources": {"cpus": 2, "memory": 2147483648, "disk": 104857600}}`,
+			want:    domain.ValidationErrors{"resources": "no_capacity"},
+		},
+		"one restarting already": {
+			task:    running(func(t *taskKind.Task) { t.Status.State = taskKind.Restarting }),
+			payload: `{"ports": [9000]}`,
+			want:    domain.ValidationErrors{"vm": "invalid_state_transition"},
+		},
+		"one that ended": {
+			task:    running(func(t *taskKind.Task) { t.Status.State = taskKind.Completed }),
+			payload: `{"name": "renamed"}`,
+			want:    domain.ValidationErrors{"vm": "invalid_state_transition"},
+		},
+	} {
+		t.Run("refused: "+name, func(t *testing.T) {
+			t.Parallel()
+
+			opts := []vmtest.Option{vmtest.WithTasks(tt.task)}
+			if tt.nodes != nil {
+				opts = append(opts, vmtest.WithNodes(tt.nodes...))
+			}
+
+			w := vmtest.New(opts...)
+
+			_, refused := updated(t, w, tt.task, tt.payload)
+			assert.Equal(t, tt.want, refused)
+			assert.Empty(t, commands(t, w))
+
+			stored, _, _ := w.StoredTask("run")
+			assert.Equal(t, tt.task.Spec, stored.Spec, "and nothing changed")
+			assert.Equal(t, tt.task.Metadata.Name, stored.Metadata.Name)
+		})
+	}
+
+	t.Run("what it leaves as it was is not held to the least a vm may be given, which a run is given less than", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(running()))
+
+		_, refused := updated(t, w, running(), `{"name": "bigger", "resources": {"cpus": 2, "memory": 314572800, "disk": 104857600}}`)
+		require.Empty(t, refused, "its 100 MiB disk, under a vm's 1 GiB, is as it was")
+
+		w = vmtest.New(vmtest.WithTasks(running()))
+
+		_, refused = updated(t, w, running(), `{"resources": {"cpus": 2, "memory": 314572800, "disk": 209715200}}`)
+		require.Empty(t, refused, "nor is one it changes, but to the least a task may be given")
+	})
 }
 
 func TestRuns_Query(t *testing.T) {

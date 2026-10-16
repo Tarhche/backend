@@ -184,7 +184,7 @@ func New(opts ...Option) *Workload {
 
 	w.Placement = placement.New(w.Nodes, w.Records, 4)
 	w.Quota = quota.New(w.Records, Limits)
-	w.Runs = runs.New(w.Resources, w.Registry, w.Dispatcher)
+	w.Runs = runs.New(w.Resources, w.Registry, w.Dispatcher, Limits, w.Placement, slog.New(slog.DiscardHandler))
 
 	held := []slugs.Taken{
 		slugs.By(w.Records.GetOneBySlug),

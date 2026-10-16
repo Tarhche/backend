@@ -74,7 +74,7 @@ var english = map[string]string{
 	"disk_cannot_shrink":     "a VM's disk can only grow",
 	"immutable":              "this cannot be changed once it is set",
 	"node_lost":              "the node holding it went away",
-	"managed_by_code_runner": "the code runner runs this VM for as long as its snippet runs: it can only be stopped or deleted",
+	"managed_by_code_runner": "the code runner runs this VM for as long as its snippet runs: it is not started, restarted or restored, and it lives as long as its snippet does",
 
 	// a stack's file: what the platform reads in it, and refuses of it.
 	"unsupported_key":       "a stack's file does not take this key",
