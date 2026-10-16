@@ -4,7 +4,11 @@ package microsandbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"path/filepath"
+	"syscall"
 	"time"
 
 	msb "github.com/superradcompany/microsandbox/sdk/go"
@@ -17,7 +21,14 @@ import (
 // slowly.
 const diskUsageEvery = 2 * time.Minute
 
-// diskSample is the last measure of a VM's disk from inside it.
+// hostDiskEvery is how often a run's disk is measured from the host: what its
+// sandbox's directory has allocated is read off the host's own filesystem,
+// which is cheaper than a command in a guest but not free, and its node
+// samples a running run every other second.
+const hostDiskEvery = 10 * time.Second
+
+// diskSample is the last measure of a VM's disk, from inside it, or from the
+// host for an instance with a main process.
 type diskSample struct {
 	at    time.Time
 	used  uint64
@@ -31,7 +42,11 @@ type diskSample struct {
 // the engine says how busy the VM keeps all of its vCPUs together, 0 to 100.
 // A flat root disk does not say how much of it is used, so a VM's disk is
 // measured from inside it every few minutes; what the host has allocated to
-// it, which never shrinks, stands in until then.
+// it, which never shrinks, stands in until then. An instance with a main
+// process, a code runner's run, has a managed disk, which microsandbox 0.7.8
+// says nothing of, and nothing is exec'd into it but what it was asked to
+// run: what its sandbox has allocated on the host for it stands in, measured
+// from the host every few seconds, and never shrinks either.
 func (e *engine) Stats(ctx context.Context, id string) (vm.Stats, error) {
 	i, err := e.get(id)
 	if err != nil {
@@ -79,9 +94,96 @@ func (e *engine) Stats(ctx context.Context, id string) (vm.Stats, error) {
 		if sample := e.diskOf(ctx, i); sample.ok {
 			stats.DiskUsed, stats.DiskTotal = sample.used, sample.total
 		}
+	case metrics.UpperHostAllocatedBytes == nil:
+		// and microsandbox says nothing of its managed disk, so it is measured
+		// from the host: what its sandbox has allocated there for it stands in
+		// for what of it is used, as the host's allocation does for a VM's
+		// disk, and never shrinks, whatever is deleted inside it.
+		if sample := e.hostDiskOf(ctx, i); sample.ok {
+			stats.DiskUsed = sample.used
+		}
 	}
 
 	return stats, nil
+}
+
+// hostDiskOf is what the sandbox of an instance with a main process has
+// allocated on the host for its disk, measured again when the last measure is
+// old.
+func (e *engine) hostDiskOf(ctx context.Context, i *instance) diskSample {
+	i.mu.Lock()
+	last := i.hostDisk
+	i.mu.Unlock()
+
+	if !last.at.IsZero() && time.Since(last.at) < hostDiskEvery {
+		return last
+	}
+
+	sample := diskSample{at: time.Now()}
+	sample.used, sample.ok = e.measureHostDisk(ctx, i)
+
+	i.mu.Lock()
+	i.hostDisk = sample
+	i.mu.Unlock()
+
+	return sample
+}
+
+// measureHostDisk is what an instance's sandbox has allocated on the host for
+// its disk: what microsandbox observes its sandbox's own directory to have
+// allocated, from the host, with nothing exec'd into the guest, less what the
+// logs kept there have. Those are what its main process printed and what
+// microsandbox said of it, kept beside its disk rather than on it, and grow
+// with every line a run prints. A microsandbox that cannot say, as one whose
+// native library is too old cannot, measures nothing, which is said at debug.
+func (e *engine) measureHostDisk(ctx context.Context, i *instance) (uint64, bool) {
+	sb, err := e.live(ctx, i)
+	if err != nil {
+		e.logger.Debug("a vm's disk could not be measured from the host", "vm", i.id, "error", err)
+
+		return 0, false
+	}
+
+	usage, err := sb.StorageUsage(ctx)
+	if err == nil && usage.AllocatedBytes == nil {
+		err = errors.New("microsandbox did not say what the sandbox has allocated")
+	}
+
+	if err != nil {
+		e.logger.Debug("a vm's disk could not be measured from the host", "vm", i.id, "error", err)
+
+		return 0, false
+	}
+
+	allocated := *usage.AllocatedBytes
+	logs := allocatedUnder(filepath.Join(usage.Path, "logs"))
+
+	return allocated - min(logs, allocated), true
+}
+
+// allocatedUnder is what the files under dir have allocated on the host's
+// filesystem, and nothing for a dir that is not there.
+func allocatedUnder(dir string) uint64 {
+	var allocated uint64
+
+	_ = filepath.WalkDir(dir, func(_ string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return nil
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return nil
+		}
+
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Blocks > 0 {
+			allocated += uint64(stat.Blocks) * 512
+		}
+
+		return nil
+	})
+
+	return allocated
 }
 
 // diskOf is a VM's disk as the guest measures it, measured again when the

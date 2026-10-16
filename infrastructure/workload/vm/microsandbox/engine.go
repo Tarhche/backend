@@ -123,6 +123,10 @@ type instance struct {
 	sessions map[*session]struct{}
 	main     *mainProcess
 	disk     diskSample
+
+	// hostDisk is the last measure of the disk of an instance with a main
+	// process, taken from the host, of the sandbox it has now.
+	hostDisk diskSample
 }
 
 func newInstance(id string, r *record) *instance {
@@ -641,11 +645,17 @@ func (e *engine) live(ctx context.Context, i *instance) (*msb.Sandbox, error) {
 }
 
 // keep makes sb the live handle into an instance's sandbox, letting go of
-// any it had.
+// any it had, and of what was measured from the host of the disk that one
+// had: a sandbox booted afresh, as a run's is on every boot, has a disk of its
+// own.
 func (e *engine) keep(i *instance, sb *msb.Sandbox) {
 	i.mu.Lock()
 	previous := i.sandbox
 	i.sandbox = sb
+
+	if previous != sb {
+		i.hostDisk = diskSample{}
+	}
 	i.mu.Unlock()
 
 	if previous != nil && previous != sb {

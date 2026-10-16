@@ -1087,35 +1087,75 @@ setInterval(tick, 2000);`}
 
 	// a running snippet's VM is sampled as any VM is, through its runtime,
 	// which is how the dashboard shows what one of the code runner's runs
-	// uses: its CPU, its memory, and its disk, which is never measured from
-	// inside it, since nothing but its snippet runs in it. microsandbox 0.7.8
-	// says nothing of a run's managed layer, neither what of it is used nor
-	// what is free, so its disk is the size its task was given, none of it
-	// said to be used.
-	t.Run("a running snippet is sampled as a vm is, its disk the size its task was given", func(t *testing.T) {
-		request := runCode.Request{Runner: "nodejs-22.14", Code: `setInterval(() => console.log("still sampled"), 1000);`}
+	// uses: its CPU, its memory, and its disk. Nothing but its snippet runs in
+	// it, so its disk is not measured from inside it, and microsandbox 0.7.8
+	// says nothing of a run's managed layer: what its sandbox has allocated on
+	// the host for it is what of it is used, measured from the host every few
+	// seconds (hostDiskEvery), and what the snippet prints, which is kept
+	// beside its disk, is not. The snippet prints about 6 MiB, and then, a
+	// while later, writes 20 MiB to its disk, synced.
+	t.Run("a running snippet is sampled as a vm is, its disk measured from the host", func(t *testing.T) {
+		request := runCode.Request{Runner: "nodejs-22.14", Code: `const fs = require("fs");
+for (let i = 0; i < 80000; i++) console.log("printed beside its disk, not on it ".repeat(2) + i);
+console.log("printed");
+setTimeout(() => {
+  const fd = fs.openSync(require("os").homedir() + "/filled", "w");
+  fs.writeSync(fd, Buffer.alloc(20 << 20, 1));
+  fs.fsyncSync(fd);
+  fs.closeSync(fd);
+  console.log("written");
+}, 20000);
+setInterval(() => {}, 1000);`}
 
 		id, err := runtime.Create(ctx, execution("it-task-sampled", request.Image(), nil, []string{"--timeout", strconv.Itoa(int(runCode.LiveCodeTimeout.Seconds())), request.Code}))
 		require.NoError(t, err)
 		t.Cleanup(func() { removed(t, e, id) })
 
-		eventually(t, 30*time.Second, func() bool {
-			lines, err := e.Logs(ctx, id, vm.LogOptions{})
-			require.NoError(t, err)
+		logged := func(line string) func() bool {
+			return func() bool {
+				lines, err := e.Logs(ctx, id, vm.LogOptions{})
+				require.NoError(t, err)
 
-			return hasLine(lines, vm.LogSourceMain, "still sampled")
-		}, "%s runs", id)
+				return hasLine(lines, vm.LogSourceMain, line)
+			}
+		}
 
-		stats, err := runtime.Stats(ctx, id)
+		eventually(t, time.Minute, logged("printed"), "%s prints", id)
+
+		before, err := runtime.Stats(ctx, id)
 		require.NoError(t, err)
 
-		t.Logf("%s: %+v", id, stats)
+		t.Logf("%s, printed: %+v", id, before)
 
-		assert.NotZero(t, stats.MemoryUsed)
-		assert.Equal(t, uint64(256<<20), stats.MemoryLimit, "of the memory its task was given")
-		assert.NotZero(t, stats.DiskTotal, "its disk says how big it is")
-		assert.LessOrEqual(t, stats.DiskUsed, stats.DiskTotal)
-		assert.WithinDuration(t, time.Now(), stats.SampledAt, time.Minute)
+		assert.NotZero(t, before.MemoryUsed)
+		assert.Equal(t, uint64(256<<20), before.MemoryLimit, "of the memory its task was given")
+		assert.NotZero(t, before.DiskTotal, "its disk says how big it is")
+		assert.NotZero(t, before.DiskUsed, "and what of it its sandbox has allocated on the host")
+		assert.Less(t, before.DiskUsed, uint64(5<<20), "which is not what it printed")
+		assert.WithinDuration(t, time.Now(), before.SampledAt, time.Minute)
+
+		eventually(t, time.Minute, logged("written"), "%s writes", id)
+
+		var after vm.Stats
+
+		last := before.DiskUsed
+
+		eventually(t, 3*hostDiskEvery, func() bool {
+			after, err = runtime.Stats(ctx, id)
+			require.NoError(t, err)
+
+			if after.DiskUsed != last {
+				t.Logf("%s: %d bytes of its disk used", id, after.DiskUsed)
+
+				last = after.DiskUsed
+			}
+
+			return after.DiskUsed >= before.DiskUsed+15<<20
+		}, "%s's disk used grows by what it wrote, from %d bytes", id, before.DiskUsed)
+
+		t.Logf("%s, written: %+v", id, after)
+
+		assert.LessOrEqual(t, after.DiskUsed, after.DiskTotal)
 
 		require.NoError(t, runtime.Stop(ctx, id))
 
