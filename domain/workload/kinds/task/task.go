@@ -361,7 +361,7 @@ type Run struct {
 
 // Job reports whether a run is of a job.
 func (r *Run) Job() bool {
-	return r != nil && r.Kind != task.KindService
+	return r != nil && r.Kind == task.KindJob
 }
 
 // Endpoint is a port of a running task and the address its node reaches it

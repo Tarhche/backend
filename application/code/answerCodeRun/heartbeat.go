@@ -55,9 +55,6 @@ func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 func (h *heartbeat) answer(ctx context.Context, uuid string, status taskKind.Status) error {
 	run := status.Run
 
-	// a job is a piece of code somebody ran here, and its name is the request
-	// that asked for it. A service is a task of somebody's, whose name is a
-	// name: answering it would be answering a request nobody made.
 	if !run.Job() || len(run.Name) == 0 || len(status.State) == 0 {
 		return nil
 	}
@@ -70,8 +67,6 @@ func (h *heartbeat) answer(ctx context.Context, uuid string, status taskKind.Sta
 		return nil
 	}
 
-	// 2. continue reviewing till the end.
-	// 3. do we need to have a task kind????
 	response := NewResponse(uuid, status, h.ingressDomain)
 
 	payload, err := json.Marshal(response)

@@ -366,13 +366,13 @@ func TestStatus_JSON(t *testing.T) {
 		assert.Equal(t, sample, read.Stats)
 	})
 
-	t.Run("a run is a job's unless it says it is a service's", func(t *testing.T) {
+	t.Run("a run is a job's only when it says so", func(t *testing.T) {
 		t.Parallel()
 
 		var nothing *Run
 
 		assert.False(t, nothing.Job())
-		assert.True(t, (&Run{}).Job())
+		assert.False(t, (&Run{}).Job())
 		assert.True(t, (&Run{Kind: task.KindJob}).Job())
 		assert.False(t, (&Run{Kind: task.KindService}).Job())
 	})
