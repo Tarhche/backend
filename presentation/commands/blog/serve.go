@@ -13,6 +13,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/core"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 )
 
@@ -70,9 +71,9 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 // Providers returns the service providers required to serve the blog service.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
-		providers.NewConfigsProvider(c.configs),
-		providers.NewOpenTelemetryProvider("blog", "blog"),
-		providers.NewProfilerProvider("blog"),
+		core.NewConfigsProvider(c.configs),
+		core.NewOpenTelemetryProvider("blog", "blog"),
+		core.NewProfilerProvider("blog"),
 		providers.NewMongodbProvider(),
 		providers.NewNatsProvider(),
 		providers.NewTranslationProvider(),
@@ -85,7 +86,7 @@ func (c *ServeCommand) Providers() []provider.Provider {
 		providers.NewAuthProvider(),
 		providers.NewStorageProvider(),
 		providers.NewTemplateProvider(),
-		providers.NewContainerProvider(),
+		core.NewContainerProvider(),
 		providers.NewBlogProvider(c.scoper),
 		c,
 	}

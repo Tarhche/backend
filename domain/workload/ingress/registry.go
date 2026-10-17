@@ -1,11 +1,17 @@
 // Package ingress is the workload cluster as the ingress knows it: which orchestrators
-// are connected, and therefore which ones can be reached.
+// are connected, and therefore which ones can be reached, and which of them
+// holds each task and VM it routes to.
 //
 // Nothing here says where an orchestrator is, because nothing dials one. An orchestrator
 // opens connections to the ingress and says who it is; the ingress keeps them
 // and sends requests back down them. Being reachable and being alive are then
 // the same fact, and it is the connection itself rather than anything either
 // side has to remember.
+//
+// Which orchestrator holds a task or a VM is what that orchestrator says of
+// it, in its heartbeats and in what came of the commands it was sent, less
+// what a command on its way to it takes away (Locations): the ingress reads
+// no records, and only the control plane reads the workload's database.
 package ingress
 
 import "context"

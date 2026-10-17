@@ -1,6 +1,7 @@
 package ingress
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,8 +12,11 @@ import (
 
 	"github.com/danceable/console"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
+	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
@@ -113,6 +117,15 @@ func TestServe(t *testing.T) {
 			fmt.Fprint(rw, "test response")
 		})
 
+		subscribers := map[string]domain.MessageHandler{
+			"test1": domain.MessageHandlerFunc(func(ctx context.Context, message []byte) error { return nil }),
+			"test2": domain.MessageHandlerFunc(func(ctx context.Context, message []byte) error { return nil }),
+		}
+
+		var subscriber messaging.MockPublishSubscriber
+		subscriber.On("Subscribe", ctx, mock.Anything, mock.Anything).Times(len(subscribers)).Return(nil)
+		defer subscriber.AssertExpectations(t)
+
 		files := testCertificates(t)
 
 		command := NewServeCommand()
@@ -122,6 +135,8 @@ func TestServe(t *testing.T) {
 		command.configs.TunnelCertificate = files.Certificate
 		command.configs.TunnelKey = files.PrivateKey
 		command.handler = handler
+		command.subscriber = &subscriber
+		command.subscribers = subscribers
 		command.logger = slog.New(slog.DiscardHandler)
 
 		tunnelIngress, err := tunnel.NewHub(tunnel.DefaultConfig(), tunnel.NewCertificateAuthenticator(nil, nil), command.logger)

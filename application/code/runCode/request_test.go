@@ -2,12 +2,15 @@ package runCode
 
 import (
 	"encoding/json"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
@@ -180,6 +183,41 @@ func TestRequest_Image(t *testing.T) {
 	}
 }
 
+func TestRequest_ResourceLimits(t *testing.T) {
+	t.Parallel()
+
+	defaults := taskKind.Limits{CPU: 2, Memory: 200 << 20, Disk: 100 << 20}
+
+	// a Go snippet is built from source before it runs, standard library
+	// and all: its compiler is killed in the default's memory, and a build of
+	// one that imports net/http does not fit in the default's disk.
+	goes := taskKind.Limits{CPU: 2, Memory: 512 << 20, Disk: 512 << 20}
+
+	// every runner there is, so that one added is one somebody has decided
+	// what to give.
+	want := map[string]taskKind.Limits{
+		"go-1.24":      goes,
+		"go-1.23":      goes,
+		"nodejs-23.11": defaults,
+		"nodejs-22.14": defaults,
+		"nodejs-20.19": defaults,
+		"php-8.4":      defaults,
+		"php-8.3":      defaults,
+		"nats-2.10.0":  defaults,
+	}
+
+	assert.ElementsMatch(t, supportedCodeRunners, slices.Collect(maps.Keys(want)))
+
+	for runner, limits := range want {
+		t.Run(runner, func(t *testing.T) {
+			t.Parallel()
+
+			request := Request{Runner: runner}
+			assert.Equal(t, limits, request.ResourceLimits())
+		})
+	}
+}
+
 func TestKeepable(t *testing.T) {
 	t.Parallel()
 
@@ -192,7 +230,7 @@ func TestKeepable(t *testing.T) {
 		return Keepable(payload)
 	}
 
-	t.Run("a snippet that prints something prints the same thing", func(t *testing.T) {
+	t.Run("a snippet that only prints something is answered with what it printed", func(t *testing.T) {
 		t.Parallel()
 
 		assert.True(t, keepable(t, Request{ID: "request-id", Code: "print", Runner: "go-1.24"}))

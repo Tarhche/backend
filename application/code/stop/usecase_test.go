@@ -13,6 +13,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	workloadMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
@@ -41,6 +43,15 @@ func request(t *testing.T) []byte {
 	return payload
 }
 
+// held is a task the workload holds, of a kind, whose it is.
+func held(k task.Kind, ownerUUID string) taskKind.Task {
+	return taskKind.Task{
+		Kind:     taskKind.Name,
+		Metadata: kind.Metadata{UUID: taskUUID, OwnerUUID: ownerUUID},
+		Spec:     taskKind.Spec{Kind: k},
+	}
+}
+
 // refusal is what the client was told about a task it does not get.
 func refusal(t *testing.T, replies []domain.Reply) map[string]string {
 	t.Helper()
@@ -67,7 +78,7 @@ func TestUseCase_Handle(t *testing.T) {
 		)
 
 		workload.On("Task", mock.Anything, taskUUID).Once().
-			Return(task.Task{UUID: taskUUID, Kind: task.KindJob, OwnerUUID: runCode.CodeRunnerOwnerUUID}, nil)
+			Return(held(task.KindJob, runCode.CodeRunnerOwnerUUID), nil)
 		workload.On("DeleteTask", mock.Anything, taskUUID).Once().Return(nil)
 		defer workload.AssertExpectations(t)
 
@@ -88,7 +99,7 @@ func TestUseCase_Handle(t *testing.T) {
 		// somebody's own task from the dashboard: naming it here does not
 		// make it a snippet's.
 		workload.On("Task", mock.Anything, taskUUID).Once().
-			Return(task.Task{UUID: taskUUID, Kind: task.KindService, OwnerUUID: "somebody"}, nil)
+			Return(held(task.KindService, "somebody"), nil)
 		defer workload.AssertExpectations(t)
 
 		require.NoError(t, NewUseCase(&workload, accepts(), &replyer, discardLogger()).
@@ -107,7 +118,7 @@ func TestUseCase_Handle(t *testing.T) {
 		)
 
 		workload.On("Task", mock.Anything, taskUUID).Once().
-			Return(task.Task{UUID: taskUUID, Kind: task.KindJob, OwnerUUID: "somebody"}, nil)
+			Return(held(task.KindJob, "somebody"), nil)
 		defer workload.AssertExpectations(t)
 
 		require.NoError(t, NewUseCase(&workload, accepts(), &replyer, discardLogger()).
@@ -125,7 +136,7 @@ func TestUseCase_Handle(t *testing.T) {
 			replyer  messagingMock.RecordingReplyer
 		)
 
-		workload.On("Task", mock.Anything, taskUUID).Once().Return(task.Task{}, domain.ErrNotExists)
+		workload.On("Task", mock.Anything, taskUUID).Once().Return(taskKind.Task{}, domain.ErrNotExists)
 		defer workload.AssertExpectations(t)
 
 		require.NoError(t, NewUseCase(&workload, accepts(), &replyer, discardLogger()).

@@ -50,9 +50,13 @@ type CacheDecorator struct {
 	logger *slog.Logger
 }
 
-// Keepable reports whether the answer to this request is the same answer every
-// time. One that is not — a snippet that serves a port, or that somebody is
-// given a way into — is asked for again rather than remembered.
+// Keepable reports whether the answer to this request is worth keeping, and
+// giving whoever asks the same again for as long as the cache keeps it, which
+// is what that subject's own says it means: a snippet that only prints
+// something is answered with what it printed, though it may print otherwise
+// when it is run again. One that is not — a snippet that serves a port, or
+// that somebody is given a way into — is asked for again rather than
+// remembered.
 type Keepable func(payload []byte) bool
 
 // Ensure CacheDecorator implements the Messaging interface

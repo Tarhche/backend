@@ -4,16 +4,25 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/danceable/console"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/execute"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	executionsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/executions"
+	leasesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/leases"
+	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestServe(t *testing.T) {
@@ -171,6 +180,71 @@ func TestServe(t *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	})
+}
+
+func TestServe_graphs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the graphs' workers and their resync run until the context is done, and then the workers stop", func(t *testing.T) {
+		t.Parallel()
+
+		command := NewServeCommand()
+		command.configs.GraphResync = time.Millisecond
+		command.logger = slog.New(slog.DiscardHandler)
+		command.reconcileGraphs = graphs(t)
+
+		ctx, stop := context.WithCancel(context.Background())
+
+		stopped := command.graphs(ctx)
+
+		select {
+		case <-stopped:
+			require.Fail(t, "the workers stopped before their context was done")
+		case <-time.After(20 * time.Millisecond):
+		}
+
+		stop()
+
+		select {
+		case <-stopped:
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "the workers never stopped")
+		}
+	})
+
+	t.Run("with no graphs to keep, there is nothing to wait for", func(t *testing.T) {
+		t.Parallel()
+
+		select {
+		case <-NewServeCommand().graphs(context.Background()):
+		default:
+			require.Fail(t, "it waits for workers there are none of")
+		}
+	})
+}
+
+// graphs is a reconciler of the graphs of no kind of root, over nothing.
+func graphs(t *testing.T) *reconcile.Reconciler {
+	t.Helper()
+
+	executions := executionsMemory.NewRepository()
+
+	executor, err := execute.New(nil, nil, executions, nil)
+	require.NoError(t, err)
+
+	r, err := reconcile.New(reconcile.Dependencies{
+		Registry:   kind.NewRegistry[kind.ControlPlaneBinding](),
+		Resources:  resourcesMemory.NewRepository(),
+		Planner:    graph.NewPlanner(nil, graph.DefaultPolicy()),
+		Executor:   executor,
+		Executions: executions,
+		Leases:     leasesMemory.NewRepository(nil),
+		Holder:     "one",
+		Logger:     slog.New(slog.DiscardHandler),
+	}, reconcile.DefaultConfig())
+	require.NoError(t, err)
+
+	return r
 }
 
 // findAvailablePort finds an available port to use for testing

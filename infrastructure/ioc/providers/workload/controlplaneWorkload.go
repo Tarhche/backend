@@ -1,0 +1,420 @@
+package workload
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"maps"
+	"net/http"
+	"time"
+
+	"github.com/nats-io/nats.go"
+
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
+	controlPlaneContainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/container"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getPlan"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/heartbeatResources"
+	controlPlaneImages "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/image"
+	controlPlaneNetworks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/network"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/planResource"
+	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
+	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
+	controlPlaneStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
+	controlPlaneTasks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/task"
+	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/placement"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/quota"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
+	controlPlaneVolumes "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/volume"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
+	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
+	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
+	taskContract "github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/scheduler/roundrobin"
+	controlPlaneKindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/kinds"
+)
+
+// ControlPlaneStores are what the control plane keeps everything it runs
+// in: the resources of every kind, VMs, snapshots, stacks and tasks among
+// them, the nodes it places them on, the logs services' tasks ship, which go
+// with their tasks, how each node of each root's plan went, and each root's
+// lease. Archives is the bucket a snapshot's archive is taken out of when the
+// snapshot goes, and may be nil: with no bucket configured, an archive is
+// left where it is.
+type ControlPlaneStores struct {
+	Resources  resource.Repository
+	Nodes      nodeContract.Repository
+	TaskLogs   taskContract.LogRepository
+	Executions graph.Executions
+	Leases     graph.Leases
+	Archives   snapshotKind.Store
+}
+
+// ControlPlaneWorkload is what the control plane runs of the workload: every
+// kind it runs, VMs, their snapshots, stacks, the code runner's tasks and the
+// building blocks of Docker VMs, on the framework.
+type ControlPlaneWorkload struct {
+	// Registry is every kind the control plane runs.
+	Registry *kind.Registry[kind.ControlPlaneBinding]
+
+	// Route serves the resource API, every kind under its plural; it is an
+	// error for a kind whose routes are taken already.
+	Route func(mux *http.ServeMux) error
+
+	// Subscribers hear the results of every kind's commands, and what the
+	// nodes hold of every kind whose state is theirs to say, each kind in a
+	// heartbeat on its own subject.
+	Subscribers map[string]domain.MessageHandler
+
+	// Reconcile is the loop that keeps every resource as it was asked to be.
+	Reconcile *kindsReconcileResources.UseCase
+
+	// Policy is what the edges of a resource's graph are typed by: whether
+	// what a resource needs goes with it, the defaults with what the control
+	// plane is configured with laid over them.
+	Policy graph.DependencyPolicy
+
+	// Graphs keeps every root's graph made, a stack's and a container's that
+	// no stack owns: its workers reconcile the roots queued, and its resync,
+	// which the serve command runs on a ticker of its own, queues every root.
+	Graphs *reconcile.Reconciler
+
+	// Holder is this control plane, as the leases of the roots it reconciles
+	// say it: a uuid made as it starts.
+	Holder string
+}
+
+// blockStrategies are the control-plane strategies of the building blocks of
+// Docker VMs, which a root's graph needs some of besides.
+type blockStrategies struct {
+	containers *controlPlaneContainers.Containers
+	images     *controlPlaneImages.Images
+	networks   *controlPlaneNetworks.Networks
+	volumes    *controlPlaneVolumes.Volumes
+}
+
+// newBlockStrategies are the building blocks' strategies, over what they
+// share.
+func newBlockStrategies(buildingBlocks blocks.Dependencies) blockStrategies {
+	return blockStrategies{
+		containers: controlPlaneContainers.New(buildingBlocks),
+		images:     controlPlaneImages.New(buildingBlocks),
+		networks:   controlPlaneNetworks.New(buildingBlocks),
+		volumes:    controlPlaneVolumes.New(buildingBlocks),
+	}
+}
+
+// NewControlPlaneWorkload builds the control plane's workload over stores,
+// asking the nodes through natsConnection and sending them commands with
+// producer.
+//
+// It is the serve command's wiring, and what the workload's end-to-end test
+// builds a control plane from, over stores kept in memory: what is tested is
+// what is served.
+func NewControlPlaneWorkload(
+	controlPlaneConfigs *configs.WorkloadControlPlane,
+	stores ControlPlaneStores,
+	natsConnection *nats.Conn,
+	producer domain.Producer,
+	logger *slog.Logger,
+	options ...ControlPlaneKindsOption,
+) (*ControlPlaneWorkload, error) {
+	policy, err := dependencyPolicy(controlPlaneConfigs)
+	if err != nil {
+		return nil, err
+	}
+
+	registry, err := NewControlPlaneRegistry()
+	if err != nil {
+		return nil, err
+	}
+
+	// a node is asked over core NATS, and given as long as it is configured
+	// to be: what may take longer, an image pulled say, is a command.
+	requester := request.NewRequester(natsConnection, controlPlaneConfigs.NodeRequestTimeout)
+
+	// what lives in a VM, its stacks, waits on it while it is not running.
+	vms := records.New(stores.Resources)
+
+	// a command that may take its node longer than the reconcile loop's
+	// patience is not asked again while the node is still at it: a pull is
+	// given what the nodes give one, and a disk streamed to or from the
+	// bucket what a snapshot is.
+	timeouts := map[kind.Timeout]time.Duration{
+		kind.TimeoutPull:     controlPlaneConfigs.PullTimeout(),
+		kind.TimeoutTransfer: snapshotKind.TransferTimeout,
+	}
+
+	// what the graphs of roots are told of, and leave to nobody else, before
+	// what keeps them made is built over the plumbing that tells it.
+	relay := &graph.Relay{}
+
+	kindsOptions := append([]ControlPlaneKindsOption{WithParents(vms), WithTimeouts(timeouts), WithGraphs(graphRoots(), relay)}, options...)
+	settings := settingsOf(kindsOptions)
+
+	kinds := NewControlPlaneKinds(
+		registry,
+		ControlPlaneKindStores{Resources: stores.Resources, Nodes: stores.Nodes},
+		requester,
+		producer,
+		logger,
+		kindsOptions...,
+	)
+
+	vmPlacement := placement.New(stores.Nodes, vms, controlPlaneConfigs.VMCPUOvercommit)
+
+	// the code runner's runs, shown among anybody's VMs: read from their tasks,
+	// stopped, changed and taken away as their tasks are, as any task's
+	// commands are asked, a change held to what one VM may be given at most
+	// and to its node's room, and sampled as their tasks are, asked of their
+	// nodes as any query is.
+	codeRunner := runs.New(kinds.Resources, registry, kinds.Dispatcher, requester, vmLimits(controlPlaneConfigs), vmPlacement, logger)
+
+	// a slug is one resource's, whatever its kind, as the resources of every
+	// kind are kept together: a VM's and a task's are what the ingress serves
+	// their ports under, and a stack's is what its graph names what it makes
+	// under.
+	slugsHeld := []slugs.Taken{
+		slugs.By(vms.GetOneBySlug),
+		slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+			return stores.Resources.GetOneBySlug(ctx, taskKind.Name, slug)
+		}),
+		slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+			return stores.Resources.GetOneBySlug(ctx, stackKind.Name, slug)
+		}),
+	}
+
+	dockerDefaults, err := dockerVMDefaults(controlPlaneConfigs)
+	if err != nil {
+		return nil, err
+	}
+
+	// a snapshot is taken of one of its owner's VMs, or of one of the code
+	// runner's runs as the asker's, by the node holding it, and is the kind's
+	// own to say a VM can be restored or made from: one of the same kind, as
+	// both their images say.
+	snapshots := controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
+		VMs:         vms,
+		Nodes:       vmPlacement,
+		Runs:        codeRunner,
+		Resources:   kinds.Resources,
+		Archives:    stores.Archives,
+		UserMax:     controlPlaneConfigs.SnapshotUserMax,
+		DockerImage: controlPlaneConfigs.VMDockerImage,
+		Logger:      logger,
+	})
+
+	// a VM is admitted, placed and held to its owner's quota as the vm kind
+	// says.
+	vmStrategy := controlPlaneVMs.New(controlPlaneVMs.Dependencies{
+		Records:   vms,
+		Snapshots: snapshots,
+		Nodes:     stores.Nodes,
+		Quota:     quota.New(vms, vmLimits(controlPlaneConfigs)),
+		Placement: vmPlacement,
+		Slugs:     slugsHeld,
+		Images:    controlPlaneVMs.Images{Machine: controlPlaneConfigs.VMDefaultImage, Docker: controlPlaneConfigs.VMDockerImage},
+		Extras:    codeRunner,
+	})
+
+	// a Docker VM made for a container or a stack is admitted as any VM is,
+	// and one a graph is to make for either is held to what the vm kind would
+	// admit it as when it is asked for.
+	chooser := dockervm.NewChooser(vms, kinds.Resources, kinds.Admit, vmStrategy, dockerDefaults)
+
+	// what the building blocks of Docker VMs share: what the nodes report of
+	// them that nobody keeps a record of, which each control plane keeps from
+	// the heartbeats it hears, shown for twice as long as a record goes
+	// unheard before it is taken to be gone, and what is labelled as the
+	// platform's only once its node has said it for as long as that, which a
+	// heartbeat its node took before a record's delete removed it, heard
+	// after, never is; and the Docker VMs they go into.
+	buildingBlocks := blocks.Dependencies{
+		Resources: kinds.Resources,
+		VMs:       vms,
+		Chooser:   chooser,
+		Requester: requester,
+		Sightings: blocks.NewSightings(2*settings.reconcile.ResourceSilentAfter, settings.reconcile.ResourceSilentAfter),
+		Logger:    logger,
+	}
+
+	strategies := newBlockStrategies(buildingBlocks)
+
+	// the graph of each root, a stack or a container no stack owns, made of
+	// the Docker VM it goes into and the building blocks it needs, each made
+	// through the control plane's own admission, commands and delete, and
+	// waited on as the reconcile loop waits on it; planned as the policy
+	// types its edges, a stack's when it is admitted too.
+	graphKinds := controlPlaneGraphKinds(chooser, strategies, controlPlaneGraphRecords(registry, kinds, settings.reconcile), settings.reconcile.ResourceSilentAfter)
+	planner := graph.NewPlanner(graphKinds, policy)
+
+	// a stack is admitted with its file read and its graph planned, into the
+	// Docker VM it names, or one its graph is to make for it.
+	stacks := controlPlaneStacks.New(controlPlaneStacks.Dependencies{Chooser: chooser, Slugs: slugsHeld, Planner: planner})
+
+	if err := registerControlPlaneKinds(registry, vmStrategy, snapshots, stacks, controlPlaneTasks.New(controlPlaneTasks.Dependencies{
+		Nodes:     stores.Nodes,
+		Scheduler: roundrobin.New(),
+		Slugs:     slugsHeld,
+		Logs:      stores.TaskLogs,
+	}), strategies); err != nil {
+		return nil, err
+	}
+
+	graphs, holder, err := newControlPlaneGraphs(
+		controlPlaneConfigs,
+		registry,
+		kinds,
+		graphKinds,
+		planner,
+		stores,
+		settings.reconcile,
+		logger,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	relay.To(graphs)
+
+	// the resource API of every kind registered, each under its own plural,
+	// and the kinds themselves: its dry runs preview what the graphs of roots
+	// would do, and how each root's plan went is served beside its queries.
+	useCases := kinds.UseCases
+	useCases.Plan = planResource.NewUseCase(registry, kinds.Resources, kinds.Admit, graphRoots(), graphs)
+	useCases.GetPlan = getPlan.NewUseCase(registry, kinds.Resources, stores.Executions, stores.Leases, graphRoots())
+
+	route := func(mux *http.ServeMux) error {
+		return controlPlaneKindsAPI.Route(mux, registry.Descriptors(), useCases)
+	}
+
+	// what the nodes hold of every kind whose state is theirs to say, heard an
+	// instance at a time, on the kind's own subject; a kind whose state is the
+	// control plane's has none.
+	subscribers := maps.Clone(kinds.Subscribers)
+	heartbeats := heartbeatResources.NewHeartbeatHandler(kinds.Observer, logger)
+
+	for _, d := range registry.Descriptors() {
+		if d.StateBy == kind.OnNode {
+			subscribers[kind.HeartbeatName(d.Name)] = heartbeats
+		}
+	}
+
+	return &ControlPlaneWorkload{
+		Registry:    registry,
+		Route:       route,
+		Subscribers: subscribers,
+		Reconcile:   kinds.Reconcile,
+		Policy:      policy,
+		Graphs:      graphs,
+		Holder:      holder,
+	}, nil
+}
+
+// registerControlPlaneKinds registers every kind the control plane runs,
+// each through its control-plane strategy: the one place a kind is added to
+// the control plane, and what its resource API, its consumers and its
+// reconcile loop all run over. A VM is admitted, placed and held to its
+// owner's quota as vms says; a snapshot is taken of one of its owner's VMs
+// and held to their quota of snapshots, as snapshots says; a stack is
+// admitted into the Docker VM stacks chooses, or plans for its graph to make,
+// which it lives in, its file read and its graph planned; a
+// task, the code runner's runs among them, is admitted and placed as tasks
+// says; and the building blocks of a Docker VM, its containers, images,
+// networks and volumes, live in it, through their strategies.
+func registerControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms *controlPlaneVMs.VMs, snapshots *controlPlaneSnapshots.Snapshots, stacks *controlPlaneStacks.Stacks, tasks *controlPlaneTasks.Tasks, strategies blockStrategies) error {
+	for _, binding := range []kind.ControlPlaneBinding{
+		kind.BindControlPlane[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), vms),
+		kind.BindControlPlane[snapshotKind.Spec, snapshotKind.Status](snapshotKind.Descriptor(), snapshots),
+		kind.BindControlPlane[stackKind.Spec, stackKind.Status](stackKind.Descriptor(), stacks),
+		kind.BindControlPlane[taskKind.Spec, taskKind.Status](taskKind.Descriptor(), tasks),
+		kind.BindControlPlane[containerKind.Spec, containerKind.Status](containerKind.Descriptor(), strategies.containers),
+		kind.BindControlPlane[imageKind.Spec, imageKind.Status](imageKind.Descriptor(), strategies.images),
+		kind.BindControlPlane[networkKind.Spec, networkKind.Status](networkKind.Descriptor(), strategies.networks),
+		kind.BindControlPlane[volumeKind.Spec, volumeKind.Status](volumeKind.Descriptor(), strategies.volumes),
+	} {
+		if err := registry.Register(binding); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// vmLimits are what one VM may be given, and one person's VMs between them,
+// as the control plane was configured.
+func vmLimits(controlPlaneConfigs *configs.WorkloadControlPlane) quota.Limits {
+	return quota.Limits{
+		MinMemory:       controlPlaneConfigs.VMMinMemory,
+		MinDisk:         controlPlaneConfigs.VMMinDisk,
+		DockerMinMemory: controlPlaneConfigs.VMDockerMinMemory,
+		DockerMinDisk:   controlPlaneConfigs.VMDockerMinDisk,
+		MaxCPUs:         controlPlaneConfigs.VMMaxCPUs,
+		MaxMemory:       controlPlaneConfigs.VMMaxMemory,
+		MaxDisk:         controlPlaneConfigs.VMMaxDisk,
+		UserMaxVMs:      controlPlaneConfigs.VMUserMaxVMs,
+		UserCPUs:        controlPlaneConfigs.VMUserCPUs,
+		UserMemory:      controlPlaneConfigs.VMUserMemory,
+		UserDisk:        controlPlaneConfigs.VMUserDisk,
+		MaxLifetime:     controlPlaneConfigs.VMMaxLifetime,
+	}
+}
+
+// dockerVMDefaults is what a Docker VM made for a container or a stack is
+// given, as the control plane was configured: the Docker image, which is what
+// makes it one, among it. Settings that cannot be what they say are refused
+// here, when the control plane starts, rather than when somebody first adds a
+// container.
+func dockerVMDefaults(controlPlaneConfigs *configs.WorkloadControlPlane) (dockervm.Defaults, error) {
+	ports, err := controlPlaneConfigs.DockerDefaultPorts()
+	if err != nil {
+		return dockervm.Defaults{}, err
+	}
+
+	network, valid := dockervm.NetworkOf(controlPlaneConfigs.VMDockerDefaultIngress, controlPlaneConfigs.VMDockerDefaultEgress)
+	if !valid {
+		return dockervm.Defaults{}, fmt.Errorf("a docker vm's default network is allow or deny each way, got ingress %q and egress %q", network.Ingress, network.Egress)
+	}
+
+	return dockervm.Defaults{
+		Image: controlPlaneConfigs.VMDockerImage,
+		Resources: vmKind.Resources{
+			CPUs:   controlPlaneConfigs.VMDockerDefaultCPUs,
+			Memory: controlPlaneConfigs.VMDockerDefaultMemory,
+			Disk:   controlPlaneConfigs.VMDockerDefaultDisk,
+		},
+		Ports:          ports,
+		Network:        network,
+		PersistentDisk: controlPlaneConfigs.VMDockerDefaultPersistentDisk,
+		Lifetime:       controlPlaneConfigs.VMDockerDefaultLifetime,
+	}, nil
+}
+
+// dependencyPolicy is what the edges of a resource's graph are typed by, as
+// the control plane was configured: the defaults, with what it was given laid
+// over them, entry by entry. A policy that cannot be read is refused here,
+// when the control plane starts, rather than when a resource is first planned.
+func dependencyPolicy(controlPlaneConfigs *configs.WorkloadControlPlane) (graph.DependencyPolicy, error) {
+	configured, err := graph.ParsePolicy(controlPlaneConfigs.DependencyPolicy)
+	if err != nil {
+		return graph.DependencyPolicy{}, fmt.Errorf("the dependency policy (WORKLOAD_DEPENDENCY_POLICY, --dependency-policy) cannot be read: %w", err)
+	}
+
+	return graph.DefaultPolicy().With(configured), nil
+}

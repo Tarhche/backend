@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/spec"
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
@@ -37,26 +36,6 @@ func (r *articleRequest) Validate() domain.ValidationErrors {
 
 	if len(r.Tags) > 10 {
 		errors["tags"] = "too_many"
-	}
-
-	return errors
-}
-
-// composeRequest stands in for the workload's own requests, which carry the
-// fields a compose file may write in more than one shape.
-type composeRequest struct {
-	Name string `json:"name"`
-
-	spec.Service
-}
-
-var _ domain.Validatable = &composeRequest{}
-
-func (r *composeRequest) Validate() domain.ValidationErrors {
-	errors := r.Service.Validate("")
-
-	if len(r.Name) == 0 {
-		errors["name"] = "required_field"
 	}
 
 	return errors
@@ -94,27 +73,6 @@ func TestBody(t *testing.T) {
 
 		assert.NotContains(t, schema.Properties, "approved")
 		assert.Contains(t, schema.Properties, "title")
-	})
-
-	t.Run("the compose shapes are described as they may be written", func(t *testing.T) {
-		schema := body[composeRequest]()
-
-		// a command is a string or a list of them, not only the list it is
-		// normalised into
-		require.Contains(t, schema.Properties, "command")
-		assert.Len(t, schema.Properties["command"].AnyOf, 2)
-
-		// a port is a number or compose's own "8080:80", never the struct it
-		// is read into
-		require.Contains(t, schema.Properties, "ports")
-		require.NotNil(t, schema.Properties["ports"].Items)
-		assert.Len(t, schema.Properties["ports"].Items.AnyOf, 2)
-		assert.NotContains(t, schema.Properties["ports"].Items.Properties, "Task")
-
-		// an image is required, and it is a service's own requirement rather
-		// than the request's
-		assert.Contains(t, schema.Required, "image")
-		assert.Contains(t, schema.Required, "name")
 	})
 
 	t.Run("a shape written by hand says what it requires itself", func(t *testing.T) {

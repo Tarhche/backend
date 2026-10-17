@@ -1,0 +1,36 @@
+package deleteResource
+
+import (
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+)
+
+// Response is what asking for a resource to be deleted came to.
+type Response struct {
+	// ValidationErrors is why an extra would not be deleted, or what its
+	// kind's delete refused of the payload it was asked with: a delete is a
+	// request to have a resource gone and is never refused, but an extra says
+	// for itself what it can be asked.
+	ValidationErrors domain.ValidationErrors
+
+	// Resource is the resource as it was left, unless it is Gone: deleted
+	// already, or with nothing of it anywhere to delete.
+	Resource kind.Raw
+	Gone     bool
+
+	// Command is the delete its node was sent, and Result what came of it,
+	// when it was waited for and came in time. Neither is there when it is
+	// being deleted already, or cannot be asked yet: deleting it is what is
+	// expected of it, and it is asked for once it can be; nor for a root its
+	// graph removes, which its graph asks of its node.
+	Command *kind.ActOnResource
+	Result  *kind.ResourceActedOn
+
+	// Dependents are the roots whose graphs need what is not a root itself,
+	// as they were when it was asked to go: those asked to go with it, when
+	// it was deleted with them (Request.Cascade). Recreated says one of them
+	// makes it again once it is gone, which none does once they go with it.
+	Dependents []graph.Dependent
+	Recreated  bool
+}

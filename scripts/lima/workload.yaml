@@ -1,0 +1,80 @@
+# A Linux VM to run the whole stack in on a Mac, VMs included (CLAUDE.md,
+# "VMs locally"): Ubuntu 24.04 on Apple's virtualization framework, with
+# nested virtualization, so /dev/kvm is there for the vmhosts, and Docker.
+#
+#   limactl start --name=workload scripts/lima/workload.yaml
+#
+# Nested virtualization needs an Apple M3 or newer, and macOS 15 or newer.
+minimumLimaVersion: 2.0.0
+base:
+- template:_images/ubuntu-24.04
+vmType: vz
+nestedVirtualization: true
+cpus: 8
+memory: 16GiB
+disk: 100GiB
+
+# the home directory, writable and at the same path, so the stack's bind
+# mounts (./:/opt/app, ./tmp/...) mean inside what they mean on the Mac.
+mounts:
+- location: "~"
+  writable: true
+
+containerd:
+  system: false
+  user: false
+
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    command -v docker >/dev/null 2>&1 && exit 0
+    export DEBIAN_FRONTEND=noninteractive
+    curl -fsSL https://get.docker.com | sh
+- mode: yq
+  path: /etc/systemd/system/docker.socket.d/override.conf
+  format: ini
+  expression: .Socket.SocketUser="{{.User}}"
+# a VM's memory is backed by huge pages only where transparent huge pages are
+# always on: microsandbox does not ask for them. Otherwise each 4 KiB page a VM
+# nested in this one touches is a fault both hypervisors take, about 50 ms for
+# every MiB, which makes a Go snippet's build minutes long rather than seconds.
+# Provisioning runs at every boot, which is what the setting needs.
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    echo always > /sys/kernel/mm/transparent_hugepage/enabled
+
+probes:
+- script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    if ! timeout 30s bash -c "until command -v docker >/dev/null 2>&1; do sleep 3; done"; then
+      echo >&2 "docker is not installed yet"
+      exit 1
+    fi
+    if ! timeout 30s bash -c "until pgrep dockerd; do sleep 3; done"; then
+      echo >&2 "dockerd is not running"
+      exit 1
+    fi
+  hint: See "/var/log/cloud-init-output.log" in the guest
+- script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    test -c /dev/kvm
+  hint: There is no /dev/kvm, so no VM can run. Nested virtualization needs an Apple M3 or newer and macOS 15 or newer.
+
+# Every TCP port the stack publishes is forwarded to the Mac's localhost on
+# its own. Docker's socket is too, so docker can be driven from the Mac:
+#   docker context create lima-workload --docker "host=unix://$HOME/.lima/workload/sock/docker.sock"
+portForwards:
+- guestSocket: "/var/run/docker.sock"
+  hostSocket: "{{.Dir}}/sock/docker.sock"
+
+message: |
+  Docker and /dev/kvm are ready. The gid WORKLOAD_KVM_GID in .env has to be:
+    limactl shell {{.Name}} -- stat -c %g /dev/kvm
+  Then, from the repository:
+    limactl shell --workdir "$PWD" {{.Name}} make up-vms

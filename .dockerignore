@@ -1,0 +1,6 @@
+# What the local stack keeps between runs (compose.yaml mounts ./tmp into
+# mongodb, rustfs, nats, mailpit and grafana) and the binaries air builds
+# there: none of it is source, and on Linux, Lima included, much of it is
+# owned by the containers and unreadable to whoever builds, which failed every
+# build once the stack had run.
+tmp

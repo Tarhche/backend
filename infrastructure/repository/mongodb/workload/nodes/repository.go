@@ -69,6 +69,7 @@ func (r *NodesRepository) GetAll(ctx context.Context, offset uint, limit uint) (
 				BlockInput:    t.Stats.BlockInput,
 				BlockOutput:   t.Stats.BlockOutput,
 			},
+			Capacity:        t.Capacity.toInfo(),
 			LastHeartbeatAt: t.LastHeartbeatAt,
 		})
 	}
@@ -108,6 +109,7 @@ func (r *NodesRepository) GetOne(ctx context.Context, UUID string) (node.Node, e
 			BlockInput:    t.Stats.BlockInput,
 			BlockOutput:   t.Stats.BlockOutput,
 		},
+		Capacity:        t.Capacity.toInfo(),
 		LastHeartbeatAt: t.LastHeartbeatAt,
 	}, nil
 }
@@ -130,6 +132,7 @@ func (r *NodesRepository) Save(ctx context.Context, n *node.Node) (string, error
 			BlockInput:    n.Stats.BlockInput,
 			BlockOutput:   n.Stats.BlockOutput,
 		},
+		Capacity:        toCapacity(n.Capacity),
 		LastHeartbeatAt: n.LastHeartbeatAt,
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
