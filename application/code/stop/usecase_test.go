@@ -23,49 +23,6 @@ import (
 
 const taskUUID = "task-uuid"
 
-func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
-func accepts() *validator.MockValidator {
-	v := &validator.MockValidator{}
-	v.On("Validate", mock.Anything).Return(domain.ValidationErrors{})
-
-	return v
-}
-
-func request(t *testing.T) []byte {
-	t.Helper()
-
-	payload, err := json.Marshal(Request{ID: "request-id", TaskUUID: taskUUID})
-	require.NoError(t, err)
-
-	return payload
-}
-
-// held is a task the workload holds, of a kind, whose it is.
-func held(k task.Kind, ownerUUID string) taskKind.Task {
-	return taskKind.Task{
-		Kind:     taskKind.Name,
-		Metadata: kind.Metadata{UUID: taskUUID, OwnerUUID: ownerUUID},
-		Spec:     taskKind.Spec{Kind: k},
-	}
-}
-
-// refusal is what the client was told about a task it does not get.
-func refusal(t *testing.T, replies []domain.Reply) map[string]string {
-	t.Helper()
-
-	require.Len(t, replies, 1)
-
-	var body struct {
-		Errors map[string]string `json:"errors"`
-	}
-	require.NoError(t, json.Unmarshal(replies[0].Payload, &body))
-
-	return body.Errors
-}
-
 func TestUseCase_Handle(t *testing.T) {
 	t.Parallel()
 
@@ -145,4 +102,47 @@ func TestUseCase_Handle(t *testing.T) {
 		assert.Empty(t, refusal(t, replyer.Replies()))
 		workload.AssertNotCalled(t, "DeleteTask", mock.Anything, mock.Anything)
 	})
+}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func accepts() *validator.MockValidator {
+	v := &validator.MockValidator{}
+	v.On("Validate", mock.Anything).Return(domain.ValidationErrors{})
+
+	return v
+}
+
+func request(t *testing.T) []byte {
+	t.Helper()
+
+	payload, err := json.Marshal(Request{ID: "request-id", TaskUUID: taskUUID})
+	require.NoError(t, err)
+
+	return payload
+}
+
+// held is a task the workload holds, of a kind, whose it is.
+func held(k task.Kind, ownerUUID string) taskKind.Task {
+	return taskKind.Task{
+		Kind:     taskKind.Name,
+		Metadata: kind.Metadata{UUID: taskUUID, OwnerUUID: ownerUUID},
+		Spec:     taskKind.Spec{Kind: k},
+	}
+}
+
+// refusal is what the client was told about a task it does not get.
+func refusal(t *testing.T, replies []domain.Reply) map[string]string {
+	t.Helper()
+
+	require.Len(t, replies, 1)
+
+	var body struct {
+		Errors map[string]string `json:"errors"`
+	}
+	require.NoError(t, json.Unmarshal(replies[0].Payload, &body))
+
+	return body.Errors
 }

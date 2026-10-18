@@ -26,8 +26,7 @@ type IngressWorkload struct {
 // NewIngressWorkload wires the ingress's workload, keeping what it hears in
 // locations.
 //
-// It is the serve command's wiring, and it is what the workload's end-to-end
-// test builds an ingress from: what is tested is what is served.
+// It is the serve command's wiring.
 func NewIngressWorkload(locations ingressContract.Locations, logger *slog.Logger) (*IngressWorkload, error) {
 	kinds, located, err := ingressKinds(locations)
 	if err != nil {

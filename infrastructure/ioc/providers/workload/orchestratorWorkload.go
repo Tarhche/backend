@@ -67,9 +67,7 @@ type OrchestratorWorkload struct {
 
 // NewOrchestratorWorkload wires an orchestrator's workload.
 //
-// It is the serve command's wiring, and it is what the workload's end-to-end
-// test builds an orchestrator from, over an engine and a bucket kept in
-// memory: what is tested is what is served.
+// It is the serve command's wiring.
 func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload, error) {
 	recorder, err := workloadMetrics.New(otel.GetMeterProvider())
 	if err != nil {
