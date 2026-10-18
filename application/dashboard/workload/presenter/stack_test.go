@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain/user"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 func shop() stack.Stack {

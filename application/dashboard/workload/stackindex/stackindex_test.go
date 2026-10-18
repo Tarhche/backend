@@ -9,10 +9,10 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/workloadtest"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 func page(current uint, total uint, slugs ...string) workloadControlPlane.Page[stack.Stack] {

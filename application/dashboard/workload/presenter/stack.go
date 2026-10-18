@@ -3,8 +3,8 @@ package presenter
 import (
 	"time"
 
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // NoteVMNotRunning is what a stack's detail says when it has no containers to

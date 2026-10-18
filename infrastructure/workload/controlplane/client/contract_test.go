@@ -41,7 +41,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -62,6 +61,7 @@ import (
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	executionsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/executions"
 	leasesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/leases"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
 	kindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/kinds"
 )

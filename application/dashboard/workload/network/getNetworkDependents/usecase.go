@@ -6,7 +6,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // UseCase reads what needs a docker network of a Docker VM before it is

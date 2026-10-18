@@ -6,7 +6,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // UseCase asks for a VM to be removed, with its disk. Its node removes it in

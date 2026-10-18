@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // held runs a rule on a fresh set of errors and says what it found.

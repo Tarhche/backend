@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
@@ -25,6 +24,7 @@ import (
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // The building blocks of a Docker VM, its containers, images, networks and

@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
@@ -35,6 +34,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
 )
 

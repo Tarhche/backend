@@ -3,8 +3,8 @@ package presenter
 import (
 	"time"
 
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // Container is one container in a Docker VM, as its node last reported it.

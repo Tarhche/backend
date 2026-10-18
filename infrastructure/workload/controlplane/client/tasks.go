@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"net/url"
 
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // A task is a kind the control plane runs, so it is reached through the

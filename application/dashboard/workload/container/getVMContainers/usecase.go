@@ -7,8 +7,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stackindex"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // UseCase lists one Docker VM's containers, stopped ones too: a container that

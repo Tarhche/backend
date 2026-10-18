@@ -8,8 +8,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // StopName is what a reader asks on to have the task their snippet is

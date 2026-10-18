@@ -12,9 +12,9 @@ import (
 	"maps"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // maxPages bounds how much of a listing of stacks is read for one request.

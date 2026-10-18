@@ -7,7 +7,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stackindex"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // UseCase reads one container, from its VM's dockerd as it is now, and names

@@ -12,9 +12,9 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/workloadtest"
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )

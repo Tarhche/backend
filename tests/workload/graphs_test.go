@@ -23,7 +23,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumes"
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
@@ -36,6 +35,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 

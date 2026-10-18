@@ -7,12 +7,12 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 type MockClient struct {

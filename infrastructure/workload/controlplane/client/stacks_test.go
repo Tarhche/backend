@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
@@ -21,6 +20,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 var made = time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)

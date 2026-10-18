@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
@@ -22,6 +21,7 @@ import (
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	workloadMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 func discard() *slog.Logger {

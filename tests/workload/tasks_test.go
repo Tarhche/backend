@@ -24,7 +24,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/updateVM"
 	getresourceendpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getResourceEndpoint"
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
@@ -34,6 +33,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 

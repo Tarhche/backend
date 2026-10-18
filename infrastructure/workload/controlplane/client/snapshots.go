@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"net/url"
 
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // A snapshot is a kind the control plane runs, so it is reached through the

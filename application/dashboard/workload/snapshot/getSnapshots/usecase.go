@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // UseCase lists snapshots: everybody's or one person's own, of every VM or

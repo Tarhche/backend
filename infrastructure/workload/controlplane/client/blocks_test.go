@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
@@ -24,6 +23,7 @@ import (
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // request is one request the blocks' control plane was asked.
