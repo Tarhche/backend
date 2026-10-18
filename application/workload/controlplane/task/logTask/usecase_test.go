@@ -9,30 +9,38 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
-	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
 )
 
-// stillThere is a task repository that recognises every task asked of it.
-func stillThere() *tasks.MockTasksRepository {
-	r := &tasks.MockTasksRepository{}
-	r.On("GetOne", mock.Anything, mock.Anything).Return(task.Task{}, nil)
-
-	return r
+// tasks are the task records kept, answering every uuid asked of them with
+// what they were told.
+type tasks struct {
+	err error
 }
 
-// gone is a task repository for which nothing exists any more.
-func gone() *tasks.MockTasksRepository {
-	r := &tasks.MockTasksRepository{}
-	r.On("GetOne", mock.Anything, mock.Anything).Return(task.Task{}, domain.ErrNotExists)
+func (t tasks) GetOne(_ context.Context, kindName string, uuid string) (resource.Record, error) {
+	if kindName != taskKind.Name {
+		return resource.Record{}, domain.ErrNotExists
+	}
 
-	return r
+	return resource.Record{}, t.err
+}
+
+// stillThere are task records in which every task asked of is.
+func stillThere() tasks {
+	return tasks{}
+}
+
+// gone are task records in which nothing exists any more.
+func gone() tasks {
+	return tasks{err: domain.ErrNotExists}
 }
 
 func discardLogger() *slog.Logger {

@@ -167,10 +167,10 @@ func TestAuthorize_Handle(t *testing.T) {
 			replyer    messagingMock.RecordingReplyer
 		)
 
-		authorizer.On("Authorize", mock.Anything, userUUID, permission.WorkloadTasksLogs).Return(true, nil).Once()
+		authorizer.On("Authorize", mock.Anything, userUUID, permission.ArticlesShow).Return(true, nil).Once()
 		defer authorizer.AssertExpectations(t)
 
-		middleware := NewAuthorizeMiddleware(next.handler(), &authorizer, permission.WorkloadTasksLogs, &replyer)
+		middleware := NewAuthorizeMiddleware(next.handler(), &authorizer, permission.ArticlesShow, &replyer)
 
 		require.NoError(t, middleware.Handle(asking(), payload(t, "")))
 
@@ -187,9 +187,9 @@ func TestAuthorize_Handle(t *testing.T) {
 			replyer    messagingMock.RecordingReplyer
 		)
 
-		authorizer.On("Authorize", mock.Anything, userUUID, permission.WorkloadTasksLogs).Return(false, nil).Once()
+		authorizer.On("Authorize", mock.Anything, userUUID, permission.ArticlesShow).Return(false, nil).Once()
 
-		middleware := NewAuthorizeMiddleware(next.handler(), &authorizer, permission.WorkloadTasksLogs, &replyer)
+		middleware := NewAuthorizeMiddleware(next.handler(), &authorizer, permission.ArticlesShow, &replyer)
 
 		require.NoError(t, middleware.Handle(asking(), payload(t, "")))
 
@@ -207,9 +207,9 @@ func TestAuthorize_Handle(t *testing.T) {
 		)
 
 		unreadable := errors.New("the roles could not be read")
-		authorizer.On("Authorize", mock.Anything, userUUID, permission.WorkloadTasksLogs).Return(false, unreadable).Once()
+		authorizer.On("Authorize", mock.Anything, userUUID, permission.ArticlesShow).Return(false, unreadable).Once()
 
-		middleware := NewAuthorizeMiddleware(next.handler(), &authorizer, permission.WorkloadTasksLogs, &replyer)
+		middleware := NewAuthorizeMiddleware(next.handler(), &authorizer, permission.ArticlesShow, &replyer)
 
 		// returned rather than replied: the message is redelivered instead of
 		// telling a client it may not do what it may.

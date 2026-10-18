@@ -4,8 +4,13 @@ ps:
 up:
 	docker compose up --build -d
 
+# the stack with VMs: a vmhost beside each orchestrator, which needs /dev/kvm,
+# so Linux, or Lima on a Mac (CLAUDE.md, "VMs locally").
+up-vms:
+	docker compose --profile vms up --build -d
+
 down:
-	docker compose down --remove-orphans --volumes
+	docker compose --profile vms down --remove-orphans --volumes
 
 stop:
 	docker compose stop
@@ -55,4 +60,9 @@ certs-env:
 		printf 'WORKLOAD_ORCHESTRATOR_%s_TUNNEL_KEY="%s"\n' "$$orchestrator" "$$(escape ./tmp/certs/workload-orchestrator-$$orchestrator/tls.key)"; \
 	done
 
-.PHONY: ps up down restart restart-% sh-% logs-% certs certs-env migrate
+# the engine's KVM integration tests, which need Linux, Docker and /dev/kvm:
+# CI runs them, and so does Lima on a Mac.
+test-vmhost-integration:
+	./scripts/vmhost-integration.sh
+
+.PHONY: ps up up-vms down restart restart-% sh-% logs-% certs certs-env migrate test-vmhost-integration

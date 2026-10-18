@@ -7,12 +7,12 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-// MockRuntime stands in for whatever runs the tasks: docker, here.
+// MockRuntime stands in for whatever runs the tasks: VMs, here.
 type MockRuntime struct {
 	mock.Mock
 }
@@ -37,10 +37,6 @@ func (m *MockRuntime) BySlug(ctx context.Context, slug string) ([]task.Execution
 	return args.Get(0).([]task.Execution), args.Error(1)
 }
 
-func (m *MockRuntime) EnsureImage(ctx context.Context, image string) error {
-	return m.Called(ctx, image).Error(0)
-}
-
 func (m *MockRuntime) Create(ctx context.Context, c *task.Execution) (string, error) {
 	args := m.Called(ctx, c)
 
@@ -59,6 +55,10 @@ func (m *MockRuntime) Restart(ctx context.Context, taskUUID string) error {
 	return m.Called(ctx, taskUUID).Error(0)
 }
 
+func (m *MockRuntime) Reconfigure(ctx context.Context, executionID string, c *task.Execution) error {
+	return m.Called(ctx, executionID, c).Error(0)
+}
+
 func (m *MockRuntime) Kill(ctx context.Context, taskUUID string) error {
 	return m.Called(ctx, taskUUID).Error(0)
 }
@@ -73,10 +73,10 @@ func (m *MockRuntime) Inspect(ctx context.Context, taskUUID string) (task.Execut
 	return args.Get(0).(task.Execution), args.Error(1)
 }
 
-func (m *MockRuntime) Stats(ctx context.Context, taskUUID string) (task.Stats, error) {
+func (m *MockRuntime) Stats(ctx context.Context, taskUUID string) (vm.Stats, error) {
 	args := m.Called(ctx, taskUUID)
 
-	return args.Get(0).(task.Stats), args.Error(1)
+	return args.Get(0).(vm.Stats), args.Error(1)
 }
 
 func (m *MockRuntime) Logs(ctx context.Context, taskUUID string, writer io.Writer) error {
@@ -95,25 +95,6 @@ func (m *MockRuntime) Exec(ctx context.Context, taskUUID string, options task.Ex
 	return session, args.Error(1)
 }
 
-// MockNetworkManager stands in for the networks the workload owns.
-type MockNetworkManager struct {
-	mock.Mock
-}
-
-var _ network.Manager = &MockNetworkManager{}
-
-func (m *MockNetworkManager) EnsureIsolatedNetwork(ctx context.Context) error {
-	return m.Called(ctx).Error(0)
-}
-
-func (m *MockNetworkManager) EnsureStackNetwork(ctx context.Context, stackSlug string) error {
-	return m.Called(ctx, stackSlug).Error(0)
-}
-
-func (m *MockNetworkManager) RemoveStackNetwork(ctx context.Context, stackSlug string) error {
-	return m.Called(ctx, stackSlug).Error(0)
-}
-
 // MockNodeManager stands in for what a node reports about itself.
 type MockNodeManager struct {
 	mock.Mock
@@ -125,4 +106,10 @@ func (m *MockNodeManager) Stats(ctx context.Context, nodeName string) (node.Stat
 	args := m.Called(ctx, nodeName)
 
 	return args.Get(0).(node.Stats), args.Error(1)
+}
+
+func (m *MockNodeManager) Capacity(ctx context.Context) (vm.Info, error) {
+	args := m.Called(ctx)
+
+	return args.Get(0).(vm.Info), args.Error(1)
 }

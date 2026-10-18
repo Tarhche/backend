@@ -1,0 +1,277 @@
+// Package resource is a resource of any kind as the control plane keeps it:
+// its manifest, and what the control plane is in the middle of asking of it.
+//
+// The manifest is the kind's own (kind.Raw): its metadata, its spec and its
+// status, as every service and the API see it. Beside it, the control plane
+// keeps what is its own business and nobody else's: the command a resource in
+// flight is waiting on, how many tries it has taken to make the resource what
+// it is expected to be, what the last command came to, and the version that
+// keeps two writers from overwriting each other blindly.
+package resource
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"maps"
+	"slices"
+	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+)
+
+// ErrConflict is a copy of a resource written back after something else wrote
+// the resource since the copy was read: a heartbeat and a command's result, a
+// person and the reconcile loop. Whoever is refused reads the resource again
+// and decides again, on what is there now.
+var ErrConflict = errors.New("the resource was changed after this copy of it was read")
+
+// ErrUnstorable is a resource a repository cannot keep as it is, for what is
+// in it rather than for anything that comes and goes: a key with a NUL in it,
+// say, or more of it than a document holds. Writing it again fails again, so
+// whoever wrote it lets it go rather than try it again.
+var ErrUnstorable = errors.New("the resource cannot be kept as it is")
+
+// Unreadable reports whether err is of what was read or written rather than
+// of whatever read or wrote it, so that reading or writing it again fails
+// again: a status, or a record, that is not what its kind says it is, whose
+// JSON is not, one of a kind that is none of it, or one a repository cannot
+// keep as it is (ErrUnstorable). A database that did not answer is not.
+func Unreadable(err error) bool {
+	var (
+		syntax      *json.SyntaxError
+		typed       *json.UnmarshalTypeError
+		unsupported *json.UnsupportedTypeError
+		value       *json.UnsupportedValueError
+		marshaler   *json.MarshalerError
+	)
+
+	return errors.As(err, &syntax) || errors.As(err, &typed) || errors.As(err, &unsupported) || errors.As(err, &value) || errors.As(err, &marshaler) ||
+		errors.Is(err, kind.ErrInvalidPayload) || errors.Is(err, kind.ErrUnknownKind) || errors.Is(err, ErrUnstorable)
+}
+
+// Record is one resource as the control plane keeps it.
+type Record struct {
+	kind.Raw
+
+	// Version is how many times the record was written. A copy is written
+	// back only over the version it was read at, which the repository checks
+	// and moves on: that is what holds a heartbeat and a result, or a person
+	// and the reconcile loop, from writing over each other.
+	Version int64
+
+	// Pending is the command the resource was last sent and has not been
+	// answered for, while it is waiting on one.
+	Pending *Pending
+
+	// Attempts is how many commands were sent to make the resource what it is
+	// expected to be, since it last stayed so for as long as its backoff, or
+	// since it was last asked for something new. It is what the next try's
+	// Attempt is, and what the wait before it grows with: one that keeps
+	// falling over as soon as it is brought back is brought back less and
+	// less often.
+	Attempts int
+
+	// TriedAt is when the last of those commands was sent.
+	TriedAt time.Time
+
+	// Answer is what came of the last command answered: whoever waited for
+	// it and was not the one that heard it reads it here. Its status is not
+	// kept, since it is the resource's already.
+	Answer *kind.ResourceActedOn
+
+	// Reset says the parent the resource lives in was restored from a
+	// snapshot since its node last saw it there, and its kind resets to what
+	// the restored parent holds (kind.CascadeReset): the next look inside the
+	// parent keeps it as it is found, and takes its record away when it is
+	// not there, rather than making it again. A root no node says anything
+	// of, a stack, is found there as its kind says (graph.ResetKind), and
+	// nothing is made for it until it is.
+	Reset bool
+
+	// ResetAt is the restore of its parent it was last reset for, by the
+	// moment the parent's node says it carried that restore out
+	// (kind.Restore): what the parent's record says of a restore before it
+	// says nothing of what the restored parent holds, and a reset as of it,
+	// or of a later one, is not reset again. It outlives the reset, kept once
+	// the resource is found where it lives. None is a reset that said none.
+	ResetAt time.Time
+
+	// Restores are the commands sent to restore it from a snapshot
+	// (kind.Action.Restores), by their ids, the tries of each among them,
+	// whose results are yet to be heard: a result of one is taken whatever
+	// the resource was asked since, but only onto the record it was sent
+	// from, which one made again under its uuid since is not. One is let go
+	// of once its result is heard, taken or not, and those of tries whose
+	// results never are once as many newer ones are kept as a command is
+	// remembered by.
+	Restores []string
+}
+
+// Pending is a command a resource is waiting on.
+//
+// A command that is not answered in time is sent again, under a new ID, as
+// another try at the same thing: a result for any of its tries answers it,
+// while one for a command sent before it does not.
+type Pending struct {
+	Action  string
+	Payload json.RawMessage
+
+	// IDs are the commands sent for it, the first try first.
+	IDs []string
+
+	// SentAt is when the latest try was sent.
+	SentAt time.Time
+}
+
+// Answers reports whether the command id is one of its tries.
+func (p *Pending) Answers(id string) bool {
+	return p != nil && len(id) > 0 && slices.Contains(p.IDs, id)
+}
+
+// Common is the part of the resource's status every kind shares: what it is
+// doing, what it is expected to be doing, and why.
+func (r Record) Common() (kind.Status, error) {
+	return Common(r.Status)
+}
+
+// SetCommon writes the part of the resource's status every kind shares,
+// leaving the kind's own fields as they are.
+func (r *Record) SetCommon(common kind.Status) error {
+	status, err := WithCommon(r.Status, common)
+	if err != nil {
+		return err
+	}
+
+	r.Status = status
+
+	return nil
+}
+
+// Clone is a copy of the record that shares nothing with it.
+func (r Record) Clone() Record {
+	r.Metadata.Labels = maps.Clone(r.Metadata.Labels)
+	r.Metadata.Owners = slices.Clone(r.Metadata.Owners)
+	r.Metadata.Refs = slices.Clone(r.Metadata.Refs)
+	r.Spec = slices.Clone(r.Spec)
+	r.Status = slices.Clone(r.Status)
+	r.Restores = slices.Clone(r.Restores)
+
+	if r.Pending != nil {
+		pending := *r.Pending
+		pending.Payload = slices.Clone(pending.Payload)
+		pending.IDs = slices.Clone(pending.IDs)
+		r.Pending = &pending
+	}
+
+	if r.Answer != nil {
+		answer := *r.Answer
+		answer.Status = slices.Clone(answer.Status)
+		r.Answer = &answer
+	}
+
+	return r
+}
+
+// Filter narrows a listing of one kind's resources. What is left empty does
+// not narrow it.
+type Filter struct {
+	// OwnerUUID is the person they belong to.
+	OwnerUUID string
+
+	// Node is the node holding them.
+	Node string
+
+	// Parent is a resource they belong to (kind.Metadata.BelongsTo): one of
+	// their metadata's refs, the resource they live in among them, or of
+	// their owners, a container's stack say. Its kind may be left out, and
+	// then a resource of any kind with that uuid is.
+	Parent kind.Reference
+
+	// Labels are labels they carry, each with the value given: the code
+	// runner's runs among anybody's VMs are labelled
+	// workload.managed-by=code-runner.
+	Labels map[string]string
+
+	// Unowned narrows them to what nothing owns, the roots of their graphs:
+	// as their metadata says, whatever is there of what it names
+	// (kind.Metadata.Owning).
+	Unowned bool
+}
+
+// Passes reports whether a resource's metadata is what filter lets through,
+// for whoever narrows resources that are not in a repository, such as a
+// kind's extras.
+func (f Filter) Passes(m kind.Metadata) bool {
+	if len(f.OwnerUUID) > 0 && m.OwnerUUID != f.OwnerUUID {
+		return false
+	}
+
+	if len(f.Node) > 0 && m.Node != f.Node {
+		return false
+	}
+
+	if len(f.Parent.UUID) > 0 && !m.BelongsTo(f.Parent) {
+		return false
+	}
+
+	if f.Unowned && len(m.Owning()) > 0 {
+		return false
+	}
+
+	for key, value := range f.Labels {
+		if carried, ok := m.Labels[key]; !ok || carried != value {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Repository keeps the resources of every kind together, and reads, writes
+// and deletes each kind's apart from the others': what is asked of one kind
+// never reaches another's. A uuid is one resource's, and so is a slug: no two
+// resources share either, whatever their kinds.
+//
+// A listing is newest first.
+type Repository interface {
+	// Create keeps a new resource. One whose uuid or slug another resource
+	// has already, of whatever kind, is domain.ErrAlreadyExists, and one it
+	// cannot keep as it is, ErrUnstorable. It comes back as it is kept:
+	// given a uuid when it had none, at its first version.
+	Create(ctx context.Context, r Record) (Record, error)
+
+	// Update writes a resource back over the version it was read at, and is
+	// the resource at its next version. It is ErrConflict when something
+	// wrote it since, domain.ErrNotExists when it is gone, or was never one
+	// of its kind, domain.ErrAlreadyExists when its slug is another's, and
+	// ErrUnstorable when it cannot be kept as it is.
+	Update(ctx context.Context, r Record) (Record, error)
+
+	// Delete takes away the resource of the kind that uuid names. One that is
+	// not there, as one of the kind, is gone already.
+	Delete(ctx context.Context, kindName string, uuid string) error
+
+	// DeleteAt takes away the resource of the kind that uuid names only at
+	// version, the version it was read at, as Update writes one back only
+	// over that: it is ErrConflict when something wrote it since, and
+	// domain.ErrNotExists when it is gone, or was never one of its kind.
+	DeleteAt(ctx context.Context, kindName string, uuid string, version int64) error
+
+	// GetOne is the resource of the kind that uuid names, or
+	// domain.ErrNotExists.
+	GetOne(ctx context.Context, kindName string, uuid string) (Record, error)
+
+	// GetOneByOwner is GetOne narrowed to one person's own: somebody else's
+	// is not there as far as they are concerned.
+	GetOneByOwner(ctx context.Context, kindName string, ownerUUID string, uuid string) (Record, error)
+
+	// GetOneBySlug is the resource of the kind that slug names, or
+	// domain.ErrNotExists.
+	GetOneBySlug(ctx context.Context, kindName string, slug string) (Record, error)
+
+	// GetAll is a page of the kind's resources that filter lets through,
+	// limit of them from offset on, and how many it lets through in all. A
+	// limit of zero is every one of them from offset on.
+	GetAll(ctx context.Context, kindName string, filter Filter, offset uint, limit uint) ([]Record, uint, error)
+}

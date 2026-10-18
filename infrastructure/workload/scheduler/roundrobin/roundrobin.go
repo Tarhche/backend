@@ -17,11 +17,11 @@ func New() *RoundRobin {
 	}
 }
 
-func (r *RoundRobin) Pick(t *task.Task, candidates []node.Node) node.Node {
+func (r *RoundRobin) Pick(candidates []node.Node) node.Node {
 	var bestNode node.Node
 	var lowestScore float64
 
-	scores := r.score(t, candidates)
+	scores := r.score(candidates)
 
 	for idx, node := range candidates {
 		nodeName := node.Name
@@ -41,9 +41,8 @@ func (r *RoundRobin) Pick(t *task.Task, candidates []node.Node) node.Node {
 	return bestNode
 }
 
-func (r *RoundRobin) score(t *task.Task, nodes []node.Node) map[string]float64 {
+func (r *RoundRobin) score(nodes []node.Node) map[string]float64 {
 	nodeScores := make(map[string]float64)
-	_ = t
 
 	var newNode int
 	if r.lastNode+1 < len(nodes) {

@@ -75,6 +75,10 @@ services:
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
       WORKLOAD_CONTROLPLANE_URL: ${BACKEND_WORKLOAD_CONTROLPLANE_URL}
       WORKLOAD_INGRESS_DOMAIN: ${BACKEND_WORKLOAD_INGRESS_DOMAIN}
+      # what every Docker VM boots from, the same image the control plane and
+      # the vmhosts are given: a VM booting it is shown as a Docker VM, and one
+      # is asked for by it.
+      WORKLOAD_VM_DOCKER_IMAGE: ${BACKEND_WORKLOAD_VM_DOCKER_IMAGE:-docker:29-dind}
 
 networks:
   app:
@@ -88,9 +92,6 @@ networks:
     external: true
   nats:
     name: nats
-    external: true
-  docker:
-    name: docker
     external: true
   monitoring:
     name: monitoring

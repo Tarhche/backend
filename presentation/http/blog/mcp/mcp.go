@@ -50,7 +50,7 @@ The tools you are shown are the ones your session may use: something you cannot 
 
 Articles are kept once per language, and the identity an article keeps across its languages is its correlation uuid: that is what a public listing gives you, and what the dashboard tools ask for alongside a language code.
 
-Tasks and stacks are containers the workload holds. Following a task's output as it is written, and opening a terminal inside one, are streams rather than answers, so they are not here: read what a task has written with the logs tools instead.`
+The workload is VMs, their snapshots, and the containers, images, networks, volumes and stacks inside Docker VMs. A Docker object is named by its VM's uuid and its own id or name. Creating a VM, a snapshot, a container or a stack is always for this session's owner. Sizes are bytes and lifetimes are seconds. Opening a terminal inside a VM is a stream on the workload's ingress rather than an answer, so it is not here.`
 )
 
 // server holds what the tools are and what each of their routes asks of
@@ -269,7 +269,22 @@ var unreachable = map[string]string{
 	"POST /oauth/token":                             "where an application collects a session; it is how a tool call is authorized, not one",
 	"GET /api/oauth/authorization":                  "what the consent page reads to say what is being asked",
 	"POST /api/oauth/authorization":                 "somebody's answer to that question, given in a browser",
+
+	// what the dashboard's delete dialogs read before they ask: a tool's
+	// delete is answered with the same, so an agent reads it there.
+	"GET /api/dashboard/workload/vms/{uuid}/dependents":                   neededFirst,
+	"GET /api/dashboard/my/workload/vms/{uuid}/dependents":                neededFirst,
+	"GET /api/dashboard/workload/vms/{uuid}/networks/{id}/dependents":     neededFirst,
+	"GET /api/dashboard/my/workload/vms/{uuid}/networks/{id}/dependents":  neededFirst,
+	"GET /api/dashboard/workload/vms/{uuid}/volumes/{name}/dependents":    neededFirst,
+	"GET /api/dashboard/my/workload/vms/{uuid}/volumes/{name}/dependents": neededFirst,
 }
+
+// neededFirst is why what needs a VM, a network or a volume is no tool: it is
+// what the dashboard's delete dialog asks before it asks for the delete, and
+// the tools' deletes are answered with what needs what they delete, and take
+// it with them when they are asked to (cascade).
+const neededFirst = "what a delete dialog reads before it asks: a tool's delete is answered with what needs what it deletes, and takes it with it when it is asked to"
 
 // authenticated refuses an MCP request that identifies nobody, and says where
 // to go and be given a session.

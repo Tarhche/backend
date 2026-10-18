@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/core"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/migrations"
 )
 
@@ -52,7 +53,7 @@ func (c *MigrateCommand) Configure(flagSet *console.FlagSet) {}
 
 func (c *MigrateCommand) Providers() []provider.Provider {
 	return []provider.Provider{
-		providers.NewConfigsProvider(),
+		core.NewConfigsProvider(),
 		providers.NewMongodbProvider(),
 		c,
 	}
