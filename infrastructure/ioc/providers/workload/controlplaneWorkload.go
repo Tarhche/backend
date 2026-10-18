@@ -124,9 +124,7 @@ func newBlockStrategies(buildingBlocks blocks.Dependencies) blockStrategies {
 // asking the nodes through natsConnection and sending them commands with
 // producer.
 //
-// It is the serve command's wiring, and what the workload's end-to-end test
-// builds a control plane from, over stores kept in memory: what is tested is
-// what is served.
+// It is the serve command's wiring.
 func NewControlPlaneWorkload(
 	controlPlaneConfigs *configs.WorkloadControlPlane,
 	stores ControlPlaneStores,
