@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stackindex"
 	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 

@@ -3,8 +3,8 @@ package deleteContainer
 import (
 	"context"
 
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
 	"github.com/khanzadimahdi/testproject/domain/translator"
+	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 

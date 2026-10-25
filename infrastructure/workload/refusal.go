@@ -73,7 +73,7 @@ func Of(err error, t translator.Translator) (domain.ValidationErrors, error) {
 	if refused, ok := errors.AsType[*client.ValidationError](err); ok && len(refused.ValidationErrors) > 0 {
 		said := make(domain.ValidationErrors, len(refused.ValidationErrors))
 		for field, reason := range refused.ValidationErrors {
-			said[field] = Say(t, field, reason)
+			said[field] = say(t, field, reason)
 		}
 
 		return said, nil
@@ -84,7 +84,7 @@ func Of(err error, t translator.Translator) (domain.ValidationErrors, error) {
 			continue
 		}
 
-		said := Say(t, reason.field, reason.code)
+		said := say(t, reason.field, reason.code)
 		if node, ok := errors.AsType[*noderequest.Error](err); ok && reason.detailed && len(node.Message) > 0 {
 			said += ": " + node.Message
 		}
@@ -107,7 +107,7 @@ var bounds = map[string][]func(*translator.Params){
 // (bounds). A reason there are no words for is kept as it was given: the
 // control plane may already have put it in words, and an empty message would
 // say less than its own.
-func Say(t translator.Translator, field string, reason string) string {
+func say(t translator.Translator, field string, reason string) string {
 	options := append([]func(*translator.Params){translator.WithAttribute("field", field)}, bounds[reason]...)
 
 	if said := t.Translate(reason, options...); len(said) > 0 {
