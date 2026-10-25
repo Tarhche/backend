@@ -1,16 +1,4 @@
-// Package refusal reads what the workload refused out of the error it answered
-// with, so a use case can hand it back the way it hands back its own
-// validation: field by field, in the reader's language.
-//
-// The workload says no in two ways. The control plane refuses a request it
-// would not take with codes by field — a quota, a bound, a Docker VM to choose
-// — which it checks itself, since it is the one holding what they are checked
-// against. A node refuses what it was asked about a VM it holds: a VM that is
-// not running, one that is not a Docker VM, a dockerd that did not come up, a
-// request dockerd itself turned down. Both are answers to the request rather
-// than failures to answer it, so neither is an error by the time it leaves
-// here.
-package refusal
+package workload
 
 import (
 	"errors"
@@ -59,13 +47,13 @@ var reasons = []struct {
 	{err: docker.ErrInvalid, field: FieldDocker, code: string(noderequest.CodeInvalid), detailed: true},
 }
 
-// Of tells a refusal apart from a failure.
+// RefusalOf tells a refusal apart from a failure.
 //
 // What the workload refused comes back as the fields it refused and why, each
 // reason translated; err is nil then. Anything else comes back as it was: nil
 // for nil, and domain.ErrNotExists, a timeout or a failure to reach the
 // workload as the error it is, for the caller to answer as such.
-func Of(err error, t translator.Translator) (domain.ValidationErrors, error) {
+func RefusalOf(err error, t translator.Translator) (domain.ValidationErrors, error) {
 	if err == nil {
 		return nil, nil
 	}

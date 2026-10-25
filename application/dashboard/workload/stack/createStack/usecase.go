@@ -6,7 +6,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
@@ -50,7 +50,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		VM:      input.DockerVMChoice(request.VMUUID, request.VM),
 	})
 
-	refused, err := refusal.Of(err, uc.translator)
+	refused, err := workload.RefusalOf(err, uc.translator)
 	switch {
 	case err != nil:
 		return nil, err

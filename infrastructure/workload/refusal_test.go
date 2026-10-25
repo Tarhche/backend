@@ -1,4 +1,4 @@
-package refusal
+package workload
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/resources/translation"
 )
 
-func TestOf(t *testing.T) {
+func TestRefusalOf(t *testing.T) {
 	t.Parallel()
 
 	unreachable := errors.New("the workload is unreachable")
@@ -154,7 +154,7 @@ func TestOf(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			refused, err := Of(tt.err, translator.New(translation.Translations, tt.locale))
+			refused, err := RefusalOf(tt.err, translator.New(translation.Translations, tt.locale))
 
 			assert.Equal(t, tt.refused, refused)
 

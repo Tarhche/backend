@@ -7,7 +7,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
@@ -45,7 +45,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	updated, err := uc.workload.UpdateVM(ctx, request.OwnerUUID, request.UUID, update(request))
 
-	refused, err := refusal.Of(err, uc.translator)
+	refused, err := workload.RefusalOf(err, uc.translator)
 	switch {
 	case err != nil:
 		return nil, err

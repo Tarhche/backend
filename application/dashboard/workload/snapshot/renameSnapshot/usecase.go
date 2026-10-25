@@ -6,7 +6,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
@@ -39,7 +39,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	renamed, err := uc.workload.RenameSnapshot(ctx, request.OwnerUUID, request.UUID, request.Name)
 
-	refused, err := refusal.Of(err, uc.translator)
+	refused, err := workload.RefusalOf(err, uc.translator)
 	switch {
 	case err != nil:
 		return nil, err

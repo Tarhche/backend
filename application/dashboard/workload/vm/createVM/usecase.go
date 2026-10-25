@@ -7,7 +7,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
@@ -56,7 +56,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		SnapshotUUID:   request.SnapshotUUID,
 	})
 
-	refused, err := refusal.Of(err, uc.translator)
+	refused, err := workload.RefusalOf(err, uc.translator)
 	switch {
 	case err != nil:
 		return nil, err

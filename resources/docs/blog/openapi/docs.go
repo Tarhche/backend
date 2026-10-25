@@ -11191,7 +11191,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "stack": {
-                    "description": "Stack and StackUUID are the slug and the uuid of the stack whose graph\nmade it, when the request could see that stack: whoever knows which\nstacks it could see says them (stackindex), and a stack's detail says\nits own. Service is the service of the stack's file it is, as its\nlabels say.",
+                    "description": "Stack and StackUUID are the slug and the uuid of the stack whose graph\nmade it, when the request could see that stack: whoever knows which\nstacks it could see says them (workload.StackIndexOf), and a stack's\ndetail says its own. Service is the service of the stack's file it is,\nas its labels say.",
                     "type": "string"
                 },
                 "stack_uuid": {
@@ -11728,7 +11728,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "stack": {
-                    "description": "Stack and StackUUID are the slug and the uuid of the stack whose graph\nmade it, when the request could see that stack: whoever knows which\nstacks it could see says them (stackindex), and a stack's detail says\nits own. Service is the service of the stack's file it is, as its\nlabels say.",
+                    "description": "Stack and StackUUID are the slug and the uuid of the stack whose graph\nmade it, when the request could see that stack: whoever knows which\nstacks it could see says them (workload.StackIndexOf), and a stack's\ndetail says its own. Service is the service of the stack's file it is,\nas its labels say.",
                     "type": "string"
                 },
                 "stack_uuid": {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
@@ -28,7 +28,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return &Response{ValidationErrors: validationErrors}, nil
 	}
 
-	refused, err := refusal.Of(
+	refused, err := workload.RefusalOf(
 		uc.workload.RestoreVM(ctx, request.OwnerUUID, request.UUID, request.SnapshotUUID),
 		uc.translator,
 	)

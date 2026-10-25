@@ -26,9 +26,9 @@ type Container struct {
 
 	// Stack and StackUUID are the slug and the uuid of the stack whose graph
 	// made it, when the request could see that stack: whoever knows which
-	// stacks it could see says them (stackindex), and a stack's detail says
-	// its own. Service is the service of the stack's file it is, as its
-	// labels say.
+	// stacks it could see says them (workload.StackIndexOf), and a stack's
+	// detail says its own. Service is the service of the stack's file it is,
+	// as its labels say.
 	Stack     string `json:"stack,omitempty"`
 	StackUUID string `json:"stack_uuid,omitempty"`
 	Service   string `json:"service,omitempty"`

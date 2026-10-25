@@ -5,7 +5,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
@@ -25,7 +25,7 @@ func NewUseCase(workload workloadControlPlane.Client, translator translator.Tran
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	deleted, err := uc.workload.DeleteVolume(ctx, request.OwnerUUID, request.VMUUID, request.Name, request.Force, request.Cascade)
 
-	refused, err := refusal.Of(err, uc.translator)
+	refused, err := workload.RefusalOf(err, uc.translator)
 	if err != nil {
 		return nil, err
 	}

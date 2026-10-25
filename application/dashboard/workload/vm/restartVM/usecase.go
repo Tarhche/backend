@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
@@ -19,7 +19,7 @@ func NewUseCase(workload workloadControlPlane.Client, translator translator.Tran
 }
 
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
-	refused, err := refusal.Of(uc.workload.RestartVM(ctx, request.OwnerUUID, request.UUID), uc.translator)
+	refused, err := workload.RefusalOf(uc.workload.RestartVM(ctx, request.OwnerUUID, request.UUID), uc.translator)
 	if err != nil {
 		return nil, err
 	}

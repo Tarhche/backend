@@ -1,4 +1,4 @@
-package stackindex
+package workload
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func page(current uint, total uint, slugs ...string) workloadControlPlane.Page[s
 	return workloadControlPlane.Page[stack.Stack]{Items: items, CurrentPage: current, TotalPages: total}
 }
 
-func TestOf(t *testing.T) {
+func TestStackIndexOf(t *testing.T) {
 	t.Parallel()
 
 	t.Run("every page of the stacks the containers were listed beside", func(t *testing.T) {
@@ -35,9 +35,9 @@ func TestOf(t *testing.T) {
 		workload.On("Stacks", mock.Anything, workloadtest.OwnerUUID, "vm-uuid", uint(2)).Once().Return(page(2, 2, "blog"), nil)
 		defer workload.AssertExpectations(t)
 
-		index := Of(context.Background(), &workload, workloadtest.OwnerUUID, "vm-uuid")
+		index := StackIndexOf(context.Background(), &workload, workloadtest.OwnerUUID, "vm-uuid")
 
-		assert.Equal(t, Index{"shop-uuid": "shop", "blog-uuid": "blog"}, index)
+		assert.Equal(t, StackIndex{"shop-uuid": "shop", "blog-uuid": "blog"}, index)
 	})
 
 	t.Run("no more than so many pages for one request", func(t *testing.T) {
@@ -47,7 +47,7 @@ func TestOf(t *testing.T) {
 		workload.On("Stacks", mock.Anything, "", "", mock.Anything).Times(maxPages).Return(page(1, 1000, "shop"), nil)
 		defer workload.AssertExpectations(t)
 
-		assert.Equal(t, Index{"shop-uuid": "shop"}, Of(context.Background(), &workload, "", ""))
+		assert.Equal(t, StackIndex{"shop-uuid": "shop"}, StackIndexOf(context.Background(), &workload, "", ""))
 	})
 
 	t.Run("a listing that cannot be read is an index of nothing, not a failure", func(t *testing.T) {
@@ -57,11 +57,11 @@ func TestOf(t *testing.T) {
 		workload.On("Stacks", mock.Anything, "", "vm-uuid", uint(1)).Once().Return(workloadControlPlane.Page[stack.Stack]{}, workloadtest.ErrUnreachable)
 		defer workload.AssertExpectations(t)
 
-		assert.Empty(t, Of(context.Background(), &workload, "", "vm-uuid"))
+		assert.Empty(t, StackIndexOf(context.Background(), &workload, "", "vm-uuid"))
 	})
 }
 
-func TestIndex_Link(t *testing.T) {
+func TestStackIndex_NameStacks(t *testing.T) {
 	t.Parallel()
 
 	// labelled as the platform labels a stack's container, its stack's uuid
@@ -78,7 +78,7 @@ func TestIndex_Link(t *testing.T) {
 
 	presented := presenter.NewContainers(containers)
 
-	Index{"shop-uuid": "shop"}.Link(presented, containers)
+	StackIndex{"shop-uuid": "shop"}.NameStacks(presented, containers)
 
 	assert.Equal(t, "shop", presented[0].Stack, "named by its slug")
 	assert.Equal(t, "shop-uuid", presented[0].StackUUID, "and its uuid")
@@ -96,17 +96,17 @@ func TestIndex_Link(t *testing.T) {
 	assert.Equal(t, labelled("unseen-uuid"), containers[2].Labels, "and what it was read as is left as it was")
 }
 
-func TestIndex_Name(t *testing.T) {
+func TestStackIndex_NameStack(t *testing.T) {
 	t.Parallel()
 
-	index := Index{"shop-uuid": "shop"}
+	index := StackIndex{"shop-uuid": "shop"}
 
 	var one presenter.Container
-	index.Name(&one, "shop-uuid")
+	index.NameStack(&one, "shop-uuid")
 	assert.Equal(t, presenter.Container{Stack: "shop", StackUUID: "shop-uuid"}, one)
 
 	var none presenter.Container
-	index.Name(&none, "")
-	index.Name(&none, "unseen-uuid")
+	index.NameStack(&none, "")
+	index.NameStack(&none, "unseen-uuid")
 	assert.Equal(t, presenter.Container{}, none, "what no stack it can see made is left as it was")
 }

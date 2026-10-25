@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
@@ -20,7 +20,7 @@ func NewUseCase(workload workloadControlPlane.Client, translator translator.Tran
 }
 
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
-	refused, err := refusal.Of(
+	refused, err := workload.RefusalOf(
 		uc.workload.Docker(request.OwnerUUID, request.VMUUID).StopContainer(ctx, request.ID),
 		uc.translator,
 	)

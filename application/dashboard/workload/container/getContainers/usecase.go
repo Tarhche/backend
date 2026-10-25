@@ -4,9 +4,8 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stackindex"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
@@ -26,7 +25,7 @@ func NewUseCase(workload workloadControlPlane.Client, translator translator.Tran
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	containers, err := uc.workload.Containers(ctx, request.OwnerUUID, request.VMUUID)
 
-	refused, err := refusal.Of(err, uc.translator)
+	refused, err := workload.RefusalOf(err, uc.translator)
 	switch {
 	case err != nil:
 		return nil, err
@@ -36,9 +35,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	items := presenter.NewVMContainers(containers)
 
-	index := stackindex.Of(ctx, uc.workload, request.OwnerUUID, request.VMUUID)
+	index := workload.StackIndexOf(ctx, uc.workload, request.OwnerUUID, request.VMUUID)
 	for i := range items {
-		index.Name(&items[i].Container, containers[i].Stack)
+		index.NameStack(&items[i].Container, containers[i].Stack)
 	}
 
 	return &Response{Items: items}, nil

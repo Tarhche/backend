@@ -4,9 +4,8 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stackindex"
 	"github.com/khanzadimahdi/testproject/domain/translator"
-	refusal "github.com/khanzadimahdi/testproject/infrastructure/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
@@ -24,7 +23,7 @@ func NewUseCase(workload workloadControlPlane.Client, translator translator.Tran
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	container, err := uc.workload.Docker(request.OwnerUUID, request.VMUUID).Container(ctx, request.ID)
 
-	refused, err := refusal.Of(err, uc.translator)
+	refused, err := workload.RefusalOf(err, uc.translator)
 	switch {
 	case err != nil:
 		return nil, err
@@ -34,7 +33,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	presented := presenter.NewContainer(container)
 	if len(container.Stack) > 0 {
-		stackindex.Of(ctx, uc.workload, request.OwnerUUID, request.VMUUID).Name(&presented, container.Stack)
+		workload.StackIndexOf(ctx, uc.workload, request.OwnerUUID, request.VMUUID).NameStack(&presented, container.Stack)
 	}
 
 	return &Response{Container: &presented}, nil
