@@ -1,13 +1,27 @@
+LIMA_VM ?= workload
+LIMA_TEMPLATE ?= scripts/lima/workload.yaml
+
+ifeq ($(shell uname -s),Darwin)
+compose-vms = limactl shell --workdir "$(CURDIR)" $(LIMA_VM) docker compose --profile vms
+lima-status = $$(limactl list --format '{{.Status}}' $(LIMA_VM) 2>/dev/null)
+lima-exists = [ -n "$(lima-status)" ]
+lima-running = [ "$(lima-status)" = Running ]
+lima-up = if $(lima-running); then :; elif $(lima-exists); then limactl start --tty=false $(LIMA_VM); \
+	else limactl start --tty=false --name=$(LIMA_VM) $(LIMA_TEMPLATE); fi
+lima-stop = limactl stop $(LIMA_VM)
+else
+compose-vms = docker compose --profile vms
+lima-exists = true
+lima-running = true
+lima-up = :
+lima-stop = :
+endif
+
 ps:
 	docker compose ps
 
 up:
 	docker compose up --build -d
-
-# the stack with VMs: a vmhost beside each orchestrator, which needs /dev/kvm,
-# so Linux, or Lima on a Mac (CLAUDE.md, "VMs locally").
-up-vms:
-	docker compose --profile vms up --build -d
 
 down:
 	docker compose --profile vms down --remove-orphans --volumes
@@ -29,6 +43,38 @@ sh-%:
 
 logs-%:
 	docker compose logs -f $*
+
+ps-vms:
+	$(compose-vms) ps
+
+up-vms:
+	@$(lima-up)
+	$(compose-vms) up --build -d
+
+# a VM that is not there has nothing to take down.
+down-vms:
+	@if $(lima-exists); then $(lima-up) && $(compose-vms) down --remove-orphans --volumes && $(lima-stop); fi
+
+stop-vms:
+	@if $(lima-running); then $(compose-vms) stop && $(lima-stop); fi
+
+start-vms:
+	@$(lima-up)
+	$(compose-vms) start
+
+restart-vms:
+	@$(lima-up)
+	$(compose-vms) restart
+
+restart-vms-%:
+	@$(lima-up)
+	$(compose-vms) restart $*
+
+sh-vms-%:
+	$(compose-vms) exec -it $* sh
+
+logs-vms-%:
+	$(compose-vms) logs -f $*
 
 generate:
 	docker compose exec -it app go generate
@@ -62,4 +108,6 @@ certs-env:
 test-vmhost-integration:
 	./scripts/vmhost-integration.sh
 
-.PHONY: ps up up-vms down restart restart-% sh-% logs-% certs certs-env test-vmhost-integration
+.PHONY: ps up down stop start restart restart-% sh-% logs-% \
+	ps-vms up-vms down-vms stop-vms start-vms restart-vms restart-vms-% sh-vms-% logs-vms-% \
+	certs certs-env test-vmhost-integration

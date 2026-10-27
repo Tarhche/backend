@@ -7,10 +7,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 # Run the full local stack (app + mongodb + rustfs (S3 file storage) + nats + grafana + workload services)
 make up            # docker compose up --build -d
-make up-vms        # the same, plus a vmhost beside each orchestrator: needs /dev/kvm (see "VMs locally")
 make down          # tears down containers AND volumes
 make logs-app      # follow logs of a service (logs-<service>)
 make sh-app        # shell into a service (sh-<service>)
+
+# The same with VMs: a vmhost beside each orchestrator, which needs /dev/kvm. On a Mac it all runs in a
+# Lima VM, LIMA_VM (`workload`), which the targets that bring the stack up make and start (see "VMs locally")
+make up-vms        # the Lima VM made and started on a Mac, then docker compose --profile vms up --build -d (in it)
+make down-vms      # tears down its containers AND volumes, and then stops the Lima VM, if there is one
+make stop-vms      # stops its containers, and then the Lima VM; start-vms starts both
+# ps-vms, restart-vms, restart-vms-<service>, logs-vms-<service>, sh-vms-<service>: as without VMs
 
 # Tests (same as CI)
 go test ./... -race -cover
@@ -138,14 +144,16 @@ microsandbox has no server of its own, and its cgo SDK may be held by one proces
 
 ### VMs locally
 
-VMs run on KVM, which a Mac does not have, so on a Mac `make up` runs everything but the vmhosts (they are behind the compose profile `vms`): the orchestrators start, and every VM fails saying its vmhost is not answering. For the whole stack, VMs included, run it inside Lima, a Linux VM with nested virtualization (Apple M3 or newer, macOS 15 or newer):
+VMs run on KVM, which a Mac does not have, so on a Mac `make up` runs everything but the vmhosts (they are behind the compose profile `vms`): the orchestrators start, and every VM fails saying its vmhost is not answering. For the whole stack, VMs included, the `-vms` targets run it inside Lima, a Linux VM with nested virtualization (Apple M3 or newer, macOS 15 or newer), from the Mac:
 
 ```sh
-limactl start --name=workload scripts/lima/workload.yaml   # Ubuntu 24.04, Docker, /dev/kvm; the home directory mounted at the same path
-limactl shell workload -- stat -c %g /dev/kvm              # what .env's WORKLOAD_KVM_GID has to be
-limactl shell --workdir "$PWD" workload make up-vms        # the stack, a vmhost beside each orchestrator
-limactl shell --workdir "$PWD" workload make test-vmhost-integration
+make up-vms                                     # makes the Lima VM workload from scripts/lima/workload.yaml when there is none (Ubuntu 24.04, Docker, /dev/kvm; the home directory mounted at the same path), starts it, and brings the stack up in it, from this directory
+limactl shell workload -- stat -c %g /dev/kvm   # what .env's WORKLOAD_KVM_GID has to be (993, compose's default, with this template)
+make down-vms                                   # the stack down, volumes too, and the Lima VM stopped
+limactl shell --workdir "$PWD" workload ./scripts/vmhost-integration.sh   # the engine's KVM tests; the VM has no make
 ```
+
+`LIMA_VM` names another Lima VM (`make up-vms LIMA_VM=...`), and `LIMA_TEMPLATE` another template to make it from.
 
 Lima forwards every port the stack publishes to the Mac's localhost, so it is reached as `make up` is: the blog on http://localhost:8000, Grafana on :3001, the ingress on :8030. Its Docker can be driven from the Mac too: `docker context create lima-workload --docker "host=unix://$HOME/.lima/workload/sock/docker.sock"`, then `docker --context lima-workload compose --profile vms ...`.
 

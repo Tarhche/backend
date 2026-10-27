@@ -76,5 +76,5 @@ portForwards:
 message: |
   Docker and /dev/kvm are ready. The gid WORKLOAD_KVM_GID in .env has to be:
     limactl shell {{.Name}} -- stat -c %g /dev/kvm
-  Then, from the repository:
-    limactl shell --workdir "$PWD" {{.Name}} make up-vms
+  Then, from the repository, on the Mac:
+    make up-vms LIMA_VM={{.Name}}
