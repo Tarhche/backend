@@ -3,8 +3,8 @@
 # of the SDK go.mod requires: an SDK and an msb of different releases break
 # the database they share under MSB_HOME, so both are bumped in one change,
 # and the engine's Version with them.
-ARG MICROSANDBOX_VERSION=0.7.8
-ARG MICROSANDBOX_DIGEST=sha256:dec861ef248558e773273aff90c37c9f683be8b0deb305e9a91407d112b5d527
+ARG MICROSANDBOX_VERSION=0.7.11
+ARG MICROSANDBOX_DIGEST=sha256:f5f27f0e2e3ff8abcc5ac30d2486d421ef3aa28f11c34ba93108e9463e90e247
 # the guest kernel library that release ships, the same on amd64 and arm64
 ARG MICROSANDBOX_LIBKRUNFW=libkrunfw.so.5.6.1
 

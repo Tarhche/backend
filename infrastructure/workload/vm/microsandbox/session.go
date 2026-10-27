@@ -250,13 +250,20 @@ func (s *session) Wait(ctx context.Context) (int, error) {
 
 // Close ends the command, if it is still running, and lets go of whoever is
 // waiting on its streams.
+//
+// A command still running is killed before its input is closed. microsandbox,
+// as of 0.7.11, takes a command's input in only as fast as the command reads
+// it, and the end of it only after what was written before (#1839), so a
+// write to a command that reads none of it waits for room, and closing the
+// input would wait behind that write for good, the kill behind it, and every
+// stop and delete of the VM behind them. A kill is never held up by input,
+// and once the command is gone, the write is refused and the input closes at
+// once.
 func (s *session) Close() error {
 	s.closing.Do(func() {
 		s.lock.Lock()
 		s.closed = true
 		s.lock.Unlock()
-
-		_ = s.stdin.Close()
 
 		select {
 		case <-s.done:
@@ -265,6 +272,8 @@ func (s *session) Close() error {
 			_ = s.handle.Kill(ctx)
 			cancel()
 		}
+
+		_ = s.stdin.Close()
 
 		_ = s.stdoutReader.CloseWithError(errSessionClosed)
 		if reader, ok := s.stderrReader.(*io.PipeReader); ok {

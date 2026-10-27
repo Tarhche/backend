@@ -19,7 +19,7 @@ const (
 
 	// managedRestoreFloor is the least disk, in bytes, a VM restored from a
 	// snapshot of a managed root disk is given, so that its disk is the one
-	// it is given: 5 GiB. microsandbox, as of 0.7.8, records a managed disk
+	// it is given: 5 GiB. microsandbox, as of 0.7.11, records a managed disk
 	// it restores as 4 GiB, its default, whatever the disk was, and grows it
 	// only to more than that: less is refused as a shrink, and 4 GiB itself
 	// as no change. Its guest then grows ext4 into a last 128 MiB block group

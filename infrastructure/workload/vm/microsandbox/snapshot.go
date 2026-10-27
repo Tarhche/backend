@@ -493,14 +493,14 @@ func newSnapshotName() string {
 
 // Reconfigure gives an instance the ports, network and resources a spec says.
 //
-// microsandbox, as of 0.7.8, changes neither the ports nor the network of a
-// sandbox that exists (#1538), so a VM with a persistent disk is stopped, its
-// disk snapshotted, its sandbox removed and restored from the snapshot under
-// the same name with the new ones, its resources with them; one that was not
-// running is stopped again. Any other instance is made afresh from its image
-// on every boot anyway, so a running one is booted again with the new ones,
-// and one that is down takes them when it boots. A spec that changes nothing
-// changes nothing.
+// microsandbox, as of 0.7.11, changes the network of a sandbox that exists in
+// no way (#1538), and its ports only when it next starts (#1789), so a VM
+// with a persistent disk is stopped, its disk snapshotted, its sandbox
+// removed and restored from the snapshot under the same name with the new
+// ones, its resources with them; one that was not running is stopped again.
+// Any other instance is made afresh from its image on every boot anyway, so a
+// running one is booted again with the new ones, and one that is down takes
+// them when it boots. A spec that changes nothing changes nothing.
 func (e *engine) Reconfigure(ctx context.Context, spec vm.Spec) (vm.Instance, error) {
 	i, err := e.get(spec.ID)
 	if err != nil {

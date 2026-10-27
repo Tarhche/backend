@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
+
+	"golang.org/x/mod/semver"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
@@ -14,16 +17,36 @@ import (
 // Version is the microsandbox release the SDK in go.mod belongs to, and the
 // image the vmhost runs on is that release's too: an SDK and a runtime of
 // different releases break the database they share under MSB_HOME. An archive
-// is read back only by the release that wrote it, since nothing promises that
-// another release loads it.
+// is read back by the release that wrote it and by every later one
+// (readable).
 const (
 	Name    = "microsandbox"
-	Version = "0.7.8"
+	Version = "0.7.11"
 )
 
 // archiveEngine is what an archive this engine writes says wrote it.
 func archiveEngine() string {
 	return Name + "/" + Version
+}
+
+// readable reports whether an archive engine wrote is one this engine loads:
+// one microsandbox saved, as this release or an earlier one.
+//
+// A later release of microsandbox reads what an earlier one saved, its
+// snapshots and its archives: that is one of the directions its compatibility
+// map (COMPATIBILITY.md) holds every change to, and what it cannot read after
+// all, it refuses as it loads it. An earlier release is held to nothing of
+// what a later one saved, so an archive a later release wrote is refused here,
+// before anything of it is loaded.
+func readable(engine string) bool {
+	name, release, ok := strings.Cut(engine, "/")
+	if !ok || name != Name {
+		return false
+	}
+
+	written := "v" + release
+
+	return semver.IsValid(written) && semver.Compare(written, "v"+Version) <= 0
 }
 
 // archiveHeader is the line an archive starts with: what wrote it and what it
@@ -82,9 +105,9 @@ func writeHeader(w io.Writer, header archiveHeader) (int64, error) {
 // readHeader reads the line an archive starts with and hands back the rest of
 // the stream, which is what microsandbox saved.
 //
-// An archive another engine wrote, or anything that is not an archive at all,
-// is refused with vm.ErrEngineMismatch: either way it is not one this engine
-// can load.
+// An archive another engine wrote, or a later release of this one, and
+// anything that is not an archive at all, is refused with vm.ErrEngineMismatch:
+// none of them is one this engine can load.
 func readHeader(r io.Reader) (archiveHeader, io.Reader, error) {
 	decoder := json.NewDecoder(r)
 
@@ -93,7 +116,7 @@ func readHeader(r io.Reader) (archiveHeader, io.Reader, error) {
 		return archiveHeader{}, nil, fmt.Errorf("%w: %w", vm.ErrEngineMismatch, err)
 	}
 
-	if engine != archiveEngine() {
+	if !readable(engine) {
 		return archiveHeader{}, nil, fmt.Errorf("%w: written by %q, and this is %q", vm.ErrEngineMismatch, engine, archiveEngine())
 	}
 

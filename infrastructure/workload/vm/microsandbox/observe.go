@@ -43,7 +43,7 @@ type diskSample struct {
 // A flat root disk does not say how much of it is used, so a VM's disk is
 // measured from inside it every few minutes; what the host has allocated to
 // it, which never shrinks, stands in until then. An instance with a main
-// process, a code runner's run, has a managed disk, which microsandbox 0.7.8
+// process, a code runner's run, has a managed disk, which microsandbox 0.7.11
 // says nothing of, and nothing is exec'd into it but what it was asked to
 // run: what its sandbox has allocated on the host for it stands in, measured
 // from the host every few seconds, and never shrinks either.

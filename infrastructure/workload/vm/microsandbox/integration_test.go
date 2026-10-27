@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -457,6 +458,57 @@ func TestPTY(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NoError(t, session.Close())
+
+		waiting, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+
+		code, err := session.Wait(waiting)
+		require.NoError(t, err)
+		assert.Equal(t, -1, code, "it was killed")
+		assert.Equal(t, "", runOK(t, e, spec.ID, "pgrep -x sleep || true"))
+	})
+
+	t.Run("closing a session ends a command that reads none of its input, a write to it waiting meanwhile", func(t *testing.T) {
+		session, err := e.Exec(ctx, spec.ID, vm.ExecOptions{Command: []string{"sleep", "600"}})
+		require.NoError(t, err)
+
+		// microsandbox, as of 0.7.11, takes a command's input in only as
+		// fast as the command reads it (#1839), and sleep reads none of it:
+		// the write waits for room, which held up closing the session for
+		// good, and stopping or removing its VM with it, while the session
+		// closed the command's input before killing it.
+		var returned atomic.Bool
+		written := make(chan error, 1)
+
+		go func() {
+			_, err := session.Stdin().Write(make([]byte, 1<<20))
+			returned.Store(true)
+			written <- err
+		}()
+
+		// long enough for the write to fill whatever room there is.
+		time.Sleep(2 * time.Second)
+		t.Logf("the write is waiting for room: %t", !returned.Load())
+
+		closed := make(chan struct{})
+
+		go func() {
+			_ = session.Close()
+			close(closed)
+		}()
+
+		select {
+		case <-closed:
+		case <-time.After(30 * time.Second):
+			t.Fatal("closing the session waits on the write")
+		}
+
+		select {
+		case err := <-written:
+			t.Logf("the write ended with %v", err)
+		case <-time.After(15 * time.Second):
+			t.Fatal("the write is never let go of")
+		}
 
 		waiting, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
@@ -957,7 +1009,7 @@ func TestCodeRunner(t *testing.T) {
 		assert.GreaterOrEqual(t, rootMiB(t, e, kept.ID), int(kept.Resources.Disk>>20)*9/10, "its disk is the one it was restored with, grown past the run's")
 
 		// a run's disk is a managed layer over its image, which microsandbox,
-		// as of 0.7.8, records as 4 GiB once it is restored, whatever it was,
+		// as of 0.7.11, records as 4 GiB once it is restored, whatever it was,
 		// and grows only to 4 GiB and 3 MiB or more. So the snapshot says a
 		// restore needs the next whole GiB, 5 GiB, which the control plane
 		// holds a VM made from it, or restored onto with it, to, and it is the
@@ -1088,7 +1140,7 @@ setInterval(tick, 2000);`}
 	// a running snippet's VM is sampled as any VM is, through its runtime,
 	// which is how the dashboard shows what one of the code runner's runs
 	// uses: its CPU, its memory, and its disk. Nothing but its snippet runs in
-	// it, so its disk is not measured from inside it, and microsandbox 0.7.8
+	// it, so its disk is not measured from inside it, and microsandbox 0.7.11
 	// says nothing of a run's managed layer: what its sandbox has allocated on
 	// the host for it is what of it is used, measured from the host every few
 	// seconds (hostDiskEvery), and what the snippet prints, which is kept

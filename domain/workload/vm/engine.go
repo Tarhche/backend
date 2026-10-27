@@ -52,7 +52,8 @@ type Engine interface {
 	Snapshot(ctx context.Context, id string, archive io.Writer) (Archive, error)
 
 	// Restore replaces the instance spec.ID names, or creates it, from an
-	// archive Snapshot wrote. An archive from another engine is refused with
+	// archive Snapshot wrote. An archive from another engine, or from a
+	// version of this one it does not read, is refused with
 	// ErrEngineMismatch.
 	Restore(ctx context.Context, spec Spec, archive io.Reader) (Instance, error)
 }
@@ -227,7 +228,8 @@ type ExecSession interface {
 // Archive describes what Snapshot wrote.
 type Archive struct {
 	// Engine is the engine and version that wrote it, such as
-	// "microsandbox/0.7.8". A restore needs the same engine.
+	// "microsandbox/0.7.11". A restore needs the same engine, of a version
+	// that reads it, which is the engine's to say.
 	Engine string
 
 	// Image is what the instance boots from, and Kind what the engine booted

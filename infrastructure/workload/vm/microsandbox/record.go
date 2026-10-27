@@ -19,7 +19,7 @@ import (
 // keeps of its sandbox.
 //
 // microsandbox's own record of a sandbox cannot answer for an instance: as of
-// 0.7.8, a restore drops the labels, the environment and the init it was made
+// 0.7.11, a restore drops the labels, the environment and the init it was made
 // with, and the ports a sandbox publishes are never reported back (#1676). So
 // the spec an instance was last given, the host ports it was given and what
 // became of its main process are kept here, and are the truth for all of

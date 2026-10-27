@@ -2,15 +2,18 @@
 # The vmhost image's entrypoint: it runs first, and then becomes what it was
 # given to run.
 #
-# microsandbox, as of 0.7.8, takes a VM to be running for as long as
-# kill(pid, 0) succeeds on the PID its last run recorded, whoever holds that
-# PID now (#1642). A container that starts again hands out the same PIDs in
-# the same order, so a stale run's PID soon belongs to some other process, or
-# to a thread of the vmhost itself, and starting that VM waits for it to go
-# away, for up to half an hour. So before the vmhost loads microsandbox, this
-# container's PID counter is moved past every PID microsandbox has recorded,
-# by forking until it is. Remove it once microsandbox checks that a PID is
-# still its own (#1685).
+# microsandbox, as of 0.7.11, takes a VM's last run to be alive for as long as
+# kill(pid, 0) succeeds on the PID it recorded, whoever holds that PID now
+# (#1642). A container that starts again hands out the same PIDs in the same
+# order, so a stale run's PID soon belongs to some other process, or to a
+# thread of the vmhost itself. Starting that VM is then refused after 5 s, for
+# as long as the PID is held; a VM whose run died with its container is said
+# to be running still, and killing it SIGKILLs whoever holds the PID. So
+# before the vmhost loads microsandbox, this container's PID counter is moved
+# past every PID microsandbox has recorded, by forking until it is. Remove it
+# once microsandbox checks that a PID is still its own wherever it reads one:
+# #1685 does so for a kill, a drain and a replace, not for a start or a
+# sandbox's status.
 set -euo pipefail
 
 db="${MSB_HOME:-/data/msb}/db/msb.db"

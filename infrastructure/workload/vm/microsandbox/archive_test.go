@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -31,7 +32,7 @@ func TestArchiveHeader(t *testing.T) {
 
 		header, rest, err := readHeader(&archive)
 		require.NoError(t, err)
-		assert.Equal(t, archiveHeader{Engine: "microsandbox/0.7.8", Kind: vm.KindDocker, Image: "docker:29-dind", Disk: 4 << 30}, header)
+		assert.Equal(t, archiveHeader{Engine: "microsandbox/" + Version, Kind: vm.KindDocker, Image: "docker:29-dind", Disk: 4 << 30}, header)
 
 		read, err := io.ReadAll(rest)
 		require.NoError(t, err)
@@ -87,11 +88,47 @@ func TestArchiveHeader(t *testing.T) {
 		assert.ErrorContains(t, err, `"memory/1"`)
 	})
 
-	t.Run("another release of this engine is refused", func(t *testing.T) {
+	t.Run("an archive an earlier release of this engine wrote is read, as one this release wrote is", func(t *testing.T) {
 		t.Parallel()
 
-		_, _, err := readHeader(strings.NewReader(`{"engine":"microsandbox/0.7.6","kind":"machine"}` + "\n"))
-		assert.ErrorIs(t, err, vm.ErrEngineMismatch)
+		// 0.7.9 is earlier than 0.7.11, which a comparison of their text
+		// would not say.
+		for _, engine := range []string{"microsandbox/0.7.6", "microsandbox/0.7.8", "microsandbox/0.7.9", "microsandbox/" + Version} {
+			header, rest, err := readHeader(strings.NewReader(`{"engine":"` + engine + `","kind":"machine","disk":1073741824}` + "\nrest"))
+			require.NoError(t, err, engine)
+			assert.Equal(t, archiveHeader{Engine: engine, Kind: vm.KindMachine, Disk: 1 << 30}, header, engine)
+
+			read, err := io.ReadAll(rest)
+			require.NoError(t, err)
+			assert.Equal(t, "rest", string(read), engine)
+		}
+	})
+
+	t.Run("an archive a later release of this engine wrote is refused", func(t *testing.T) {
+		t.Parallel()
+
+		release := strings.Split(Version, ".")
+		require.Len(t, release, 3)
+
+		patch, err := strconv.Atoi(release[2])
+		require.NoError(t, err)
+
+		nextPatch := release[0] + "." + release[1] + "." + strconv.Itoa(patch+1)
+
+		for _, engine := range []string{"microsandbox/" + nextPatch, "microsandbox/99.0.0"} {
+			_, _, err := readHeader(strings.NewReader(`{"engine":"` + engine + `","kind":"machine"}` + "\n"))
+			assert.ErrorIs(t, err, vm.ErrEngineMismatch, engine)
+			assert.ErrorContains(t, err, `"`+engine+`"`)
+		}
+	})
+
+	t.Run("an engine whose release is not a version is refused", func(t *testing.T) {
+		t.Parallel()
+
+		for _, engine := range []string{"microsandbox", "microsandbox/", "microsandbox/latest", "microsandbox/v0.7.8", "microsandboxes/0.7.8", "Microsandbox/0.7.8"} {
+			_, _, err := readHeader(strings.NewReader(`{"engine":"` + engine + `","kind":"machine"}` + "\n"))
+			assert.ErrorIs(t, err, vm.ErrEngineMismatch, engine)
+		}
 	})
 
 	t.Run("what is not an archive at all is refused", func(t *testing.T) {
@@ -122,7 +159,7 @@ func TestRestoreDiskOf(t *testing.T) {
 		}
 	})
 
-	// a run's disk is a managed layer, which microsandbox 0.7.8 grows once
+	// a run's disk is a managed layer, which microsandbox 0.7.11 grows once
 	// it is restored only to 4 GiB and 3 MiB or more, as the KVM suite holds,
 	// and its archive says the next whole GiB.
 	t.Run("a run's managed disk needs 5 GiB, or as much as it was given past that", func(t *testing.T) {

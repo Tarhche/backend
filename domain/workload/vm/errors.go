@@ -3,8 +3,8 @@ package vm
 import "errors"
 
 var (
-	// ErrEngineMismatch is an archive from another engine, or from another
-	// version of this one, which a restore cannot read.
+	// ErrEngineMismatch is an archive from another engine, or from a version
+	// of this one it does not read, which a restore cannot read.
 	ErrEngineMismatch = errors.New("the archive was written by another engine")
 
 	// ErrNoCapacity is a node that has no room left for what was asked of it.
