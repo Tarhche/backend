@@ -56,18 +56,14 @@
 // names one document at most.
 //
 // It is indexed by the control plane as it starts, for every kind it
-// registers (EnsureKind), rather than by a migration. The migrations are a
-// fixed list, applied once each by `app migrate`, which runs without the
-// control plane's registry and so cannot know which kinds there are; and a
-// released migration is never edited, so none could be told of an index
-// added later. Creating an index that is already there, with the same keys
-// and options, changes nothing, so doing it at every start costs one round
-// trip per kind, as the task logs' index already does.
+// registers (EnsureKind), since only the registry knows which kinds there
+// are. Creating an index that is already there, with the same keys and
+// options, changes nothing, so doing it at every start costs one round trip
+// per kind, as the task logs' index already does.
 //
-// No migration moves what was kept before workloads into it: that is moved
-// by hand. A control plane started on an empty workloads while the nodes
-// hold VMs takes each VM a node reports for one nobody keeps a record of, and
-// asks its node to delete it.
+// What was kept before workloads is moved into it by hand. A control plane
+// started on an empty workloads while the nodes hold VMs takes each VM a node
+// reports for one nobody keeps a record of, and asks its node to delete it.
 package resources
 
 import (

@@ -161,9 +161,8 @@ func controlPlaneConsoleCommand(
 		return nil, err
 	}
 
-	// every kind's resources are kept in workloads, indexed here rather than
-	// by a migration, which runs without the registry and cannot know the
-	// kinds there are.
+	// every kind's resources are kept in workloads, indexed here for every
+	// kind the registry has, which only the registry knows.
 	for _, d := range workload.Registry.Descriptors() {
 		if err := resourceRepository.EnsureKind(ctx, d); err != nil {
 			return nil, err

@@ -33,9 +33,6 @@ logs-%:
 generate:
 	docker compose exec -it app go generate
 
-migrate:
-	docker compose exec app go run . migrate
-
 # the certificates the workload's tunnel authenticates with. (mTLS)
 certs:
 	go run . certificate authority generate --output-dir ./tmp/certs/ca --name "workload tunnel development authority"
@@ -65,4 +62,4 @@ certs-env:
 test-vmhost-integration:
 	./scripts/vmhost-integration.sh
 
-.PHONY: ps up up-vms down restart restart-% sh-% logs-% certs certs-env migrate test-vmhost-integration
+.PHONY: ps up up-vms down restart restart-% sh-% logs-% certs certs-env test-vmhost-integration

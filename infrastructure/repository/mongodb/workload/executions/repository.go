@@ -15,8 +15,7 @@
 // A root's executions are read together, in the order of their levels and
 // then of their nodes, and forgotten together, or those of generations
 // before one, through an index on the root's uuid, the level and the node,
-// which is made at start (EnsureIndexes), as the task logs' is, rather than
-// by a migration.
+// which is made at start (EnsureIndexes), as the task logs' is.
 package executions
 
 import (

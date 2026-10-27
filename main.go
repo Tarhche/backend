@@ -15,7 +15,6 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
 	"github.com/khanzadimahdi/testproject/presentation/commands/certificate"
-	"github.com/khanzadimahdi/testproject/presentation/commands/database"
 	"github.com/khanzadimahdi/testproject/presentation/commands/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/presentation/commands/workload/ingress"
 	"github.com/khanzadimahdi/testproject/presentation/commands/workload/orchestrator"
@@ -62,9 +61,6 @@ func main() {
 	// container, and the question its healthcheck asks it
 	c.Register(vmhost.NewServeCommand())
 	c.Register(vmhost.NewCheckCommand())
-
-	// brings what is stored up to what this version reads
-	c.Register(database.NewMigrateCommand())
 
 	// the certificates the workload's tunnel authenticates with
 	c.RegisterGroup(certificate.Group())
