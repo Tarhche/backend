@@ -35,15 +35,6 @@ start:
 restart:
 	docker compose restart
 
-restart-%:
-	docker compose restart $*
-
-sh-%:
-	docker compose exec -it $* sh
-
-logs-%:
-	docker compose logs -f $*
-
 ps-vms:
 	$(compose-vms) ps
 
@@ -75,6 +66,18 @@ sh-vms-%:
 
 logs-vms-%:
 	$(compose-vms) logs -f $*
+
+# these come after the -vms- ones, whose names they match too: make 3.81, a
+# Mac's, takes the first pattern rule that matches, so sh-vms-app would
+# otherwise shell into a service named vms-app.
+restart-%:
+	docker compose restart $*
+
+sh-%:
+	docker compose exec -it $* sh
+
+logs-%:
+	docker compose logs -f $*
 
 generate:
 	docker compose exec -it app go generate
