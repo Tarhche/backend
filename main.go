@@ -15,18 +15,21 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
 	"github.com/khanzadimahdi/testproject/presentation/commands/certificate"
-	"github.com/khanzadimahdi/testproject/presentation/commands/database"
 	"github.com/khanzadimahdi/testproject/presentation/commands/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/presentation/commands/workload/ingress"
 	"github.com/khanzadimahdi/testproject/presentation/commands/workload/orchestrator"
+	"github.com/khanzadimahdi/testproject/presentation/commands/workload/vmhost"
 )
 
 // the blog's specification documents the blog. The workload services carry
 // annotations of their own and are served elsewhere, so scanning them here
 // only puts routes in this spec that this service does not answer — and makes
 // the control plane and the orchestrator collide over the paths they share.
+// Their use cases are left out for the same reason: the control plane has a
+// presenter package of its own, and an annotation naming presenter.Container
+// would be read as the control plane's rather than the dashboard's.
 //
-//go:generate go tool swag init --generalInfo ./presentation/commands/blog/serve.go --dir ./ --exclude ./presentation/http/workload --output ./resources/docs/blog/openapi
+//go:generate go tool swag init --generalInfo ./presentation/commands/blog/serve.go --dir ./ --exclude ./presentation/http/workload,./application/workload --output ./resources/docs/blog/openapi
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
@@ -54,8 +57,10 @@ func main() {
 	c.Register(orchestrator.NewServeCommand())
 	c.Register(ingress.NewServeCommand())
 
-	// brings what is stored up to what this version reads
-	c.Register(database.NewMigrateCommand())
+	// a node's engine, served to its orchestrator from the microsandbox
+	// container, and the question its healthcheck asks it
+	c.Register(vmhost.NewServeCommand())
+	c.Register(vmhost.NewCheckCommand())
 
 	// the certificates the workload's tunnel authenticates with
 	c.RegisterGroup(certificate.Group())

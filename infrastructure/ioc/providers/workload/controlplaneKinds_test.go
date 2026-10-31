@@ -1,0 +1,280 @@
+package workload
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"maps"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind/kindtest"
+	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
+	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
+	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	executionsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/executions"
+	leasesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/leases"
+	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
+	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
+	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
+	infraDocker "github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
+	ingressMemory "github.com/khanzadimahdi/testproject/infrastructure/workload/ingress/memory"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/task/vmruntime"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
+)
+
+// controlPlane is the control plane as the serve command wires it, with
+// every kind it runs registered as it registers them, over stores kept in
+// memory.
+type controlPlane struct {
+	workload  *ControlPlaneWorkload
+	resources *resourcesMemory.Repository
+}
+
+func served(t *testing.T) *controlPlane {
+	t.Helper()
+
+	resources := resourcesMemory.NewRepository()
+
+	workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), storesOf(resources), nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	return &controlPlane{workload: workload, resources: resources}
+}
+
+// storesOf are what a control plane keeps everything in, kept in memory: the
+// resources of every kind in resources.
+func storesOf(resources *resourcesMemory.Repository) ControlPlaneStores {
+	return ControlPlaneStores{
+		Resources:  resources,
+		Nodes:      nodesMemory.NewRepository(),
+		TaskLogs:   logsMock.NewInMemoryRepository(),
+		Executions: executionsMemory.NewRepository(),
+		Leases:     leasesMemory.NewRepository(nil),
+	}
+}
+
+func kindsOf(registry *kind.Registry[kind.ControlPlaneBinding], resources *resourcesMemory.Repository) *ControlPlaneKinds {
+	return NewControlPlaneKinds(
+		registry,
+		ControlPlaneKindStores{Resources: resources, Nodes: nodesMemory.NewRepository()},
+		&messagingMock.Requester{},
+		&messagingMock.Recorder{},
+		slog.New(slog.DiscardHandler),
+	)
+}
+
+func get(t *testing.T, handler http.Handler, target string) (int, string) {
+	t.Helper()
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
+
+	return recorder.Code, recorder.Body.String()
+}
+
+func TestNewControlPlaneKinds(t *testing.T) {
+	t.Parallel()
+
+	t.Run("every kind is served under its plural", func(t *testing.T) {
+		t.Parallel()
+
+		plane := served(t)
+		assert.Equal(t, allKinds, kindNames(plane.workload.Registry.Descriptors()))
+
+		mux := http.NewServeMux()
+		require.NoError(t, plane.workload.Route(mux), "no kind takes another's routes")
+
+		status, body := get(t, mux, "/api/kinds")
+		require.Equal(t, http.StatusOK, status)
+
+		var described struct {
+			Items []kind.Descriptor `json:"items"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(body), &described))
+
+		plurals := make([]string, len(described.Items))
+		for i, d := range described.Items {
+			plurals[i] = d.Plural
+		}
+
+		assert.Equal(t, []string{"vms", "snapshots", "stacks", "tasks", "containers", "images", "networks", "volumes"}, plurals)
+
+		for _, plural := range plurals {
+			status, body = get(t, mux, "/api/"+plural)
+			require.Equal(t, http.StatusOK, status)
+			assert.JSONEq(t, `{"items":[],"pagination":{"total_pages":0,"current_page":1}}`, body)
+		}
+
+		subjects := slices.Collect(maps.Keys(plane.workload.Subscribers))
+		assert.ElementsMatch(t, []string{
+			kind.ResourceActedOnName,
+			"workloadVmHeartbeat",
+			"workloadTaskHeartbeat",
+			"workloadContainerHeartbeat",
+			"workloadImageHeartbeat",
+			"workloadNetworkHeartbeat",
+			"workloadVolumeHeartbeat",
+		}, subjects, "every kind's results are heard on one subject, and what the nodes hold of every kind whose state is theirs on the kind's own: a snapshot's and a stack's are the control plane's")
+
+		assert.NoError(t, plane.workload.Reconcile.Execute(context.Background()), "a pass over nothing does nothing")
+	})
+
+	t.Run("a kind registered over routes served is refused when the control plane is put together", func(t *testing.T) {
+		t.Parallel()
+
+		d := kindstest.Descriptor()
+		d.Plural = "snapshots"
+
+		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &kindstest.Fans{})))
+
+		mux := http.NewServeMux()
+		require.NoError(t, served(t).workload.Route(mux))
+
+		assert.Error(t, kindsOf(registry, resourcesMemory.NewRepository()).Route(mux))
+	})
+
+	t.Run("a kind registered is served under its plural, and its results heard", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := kindsOf(kindstest.Registry(&kindstest.Fans{Node: kindstest.NodeName}), resourcesMemory.NewRepository())
+
+		mux := http.NewServeMux()
+		require.NoError(t, kinds.Route(mux))
+
+		status, body := get(t, mux, "/api/fans")
+		require.Equal(t, http.StatusOK, status)
+		assert.JSONEq(t, `{"items":[],"pagination":{"total_pages":0,"current_page":1}}`, body)
+
+		result, err := json.Marshal(kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: true})
+		require.NoError(t, err)
+		assert.NoError(t, kinds.Subscribers[kind.ResourceActedOnName].Handle(context.Background(), result), "a result for a resource that is gone is never asked for again")
+	})
+}
+
+// TestNewControlPlaneWorkload_dependencyPolicy holds the control plane to the
+// dependency policy it is configured with, laid over the defaults, and to not
+// starting with one it cannot read.
+func TestNewControlPlaneWorkload_dependencyPolicy(t *testing.T) {
+	t.Parallel()
+
+	started := func(policy string) (*ControlPlaneWorkload, error) {
+		controlPlaneConfigs := configs.NewWorkloadControlPlane()
+		controlPlaneConfigs.DependencyPolicy = policy
+
+		return NewControlPlaneWorkload(controlPlaneConfigs, storesOf(resourcesMemory.NewRepository()), nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+	}
+
+	for name, tt := range map[string]struct {
+		configured string
+		want       graph.DependencyPolicy
+	}{
+		"nothing configured is the defaults": {
+			want: graph.DefaultPolicy(),
+		},
+		"and what is configured is laid over them, entry by entry": {
+			configured: " volume=owned, stack/network=loose ",
+			want: graph.DependencyPolicy{
+				ByPair: map[[2]string]graph.EdgeType{{stackKind.Name, networkKind.Name}: graph.Loose},
+				ByKind: map[string]graph.EdgeType{
+					vmKind.Name:        graph.Loose,
+					volumeKind.Name:    graph.Owned,
+					networkKind.Name:   graph.Owned,
+					containerKind.Name: graph.Owned,
+				},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			workload, err := started(tt.configured)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, workload.Policy)
+		})
+	}
+
+	t.Run("one it cannot read is refused as it starts, saying which setting and what of it", func(t *testing.T) {
+		t.Parallel()
+
+		workload, err := started("vm=loose,volume=strong")
+		assert.Nil(t, workload)
+		assert.EqualError(t, err, `the dependency policy (WORKLOAD_DEPENDENCY_POLICY, --dependency-policy) cannot be read: entry "volume=strong" gives "strong", which is no type: an edge is owned or loose`)
+	})
+}
+
+// TestConformance holds every kind the services register, as they register
+// them, to the rules every kind keeps: what a kind declares, a strategy
+// wherever one of its actions runs, permissions that exist, with a name, and
+// heartbeats on a subject that names their stream.
+func TestConformance(t *testing.T) {
+	t.Parallel()
+
+	engine := memory.New()
+
+	nodes, err := nodeKinds(NodeKindDependencies{
+		Engine:         engine,
+		Tasks:          vmruntime.New(engine, slog.New(slog.DiscardHandler)),
+		Daemons:        infraDocker.NewDaemons(engine, time.Second, slog.New(slog.DiscardHandler)),
+		NodeName:       "workload-orchestrator-01",
+		CommandTimeout: time.Minute,
+	})
+	require.NoError(t, err)
+
+	plane := served(t)
+
+	ingress, _, err := ingressKinds(ingressMemory.NewLocations(time.Minute))
+	require.NoError(t, err)
+
+	services := kind.Services{
+		ControlPlane: plane.workload.Registry,
+		Node:         nodes,
+		Ingress:      ingress,
+	}
+
+	kindtest.Conformance(t, services, permissions.NewRepository())
+
+	assert.Equal(t, allKinds, kindNames(services.Descriptors()), "every kind the services run")
+
+	// a subject is the name of the stream JetStream keeps it in, which has
+	// none of these and is no longer than this; who keeps what it says hears
+	// it under a durable consumer named after their service.
+	for _, d := range services.Descriptors() {
+		subject := kind.HeartbeatName(d.Name)
+
+		assert.False(t, strings.ContainsAny(subject, " \t\r\n\f.*>/\\"), "%q names no stream", subject)
+		assert.LessOrEqual(t, len(subject), 255, "%q names no stream", subject)
+	}
+}
+
+// allKinds are the kinds the services run, in the order they are registered.
+var allKinds = []string{vmKind.Name, snapshotKind.Name, stackKind.Name, taskKind.Name, containerKind.Name, imageKind.Name, networkKind.Name, volumeKind.Name}
+
+func kindNames(descriptors []kind.Descriptor) []string {
+	names := make([]string, len(descriptors))
+	for i, d := range descriptors {
+		names[i] = d.Name
+	}
+
+	return names
+}

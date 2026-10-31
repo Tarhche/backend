@@ -1,3 +1,22 @@
+LIMA_VM ?= workload
+LIMA_TEMPLATE ?= scripts/lima/workload.yaml
+
+ifeq ($(shell uname -s),Darwin)
+compose-vms = limactl shell --workdir "$(CURDIR)" $(LIMA_VM) docker compose --profile vms
+lima-status = $$(limactl list --format '{{.Status}}' $(LIMA_VM) 2>/dev/null)
+lima-exists = [ -n "$(lima-status)" ]
+lima-running = [ "$(lima-status)" = Running ]
+lima-up = if $(lima-running); then :; elif $(lima-exists); then limactl start --tty=false $(LIMA_VM); \
+	else limactl start --tty=false --name=$(LIMA_VM) $(LIMA_TEMPLATE); fi
+lima-stop = limactl stop $(LIMA_VM)
+else
+compose-vms = docker compose --profile vms
+lima-exists = true
+lima-running = true
+lima-up = :
+lima-stop = :
+endif
+
 ps:
 	docker compose ps
 
@@ -5,7 +24,7 @@ up:
 	docker compose up --build -d
 
 down:
-	docker compose down --remove-orphans --volumes
+	docker compose --profile vms down --remove-orphans --volumes
 
 stop:
 	docker compose stop
@@ -16,6 +35,41 @@ start:
 restart:
 	docker compose restart
 
+ps-vms:
+	$(compose-vms) ps
+
+up-vms:
+	@$(lima-up)
+	$(compose-vms) up --build -d
+
+# a VM that is not there has nothing to take down.
+down-vms:
+	@if $(lima-exists); then $(lima-up) && $(compose-vms) down --remove-orphans --volumes && $(lima-stop); fi
+
+stop-vms:
+	@if $(lima-running); then $(compose-vms) stop && $(lima-stop); fi
+
+start-vms:
+	@$(lima-up)
+	$(compose-vms) start
+
+restart-vms:
+	@$(lima-up)
+	$(compose-vms) restart
+
+restart-vms-%:
+	@$(lima-up)
+	$(compose-vms) restart $*
+
+sh-vms-%:
+	$(compose-vms) exec -it $* sh
+
+logs-vms-%:
+	$(compose-vms) logs -f $*
+
+# these come after the -vms- ones, whose names they match too: make 3.81, a
+# Mac's, takes the first pattern rule that matches, so sh-vms-app would
+# otherwise shell into a service named vms-app.
 restart-%:
 	docker compose restart $*
 
@@ -27,9 +81,6 @@ logs-%:
 
 generate:
 	docker compose exec -it app go generate
-
-migrate:
-	docker compose exec app go run . migrate
 
 # the certificates the workload's tunnel authenticates with. (mTLS)
 certs:
@@ -55,4 +106,11 @@ certs-env:
 		printf 'WORKLOAD_ORCHESTRATOR_%s_TUNNEL_KEY="%s"\n' "$$orchestrator" "$$(escape ./tmp/certs/workload-orchestrator-$$orchestrator/tls.key)"; \
 	done
 
-.PHONY: ps up down restart restart-% sh-% logs-% certs certs-env migrate
+# the engine's KVM integration tests, which need Linux, Docker and /dev/kvm:
+# CI runs them, and so does Lima on a Mac.
+test-vmhost-integration:
+	./scripts/vmhost-integration.sh
+
+.PHONY: ps up down stop start restart restart-% sh-% logs-% \
+	ps-vms up-vms down-vms stop-vms start-vms restart-vms restart-vms-% sh-vms-% logs-vms-% \
+	certs certs-env test-vmhost-integration

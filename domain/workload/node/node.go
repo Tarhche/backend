@@ -3,13 +3,21 @@ package node
 import (
 	"context"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // Node represents a node in the cluster
 type Node struct {
-	Name            string
-	Role            Role
-	Stats           Stats
+	Name  string
+	Role  Role
+	Stats Stats
+
+	// Capacity is what the node's engine offers to VMs and how much of it the
+	// VMs it holds have been given, as its last heartbeat said. It is what a
+	// VM is placed by.
+	Capacity vm.Info
+
 	LastHeartbeatAt time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -18,6 +26,10 @@ type Node struct {
 // Manager represents a manager of nodes
 type Manager interface {
 	Stats(ctx context.Context, nodeName string) (Stats, error)
+
+	// Capacity is what the node's engine offers to VMs and how much of it
+	// the instances it holds have been given: what VMs are placed by.
+	Capacity(ctx context.Context) (vm.Info, error)
 }
 
 // Role represents the role of the node

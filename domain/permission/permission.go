@@ -70,20 +70,43 @@ const (
 	LanguagesUpdate = "languages.update"
 	LanguagesDelete = "languages.delete"
 
-	WorkloadTasksIndex  = "workload.tasks.index"
-	WorkloadTasksCreate = "workload.tasks.create"
-	WorkloadTasksShow   = "workload.tasks.show"
-	WorkloadTasksDelete = "workload.tasks.delete"
-	WorkloadTasksLogs   = "workload.tasks.logs"
-	WorkloadTasksAttach = "workload.tasks.attach"
+	// The workload's permissions over anybody's VMs, snapshots, containers and
+	// stacks. Create is only ever in this set, and creates for whoever asks.
+	WorkloadVMsIndex  = "workload.vms.index"
+	WorkloadVMsCreate = "workload.vms.create"
+	WorkloadVMsShow   = "workload.vms.show"
+	WorkloadVMsUpdate = "workload.vms.update"
+	WorkloadVMsDelete = "workload.vms.delete"
+	WorkloadVMsLogs   = "workload.vms.logs"
+	WorkloadVMsAttach = "workload.vms.attach"
 
-	// WorkloadTasksManage covers stopping, killing and restarting.
-	WorkloadTasksManage = "workload.tasks.manage"
+	// WorkloadVMsManage covers starting, stopping, restarting and restoring.
+	WorkloadVMsManage = "workload.vms.manage"
+
+	WorkloadSnapshotsIndex  = "workload.snapshots.index"
+	WorkloadSnapshotsCreate = "workload.snapshots.create"
+	WorkloadSnapshotsShow   = "workload.snapshots.show"
+	WorkloadSnapshotsUpdate = "workload.snapshots.update"
+	WorkloadSnapshotsDelete = "workload.snapshots.delete"
+
+	// The container permissions cover a Docker VM's images, networks and
+	// volumes too.
+	WorkloadContainersIndex  = "workload.containers.index"
+	WorkloadContainersCreate = "workload.containers.create"
+	WorkloadContainersShow   = "workload.containers.show"
+	WorkloadContainersDelete = "workload.containers.delete"
+	WorkloadContainersLogs   = "workload.containers.logs"
+
+	// WorkloadContainersManage covers starting, stopping and restarting a
+	// container, and connecting it to a network or disconnecting it from one.
+	WorkloadContainersManage = "workload.containers.manage"
 
 	WorkloadStacksIndex  = "workload.stacks.index"
 	WorkloadStacksCreate = "workload.stacks.create"
 	WorkloadStacksShow   = "workload.stacks.show"
 	WorkloadStacksDelete = "workload.stacks.delete"
+
+	// WorkloadStacksManage covers starting, stopping and restarting.
 	WorkloadStacksManage = "workload.stacks.manage"
 )
 
@@ -105,12 +128,24 @@ const (
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
 
-	SelfWorkloadTasksIndex  = "self.workload.tasks.index"
-	SelfWorkloadTasksShow   = "self.workload.tasks.show"
-	SelfWorkloadTasksLogs   = "self.workload.tasks.logs"
-	SelfWorkloadTasksManage = "self.workload.tasks.manage"
-	SelfWorkloadTasksAttach = "self.workload.tasks.attach"
-	SelfWorkloadTasksDelete = "self.workload.tasks.delete"
+	SelfWorkloadVMsIndex  = "self.workload.vms.index"
+	SelfWorkloadVMsShow   = "self.workload.vms.show"
+	SelfWorkloadVMsUpdate = "self.workload.vms.update"
+	SelfWorkloadVMsDelete = "self.workload.vms.delete"
+	SelfWorkloadVMsManage = "self.workload.vms.manage"
+	SelfWorkloadVMsLogs   = "self.workload.vms.logs"
+	SelfWorkloadVMsAttach = "self.workload.vms.attach"
+
+	SelfWorkloadSnapshotsIndex  = "self.workload.snapshots.index"
+	SelfWorkloadSnapshotsShow   = "self.workload.snapshots.show"
+	SelfWorkloadSnapshotsUpdate = "self.workload.snapshots.update"
+	SelfWorkloadSnapshotsDelete = "self.workload.snapshots.delete"
+
+	SelfWorkloadContainersIndex  = "self.workload.containers.index"
+	SelfWorkloadContainersShow   = "self.workload.containers.show"
+	SelfWorkloadContainersDelete = "self.workload.containers.delete"
+	SelfWorkloadContainersManage = "self.workload.containers.manage"
+	SelfWorkloadContainersLogs   = "self.workload.containers.logs"
 
 	SelfWorkloadStacksIndex  = "self.workload.stacks.index"
 	SelfWorkloadStacksShow   = "self.workload.stacks.show"

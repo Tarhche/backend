@@ -1,80 +1,58 @@
+// Package node says what a node offers and how much of it is taken, as its
+// engine reports it.
 package node
 
 import (
 	"context"
-	"fmt"
-
-	containerTypes "github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/client"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
-	infraContainer "github.com/khanzadimahdi/testproject/infrastructure/workload/container"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-type DockerManager struct {
-	client *client.Client
-	tracer oteltrace.Tracer
-
-	containerManager task.Runtime
+// Manager reads a node's stats off its engine.
+//
+// What a node is asked for is placed by what it has given away, not by what
+// is busy this second: a VM given four vCPUs may take them all at any moment.
+// So the CPU percent is the vCPUs the instances on the node were given, of
+// the vCPUs it offers, and goes past 100 when CPUs are given more than once,
+// which the control plane allows; memory is the bytes given, of the bytes
+// offered, which never are.
+type Manager struct {
+	engine vm.Engine
 }
 
-var _ node.Manager = &DockerManager{}
+var _ node.Manager = &Manager{}
 
-func NewDockerManager(dockerHost string, containerManager task.Runtime) (*DockerManager, error) {
-	cli, err := client.NewClientWithOpts(
-		client.WithHost(dockerHost),
-		client.WithAPIVersionNegotiation(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %w", err)
-	}
-
-	return &DockerManager{client: cli, containerManager: containerManager, tracer: otel.Tracer("docker")}, nil
+func NewManager(engine vm.Engine) *Manager {
+	return &Manager{engine: engine}
 }
 
-func (m *DockerManager) Stats(ctx context.Context, nodeName string) (node.Stats, error) {
-	ctx, span := m.tracer.Start(ctx, "docker.node.stats",
-		oteltrace.WithAttributes(attribute.String("node.name", nodeName)),
-	)
-	defer span.End()
-
-	filter := filters.NewArgs()
-	filter.Add("label", infraContainer.NodeNameLabel+"="+nodeName)
-	filter.Add("status", "running")
-
-	containers, err := m.client.ContainerList(ctx, containerTypes.ListOptions{Filters: filter})
+// Stats is what the node's engine says it offers and has given. The engine is
+// this node's alone, so the name says nothing the engine does not.
+func (m *Manager) Stats(ctx context.Context, nodeName string) (node.Stats, error) {
+	info, err := m.engine.Info(ctx)
 	if err != nil {
-		return node.Stats{}, trace.RecordError(span, err)
+		return node.Stats{}, err
 	}
 
-	span.SetAttributes(attribute.Int("task.count", len(containers)))
-
-	var aggregate node.Stats
-	for _, c := range containers {
-		s, err := m.containerManager.Stats(ctx, c.ID)
-		if err != nil {
-			return node.Stats{}, trace.RecordError(span, err)
-		}
-
-		aggregate.PIDs += s.PIDs
-		aggregate.CPUPercent += s.CPUPercent
-		aggregate.MemoryUsage += s.MemoryUsage
-		aggregate.MemoryLimit += s.MemoryLimit
-		aggregate.NetworkInput += s.NetworkInput
-		aggregate.NetworkOutput += s.NetworkOutput
-		aggregate.BlockInput += s.BlockInput
-		aggregate.BlockOutput += s.BlockOutput
+	stats := node.Stats{
+		MemoryUsage: info.Allocated.Memory,
+		MemoryLimit: info.Memory,
 	}
 
-	if aggregate.MemoryLimit > 0 {
-		aggregate.MemoryPercent = float64(aggregate.MemoryUsage) / float64(aggregate.MemoryLimit) * 100.0
+	if info.CPUs > 0 {
+		stats.CPUPercent = float64(info.Allocated.CPUs) / float64(info.CPUs) * 100
 	}
 
-	return aggregate, nil
+	if info.Memory > 0 {
+		stats.MemoryPercent = float64(info.Allocated.Memory) / float64(info.Memory) * 100
+	}
+
+	return stats, nil
+}
+
+// Capacity is what the node's engine offers to VMs and how much of it the
+// instances it holds have been given, as the engine says.
+func (m *Manager) Capacity(ctx context.Context) (vm.Info, error) {
+	return m.engine.Info(ctx)
 }

@@ -8,8 +8,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/domain"
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
 // StopName is what a reader asks on to have the task their snippet is
@@ -58,7 +58,7 @@ func (uc *UseCase) Handle(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	if c.Kind != task.KindJob || c.OwnerUUID != runCode.CodeRunnerOwnerUUID {
+	if c.Spec.TaskKind() != task.KindJob || c.Metadata.OwnerUUID != runCode.CodeRunnerOwnerUUID {
 		uc.logger.WarnContext(ctx, "a stop was asked for on a task the code runner does not own", "task", request.TaskUUID)
 
 		return uc.reply(ctx, request.ID, &Response{

@@ -3,19 +3,26 @@ package stopStack
 import (
 	"context"
 
-	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane"
 )
 
-// UseCase stops a stack. The workload owns its lifecycle, so this passes the
-// command on rather than deciding anything about it.
+// UseCase asks for a stack's containers to be stopped, and kept.
 type UseCase struct {
-	workload workloadControlPlane.Client
+	workload   workloadControlPlane.Client
+	translator translator.Translator
 }
 
-func NewUseCase(workload workloadControlPlane.Client) *UseCase {
-	return &UseCase{workload: workload}
+func NewUseCase(workload workloadControlPlane.Client, translator translator.Translator) *UseCase {
+	return &UseCase{workload: workload, translator: translator}
 }
 
-func (uc *UseCase) Execute(ctx context.Context, request *Request) error {
-	return uc.workload.StopStack(ctx, request.UUID)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	refused, err := workload.RefusalOf(uc.workload.StopStack(ctx, request.OwnerUUID, request.UUID), uc.translator)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Response{ValidationErrors: refused}, nil
 }

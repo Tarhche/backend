@@ -1,0 +1,1181 @@
+// Package task is the task kind's node strategy: what a node does to the
+// tasks it runs, and what it says they are doing.
+//
+// Everything is done through the node's task runtime (task.Runtime), which
+// runs each run of a task as an ephemeral VM of its own on the node's engine,
+// labelled with what the run was made as: the task's uuid, name, slug, kind
+// and owner, which attempt at it the run is, whether it is watched and its
+// ttl. What a node knows of a task is what a command carries, the task as the
+// control plane recorded it, and what its runs say of themselves.
+//
+// A command is carried out the way the code runner's tasks always were:
+//
+//   - create runs a task: a run of it already running is left to run,
+//     whatever attempt it is, and what is left of earlier attempts goes, so
+//     that the run made now has the task's name and ports; one asked for again
+//     takes the run of its attempt that is there already, and one that cannot
+//     be started is taken away again, so nothing is left of it to report;
+//   - stop and kill stop every run of it: a VM has no grace period to cut
+//     short, so the two end it alike;
+//   - reconfigure gives the run that speaks for it the ports, network policy
+//     and limits the task now has, which its runtime does by stopping it and
+//     making its VM afresh with them, running its program again from the
+//     start;
+//   - delete takes every run of it away, stopping a running one first.
+//
+// What a create made a run with, and what a reconfigure gave one, is said in
+// what it came to (taskKind.Status.Applied), and nowhere else: that is how
+// the control plane knows a change of a task reached its run.
+//
+// Its state is every task this node runs, each as the run of it that runs, or
+// otherwise its latest: what its program is doing, and the run itself, with
+// what a job has written so far (Run.Output), the ports its VM publishes,
+// which the ingress reaches it on, and those that came up. The outputs of a
+// node's tasks share a budget, what a beat carries of them between them, a
+// task in each of the task kind's heartbeats. What the run of a running task
+// uses is sampled as a VM is, and said as a VM's sample is
+// (taskKind.Status.Stats): on the node's beat, at most every other one and a
+// few at once, given up on when the beat cannot wait for it any longer, and
+// shown as it was last taken in every look between beats, so that a look
+// taken at every prompt is never held up sampling, nor tells of a task again
+// for a new sample alone. A task's stats query samples its run afresh, as a
+// VM's stats query samples the VM. A task being reconfigured is
+// said to be restarting, for as long as that takes and in every look at what
+// the node holds taken meanwhile, however late it is read: its run is a VM
+// that is down halfway through, which would otherwise be said to have ended,
+// and whoever follows the task from its heartbeats, a snippet's reader, would
+// be told it had. A task's terminal is a shell inside its running run,
+// anybody's for a task of the guest's, as the page a snippet runs on is, and
+// its owner's alone otherwise; its ports are wherever its run was published.
+package task
+
+import (
+	"bytes"
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"maps"
+	"net"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/internal/reply"
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
+	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+)
+
+const (
+	// ReportOutput is the most of their outputs a node's tasks report
+	// between them a beat, written out as JSON: a task in each of the task
+	// kind's heartbeats, each one NATS message of 1 MiB at most.
+	ReportOutput = 512 << 10
+
+	// reading is how many runs' outputs are read at once.
+	reading = 8
+
+	// endWait bounds ending a command a terminal's client walked away from.
+	endWait = 30 * time.Second
+
+	// failedRun is why a job whose program failed is failed.
+	failedRun = "the task failed"
+
+	// prompt is how often what the node's tasks are doing is looked at
+	// between beats: a snippet's reader is told it ended, or serves its
+	// ports, as soon as that is seen, as often as the code runner always
+	// looked.
+	prompt = 300 * time.Millisecond
+
+	// sampleEvery is how often the run of a running task is sampled: every
+	// other beat, as often as a VM is.
+	sampleEvery = 2 * time.Second
+
+	// sampleKept is how long a sample is shown when a newer one could not be
+	// taken in time, rather than nothing.
+	sampleKept = 10 * time.Second
+
+	// sampling is how many runs are sampled at once.
+	sampling = 8
+)
+
+// shell is what a terminal is opened with: a busybox image has sh but not
+// bash, so sh is the one to reach for.
+var shell = []string{"/bin/sh"}
+
+// Node is the task kind's node strategy.
+type Node struct {
+	runtime  task.Runtime
+	nodeName string
+	now      func() time.Time
+
+	lock sync.Mutex
+
+	// outputs are what each run that has ended wrote, by run, as of the start
+	// it ended after: it writes nothing more until it is started again, so it
+	// is read once.
+	outputs map[string]written
+
+	// samples are the last sample of each running run, by run, as of the
+	// start it was taken in.
+	samples map[string]usage
+
+	// reconfiguring are the tasks whose run is being reconfigured, by uuid;
+	// reconfigured, by uuid, the mark at which each was last done with, out
+	// of marks, which counts every reconfigure done with on this node. A
+	// look at what the node holds that began at a mark said nothing true of
+	// a task done with since, which was halfway through being reconfigured
+	// whenever the look saw it.
+	reconfiguring map[string]bool
+	reconfigured  map[string]uint64
+	marks         uint64
+}
+
+// written is what a run that ended wrote, and the start it ended after.
+type written struct {
+	startedAt time.Time
+	output    string
+}
+
+// usage is the last sample of what a run uses, and the start it was taken in:
+// one started again since, which a reconfigure does, is a VM made afresh,
+// which uses something else.
+type usage struct {
+	startedAt time.Time
+	stats     *vmKind.Stats
+}
+
+var (
+	_ kind.Node[taskKind.Spec, taskKind.Status] = &Node{}
+	_ kind.Attacher                             = &Node{}
+	_ kind.Exposer                              = &Node{}
+	_ kind.Prompt                               = &Node{}
+)
+
+// New is the strategy that runs the tasks nodeName holds on runtime.
+func New(runtime task.Runtime, nodeName string) *Node {
+	return &Node{
+		runtime:       runtime,
+		nodeName:      nodeName,
+		now:           time.Now,
+		outputs:       make(map[string]written),
+		samples:       make(map[string]usage),
+		reconfiguring: make(map[string]bool),
+		reconfigured:  make(map[string]uint64),
+	}
+}
+
+// Execute carries out one of a task's commands, and is what it left the task
+// as: what its run is doing afterwards.
+func (n *Node) Execute(ctx context.Context, t taskKind.Task, action string, _ any) (kind.Outcome[taskKind.Status], error) {
+	switch action {
+	case taskKind.ActionCreate:
+		return n.create(ctx, t)
+	case taskKind.ActionStop:
+		return n.stop(ctx, t, n.runtime.Stop)
+	case taskKind.ActionKill:
+		return n.stop(ctx, t, n.runtime.Kill)
+	case taskKind.ActionReconfigure:
+		return n.reconfigure(ctx, t)
+	case taskKind.ActionDelete:
+		return kind.Outcome[taskKind.Status]{}, n.delete(ctx, t)
+	}
+
+	return kind.Outcome[taskKind.Status]{}, fmt.Errorf("%w: a task cannot be %s on its node", kind.ErrUnknownAction, action)
+}
+
+// create runs a task, as the attempt at it the control plane counted.
+func (n *Node) create(ctx context.Context, t taskKind.Task) (kind.Outcome[taskKind.Status], error) {
+	attempt := t.Status.Retries
+
+	runs, err := n.runtime.Of(ctx, t.Metadata.UUID)
+	if err != nil {
+		return failed(t, err)
+	}
+
+	// one of its runs running is what was asked for, whatever attempt it
+	// belongs to: a node asked for its tasks again after being away finds them
+	// standing.
+	if running, found := runningOf(runs); found {
+		return n.outcome(ctx, running), nil
+	}
+
+	var existing *task.Execution
+
+	for i := range runs {
+		if runs[i].Attempt == attempt {
+			existing = &runs[i]
+
+			continue
+		}
+
+		// what is left of an earlier attempt goes, so this one can have the
+		// name and the ports.
+		if err := n.runtime.Delete(ctx, runs[i].ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+			return failed(t, err)
+		}
+	}
+
+	execution := executionOf(t, attempt, n.nodeName)
+
+	id, err := n.runtime.Create(ctx, &execution)
+	if err != nil {
+		// asked for twice: the first was cut short after it made the run, and
+		// taking the one there is what was wanted either way.
+		if existing == nil {
+			return failed(t, err)
+		}
+
+		id = existing.ID
+	}
+
+	if err := n.runtime.Start(ctx, id); err != nil {
+		// a run that cannot be started is taken away, so nothing is left of it
+		// that its node would report as being on its way.
+		_ = n.runtime.Delete(context.WithoutCancel(ctx), id)
+
+		return failed(t, err)
+	}
+
+	started, err := n.runtime.Inspect(ctx, id)
+	if err != nil {
+		return failed(t, err)
+	}
+
+	return applied(n.outcome(ctx, started), t), nil
+}
+
+// stop stops every run of a task, by how. A task that has no run here has
+// stopped already.
+func (n *Node) stop(ctx context.Context, t taskKind.Task, how func(ctx context.Context, executionID string) error) (kind.Outcome[taskKind.Status], error) {
+	runs, err := n.runtime.Of(ctx, t.Metadata.UUID)
+	if err != nil {
+		return kind.Outcome[taskKind.Status]{}, err
+	}
+
+	if len(runs) == 0 {
+		return kind.Outcome[taskKind.Status]{Status: taskKind.Status{Status: kind.Status{State: taskKind.Stopped}}}, nil
+	}
+
+	for _, run := range runs {
+		if err := how(ctx, run.ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+			return kind.Outcome[taskKind.Status]{}, err
+		}
+	}
+
+	stopped, err := n.runtime.Inspect(ctx, current(runs).ID)
+	if errors.Is(err, domain.ErrNotExists) {
+		return kind.Outcome[taskKind.Status]{Status: taskKind.Status{Status: kind.Status{State: taskKind.Stopped}}}, nil
+	} else if err != nil {
+		return kind.Outcome[taskKind.Status]{}, err
+	}
+
+	return n.outcome(ctx, stopped), nil
+}
+
+// reconfigure gives the run that speaks for a task the ports, network policy
+// and limits the task now has, which its runtime does by stopping it and
+// making its VM afresh with them, running its program again from the start:
+// a job's output, its start and its deadline start again. What the run was
+// made as, its name among it, stays: it is still what the task's reader is
+// answered under. One that ended in the meantime is given them for nothing,
+// and has ended still. A task this node holds no run of has nothing to give
+// them to, and is not running.
+//
+// The task is said to be restarting until its run is up again, as long as
+// that takes, and what was kept of what the run wrote before is let go of.
+func (n *Node) reconfigure(ctx context.Context, t taskKind.Task) (kind.Outcome[taskKind.Status], error) {
+	runs, err := n.runtime.Of(ctx, t.Metadata.UUID)
+	if err != nil {
+		return kind.Outcome[taskKind.Status]{}, err
+	}
+
+	if len(runs) == 0 {
+		return kind.Outcome[taskKind.Status]{}, fmt.Errorf("%w: this node holds no run of %q", vm.ErrNotRunning, t.Metadata.UUID)
+	}
+
+	run := current(runs)
+
+	n.begin(t.Metadata.UUID)
+	defer n.end(t.Metadata.UUID)
+
+	execution := executionOf(t, run.Attempt, n.nodeName)
+	if err := n.runtime.Reconfigure(ctx, run.ID, &execution); err != nil {
+		return kind.Outcome[taskKind.Status]{}, err
+	}
+
+	n.forget(run.ID)
+
+	reconfigured, err := n.runtime.Inspect(ctx, run.ID)
+	if err != nil {
+		return kind.Outcome[taskKind.Status]{}, err
+	}
+
+	return applied(n.outcome(ctx, reconfigured), t), nil
+}
+
+// begin says a task's run is being reconfigured.
+func (n *Node) begin(uuid string) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	n.reconfiguring[uuid] = true
+}
+
+// end says a task's run is done being reconfigured, as of the next mark.
+func (n *Node) end(uuid string) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	n.marks++
+
+	delete(n.reconfiguring, uuid)
+	n.reconfigured[uuid] = n.marks
+}
+
+// mark is where the reconfigures done with on this node stand now, which a
+// look at what it holds is taken as of.
+func (n *Node) mark() uint64 {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	return n.marks
+}
+
+// restarting reports whether a look at what the node holds that began at
+// mark saw the run of the task uuid names halfway through being reconfigured,
+// or may have: it is being reconfigured now, or was done with since.
+func (n *Node) restarting(uuid string, mark uint64) bool {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	return n.reconfiguring[uuid] || n.reconfigured[uuid] > mark
+}
+
+// delete takes every run of a task away. A running one is stopped first, so
+// it ends the way it would if it had been stopped; one that will not stop is
+// still taken away. One that was not here is gone already.
+func (n *Node) delete(ctx context.Context, t taskKind.Task) error {
+	runs, err := n.runtime.Of(ctx, t.Metadata.UUID)
+	if err != nil {
+		return err
+	}
+
+	for _, run := range runs {
+		if run.Status == task.StatusRunning {
+			_ = n.runtime.Stop(ctx, run.ID)
+		}
+
+		if err := n.runtime.Delete(ctx, run.ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+			return err
+		}
+
+		n.forget(run.ID)
+	}
+
+	return nil
+}
+
+// Query reads what a task's run has written, and samples what it uses, as its
+// runtime has them now.
+func (n *Node) Query(ctx context.Context, t taskKind.Task, action string, payload any) (any, error) {
+	if action != taskKind.ActionLogs && action != taskKind.ActionStats {
+		return nil, fmt.Errorf("%w: a task has no %q", kind.ErrUnknownAction, action)
+	}
+
+	runs, err := n.runtime.Of(ctx, t.Metadata.UUID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(runs) == 0 {
+		return nil, fmt.Errorf("%w: this node holds no run of %q", vm.ErrNotRunning, t.Metadata.UUID)
+	}
+
+	if action == taskKind.ActionStats {
+		return n.stats(ctx, current(runs))
+	}
+
+	asked, _ := payload.(taskKind.LogsPayload)
+
+	return n.logs(ctx, current(runs), asked)
+}
+
+// stats is a sample of what a task's run uses, as its runtime takes one now,
+// in the shape a VM's stats query answers with: a run that is not running is
+// not sampled, which its runtime says.
+func (n *Node) stats(ctx context.Context, run task.Execution) (*vmKind.Stats, error) {
+	stats, err := n.runtime.Stats(ctx, run.ID)
+	if errors.Is(err, domain.ErrNotExists) {
+		return nil, fmt.Errorf("%w: this node holds nothing of %q", vm.ErrNotRunning, run.ID)
+	} else if err != nil {
+		return nil, err
+	}
+
+	return vmKind.StatsOf(stats), nil
+}
+
+// logs is what a task's run has written, its last lines as many as were asked
+// for, and no more than an answer carries.
+func (n *Node) logs(ctx context.Context, run task.Execution, asked taskKind.LogsPayload) (taskKind.Logs, error) {
+	var written bytes.Buffer
+	if err := n.runtime.Logs(ctx, run.ID, &written); err != nil {
+		return taskKind.Logs{}, err
+	}
+
+	lines := linesOf(written.String())
+
+	tail, truncated := asked.Tail, false
+	if tail == 0 || tail > noderequest.MaxLogLines {
+		tail = noderequest.MaxLogLines
+	}
+
+	if uint(len(lines)) > tail {
+		lines, truncated = lines[uint(len(lines))-tail:], true
+	}
+
+	fitted, cut := reply.Last(lines)
+
+	return taskKind.Logs{Lines: fitted, Truncated: truncated || cut}, nil
+}
+
+// State is every task this node runs, each as the run of it that runs, or
+// otherwise its latest, with what the jobs among them have written, their
+// outputs fitted between them into the heartbeat's share of them, and a
+// sample of what each run that runs uses. A task whose run was being
+// reconfigured at any moment of the look is restarting, whatever its run was
+// seen doing, and uses nothing.
+func (n *Node) State(ctx context.Context) (kind.Report[taskKind.Status], error) {
+	mark := n.mark()
+
+	held, err := n.runtime.OnNode(ctx, n.nodeName)
+	if err != nil {
+		return kind.Report[taskKind.Status]{}, err
+	}
+
+	n.forgetAllBut(held)
+
+	byTask := make(map[string][]task.Execution)
+	for _, run := range held {
+		// a run that says of no task is nobody's to speak for.
+		if len(run.TaskUUID) == 0 {
+			continue
+		}
+
+		byTask[run.TaskUUID] = append(byTask[run.TaskUUID], run)
+	}
+
+	uuids := slices.Sorted(maps.Keys(byTask))
+
+	runs := make([]task.Execution, len(uuids))
+	for i, uuid := range uuids {
+		runs[i] = current(byTask[uuid])
+	}
+
+	// what the runs use is sampled while what the jobs wrote is read, so that
+	// a beat waits on whichever takes longer, and not on both.
+	sampled := make(chan map[string]*vmKind.Stats, 1)
+	go func() { sampled <- n.sample(ctx, runs) }()
+
+	outputs := fitted(n.read(ctx, runs), ReportOutput)
+	samples := <-sampled
+
+	report := kind.Report[taskKind.Status]{Instances: make([]kind.Observed[taskKind.Status], len(runs))}
+	for i, run := range runs {
+		status := statusOf(run)
+		status.Run.Output = outputs[i]
+		status.Stats = samples[run.ID]
+
+		if n.restarting(run.TaskUUID, mark) {
+			status = restarting(status)
+		}
+
+		report.Instances[i] = kind.Observed[taskKind.Status]{UUID: run.TaskUUID, Status: status}
+	}
+
+	return report, nil
+}
+
+// Prompt is how often the node's tasks are looked at between beats: whoever
+// ran a snippet is waiting on its page to be told it ended, which is told
+// as soon as it is seen rather than at the node's next beat.
+func (n *Node) Prompt() time.Duration {
+	return prompt
+}
+
+// Endpoint is where port p of the task a slug names is published on this
+// node, or its lowest port when p is none.
+func (n *Node) Endpoint(ctx context.Context, slug string, p port.Port) (kind.Endpoint, error) {
+	if len(slug) == 0 {
+		return kind.Endpoint{}, fmt.Errorf("%w: no slug names a task", domain.ErrNotExists)
+	}
+
+	runs, err := n.runtime.BySlug(ctx, slug)
+	if err != nil {
+		return kind.Endpoint{}, err
+	}
+
+	if len(runs) == 0 {
+		return kind.Endpoint{}, fmt.Errorf("%w: this node holds no task %q", domain.ErrNotExists, slug)
+	}
+
+	run := current(runs)
+	if run.Status != task.StatusRunning {
+		return kind.Endpoint{}, fmt.Errorf("%w: the task is not running", kind.ErrUnreachable)
+	}
+
+	endpoint, found := pick(endpointsOf(run), p)
+	if !found {
+		return kind.Endpoint{}, fmt.Errorf("%w: the task %q does not expose that port", domain.ErrNotExists, slug)
+	}
+
+	return kind.Endpoint{Port: endpoint.Port, Address: endpoint.Address}, nil
+}
+
+// Attach opens a terminal in a task's running run.
+//
+// Whose a run is comes off the run itself: it was labelled with its task's
+// owner as it was made, so the node answers without a database and without
+// taking anybody's word for it. A run of the guest's is everybody's, as the
+// page its snippet runs on is, and so is one that says of no owner, as runs
+// made before they said did not; any other is its owner's alone. Somebody who
+// may not open it is told it is not there, so knowing a uuid says nothing
+// about whether one exists.
+func (n *Node) Attach(ctx context.Context, action string, uuid string, owner string) (kind.Session, error) {
+	if action != taskKind.ActionAttach {
+		return nil, fmt.Errorf("%w: a task has no stream %q", kind.ErrUnknownAction, action)
+	}
+
+	runs, err := n.runtime.Of(ctx, uuid)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(runs) == 0 {
+		return nil, fmt.Errorf("%w: no task %q of theirs", domain.ErrNotExists, uuid)
+	}
+
+	run := current(runs)
+	if !opensFor(run.OwnerUUID, owner) {
+		return nil, fmt.Errorf("%w: no task %q of theirs", domain.ErrNotExists, uuid)
+	}
+
+	if run.Status != task.StatusRunning {
+		return nil, fmt.Errorf("%w: the task is not running", kind.ErrUnreachable)
+	}
+
+	// the shell outlives this call: it ends when the terminal is closed, not
+	// when the request that opened it is done being made.
+	opened, err := n.runtime.Exec(context.WithoutCancel(ctx), run.ID, task.ExecOptions{Command: shell, TTY: true})
+	if err != nil {
+		return nil, err
+	}
+
+	return newSession(opened), nil
+}
+
+// outcome is what a command left a task as: what its run is doing.
+func (n *Node) outcome(ctx context.Context, run task.Execution) kind.Outcome[taskKind.Status] {
+	status := statusOf(run)
+	status.Run.Output = n.read(ctx, []task.Execution{run})[0]
+
+	return kind.Outcome[taskKind.Status]{Status: status}
+}
+
+// read is what each of runs has written, a job's last taskKind.MaxOutput
+// bytes of it, a few runs at a time. A service writes nothing here: its log
+// is shipped a line at a time. One that cannot be read now, because it has
+// not started or its engine did not answer in time, has written nothing yet,
+// and is read again next time.
+func (n *Node) read(ctx context.Context, runs []task.Execution) []string {
+	outputs := make([]string, len(runs))
+	slots := make(chan struct{}, reading)
+
+	var waiting sync.WaitGroup
+
+	for i, run := range runs {
+		if run.Kind == task.KindService {
+			continue
+		}
+
+		if output, kept := n.kept(run); kept {
+			outputs[i] = output
+
+			continue
+		}
+
+		waiting.Go(func() {
+			select {
+			case slots <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-slots }()
+
+			var written bytes.Buffer
+			if err := n.runtime.Logs(ctx, run.ID, &written); err != nil {
+				return
+			}
+
+			outputs[i] = last(written.String(), taskKind.MaxOutput)
+
+			if run.Status.Ended() {
+				n.keep(run, outputs[i])
+			}
+		})
+	}
+
+	waiting.Wait()
+
+	return outputs
+}
+
+// kept is what a run that ended wrote, as it was read once it had ended
+// after the start it says: one started again since, which a reconfigure
+// does, has written something else.
+func (n *Node) kept(run task.Execution) (string, bool) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	kept, found := n.outputs[run.ID]
+	if !found || !kept.startedAt.Equal(run.StartedAt) {
+		return "", false
+	}
+
+	return kept.output, true
+}
+
+func (n *Node) keep(run task.Execution, output string) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	n.outputs[run.ID] = written{startedAt: run.StartedAt, output: output}
+}
+
+// sample is a sample of what each running one of runs uses, by run, as a VM is
+// sampled: taken on the node's beat (kind.BeatOf), at most every other one
+// and a few at once, and given up on when the beat cannot wait for it any
+// longer, the last one kept a while rather than shown as nothing. Every look
+// between beats shows the last one taken, so that a look taken at every
+// prompt is never held up sampling, nor tells of a task again for a new
+// sample alone. Only a running run uses anything worth sampling, and one
+// being reconfigured is a VM going and another coming: it is sampled again
+// once it is done, as of its new start.
+func (n *Node) sample(ctx context.Context, runs []task.Execution) map[string]*vmKind.Stats {
+	now := n.now()
+	_, beating := kind.BeatOf(ctx)
+	samples := make(map[string]*vmKind.Stats, len(runs))
+
+	type sampled struct {
+		id    string
+		stats *vmKind.Stats
+	}
+
+	var due []task.Execution
+
+	n.lock.Lock()
+	for _, run := range runs {
+		last, kept := n.samples[run.ID]
+
+		// a sample taken as of another start is of a VM made afresh since,
+		// and says nothing of the one there now.
+		if kept && !last.startedAt.Equal(run.StartedAt) {
+			delete(n.samples, run.ID)
+
+			kept = false
+		}
+
+		switch {
+		case run.Status != task.StatusRunning || n.reconfiguring[run.TaskUUID]:
+			delete(n.samples, run.ID)
+		case kept && now.Sub(last.stats.SampledAt) < sampleEvery:
+			samples[run.ID] = last.stats
+		case beating:
+			due = append(due, run)
+		default:
+			samples[run.ID] = n.recent(run.ID, now)
+		}
+	}
+	n.lock.Unlock()
+
+	answers := make(chan sampled, len(due))
+	slots := make(chan struct{}, sampling)
+
+	for _, run := range due {
+		go func() {
+			select {
+			case slots <- struct{}{}:
+			case <-ctx.Done():
+				answers <- sampled{id: run.ID}
+
+				return
+			}
+			defer func() { <-slots }()
+
+			stats, err := n.runtime.Stats(ctx, run.ID)
+			if err != nil {
+				// sampled again on the next beat; a run is no less there for
+				// one sample missing.
+				answers <- sampled{id: run.ID}
+
+				return
+			}
+
+			if stats.SampledAt.IsZero() {
+				stats.SampledAt = n.now()
+			}
+
+			answers <- sampled{id: run.ID, stats: vmKind.StatsOf(stats)}
+		}()
+	}
+
+	taken := make(map[string]*vmKind.Stats, len(due))
+
+collecting:
+	for range due {
+		select {
+		case answer := <-answers:
+			taken[answer.id] = answer.stats
+		case <-ctx.Done():
+			// the beat goes without what is still being sampled, and the
+			// last sample of it is shown meanwhile.
+			break collecting
+		}
+	}
+
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	for _, run := range due {
+		if stats := taken[run.ID]; stats != nil {
+			n.samples[run.ID] = usage{startedAt: run.StartedAt, stats: stats}
+			samples[run.ID] = stats
+
+			continue
+		}
+
+		samples[run.ID] = n.recent(run.ID, now)
+	}
+
+	return samples
+}
+
+// recent is the last sample of a run, while it is recent enough to show. It
+// is called with the lock held.
+func (n *Node) recent(executionID string, now time.Time) *vmKind.Stats {
+	last, kept := n.samples[executionID]
+	if !kept || now.Sub(last.stats.SampledAt) > sampleKept {
+		return nil
+	}
+
+	return last.stats
+}
+
+// forget lets go of what was kept of a run: what it wrote, and what it used.
+func (n *Node) forget(executionID string) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	delete(n.outputs, executionID)
+	delete(n.samples, executionID)
+}
+
+// forgetAllBut lets go of what was kept of the runs this node no longer
+// holds, and of when the tasks it holds no run of were last reconfigured.
+func (n *Node) forgetAllBut(held []task.Execution) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+
+	maps.DeleteFunc(n.outputs, func(id string, _ written) bool {
+		return !slices.ContainsFunc(held, func(run task.Execution) bool { return run.ID == id })
+	})
+
+	maps.DeleteFunc(n.samples, func(id string, _ usage) bool {
+		return !slices.ContainsFunc(held, func(run task.Execution) bool { return run.ID == id })
+	})
+
+	maps.DeleteFunc(n.reconfigured, func(uuid string, _ uint64) bool {
+		return !slices.ContainsFunc(held, func(run task.Execution) bool { return run.TaskUUID == uuid })
+	})
+}
+
+// failed is what a create that could not be carried out leaves a task as:
+// failed, saying why, with the run it was to be, so that whoever follows the
+// task from its node, the code runner, knows whose request it answers.
+func failed(t taskKind.Task, err error) (kind.Outcome[taskKind.Status], error) {
+	return kind.Outcome[taskKind.Status]{Status: taskKind.Status{
+		Status: kind.Status{State: taskKind.Failed, Reason: err.Error()},
+		Run: &taskKind.Run{
+			Attempt:     t.Status.Retries,
+			Name:        t.Metadata.Name,
+			Slug:        t.Metadata.Slug,
+			Kind:        t.Spec.TaskKind(),
+			Interactive: t.Spec.Interactive,
+		},
+	}}, err
+}
+
+// applied is an outcome that says the run it is of was given what t's spec
+// says: made with it, or reconfigured with it.
+func applied(outcome kind.Outcome[taskKind.Status], t taskKind.Task) kind.Outcome[taskKind.Status] {
+	config := t.Spec.Config()
+	outcome.Status.Applied = &config
+
+	return outcome
+}
+
+// restarting is a task's status as its run is seen halfway through being
+// reconfigured: restarting, rather than having ended with what it exited
+// with, or failed, which its VM, stopped for the moment, would say of it; and
+// using nothing, as a VM that is not running does.
+func restarting(status taskKind.Status) taskKind.Status {
+	status.State = taskKind.Restarting
+	status.Reason = ""
+	status.Stats = nil
+
+	if status.Run != nil {
+		status.Run.ExitCode = 0
+	}
+
+	return status
+}
+
+// executionOf is the run a task is made as, labelled with what it is, which
+// its runtime keeps on it.
+func executionOf(t taskKind.Task, attempt int, nodeName string) task.Execution {
+	name := t.Metadata.Slug
+	if len(name) == 0 {
+		name = t.Metadata.Name
+	}
+
+	exposed := make(port.PortSet, len(t.Spec.Ports))
+	published := make(port.PortMap, len(t.Spec.Ports))
+
+	// every port is published on a host port its node picks, so the workload
+	// never keeps track of what is taken on it.
+	for _, p := range t.Spec.Ports {
+		exposed[p] = struct{}{}
+		published[p] = []port.PortBinding{{HostIP: "0.0.0.0"}}
+	}
+
+	return task.Execution{
+		Name:           name,
+		TaskUUID:       t.Metadata.UUID,
+		TaskName:       t.Metadata.Name,
+		Slug:           t.Metadata.Slug,
+		Kind:           t.Spec.TaskKind(),
+		NodeName:       nodeName,
+		OwnerUUID:      t.Metadata.OwnerUUID,
+		Attempt:        attempt,
+		Interactive:    t.Spec.Interactive,
+		TTL:            t.Spec.TTL,
+		Image:          t.Spec.Image,
+		Entrypoint:     slices.Clone(t.Spec.Entrypoint),
+		Command:        slices.Clone(t.Spec.Command),
+		Environment:    slices.Clone(t.Spec.Environment),
+		ExposedPorts:   exposed,
+		PortBindings:   published,
+		NetworkPolicy:  t.Spec.Policy(),
+		ResourceLimits: t.Spec.Limits.ResourceLimits(),
+	}
+}
+
+// statusOf is what a run says its task is doing, in the kind's words, with
+// the run itself.
+func statusOf(run task.Execution) taskKind.Status {
+	state := taskKind.StateOf(run.Status, run.Kind, run.ExitCode)
+
+	status := taskKind.Status{
+		Status: kind.Status{State: state},
+		Run: &taskKind.Run{
+			ID:          run.ID,
+			Attempt:     run.Attempt,
+			Name:        run.TaskName,
+			Slug:        run.Slug,
+			Kind:        run.Kind,
+			Interactive: run.Interactive,
+			Ports:       portsOf(run),
+			StartedAt:   run.StartedAt,
+			Deadline:    run.Deadline(),
+			Endpoints:   endpointsOf(run),
+		},
+	}
+
+	if run.Status.Ended() {
+		status.Run.ExitCode = run.ExitCode
+	}
+
+	if state == taskKind.Failed {
+		status.Reason = failedRun
+	}
+
+	return status
+}
+
+// portsOf are the ports a run's VM publishes, lowest first, whether or not
+// they are up now: those it serves, as it was made, under a network policy
+// that lets anything in, and none otherwise.
+func portsOf(run task.Execution) []port.Port {
+	return slices.Sorted(maps.Keys(run.ExposedPorts))
+}
+
+// endpointsOf are the ports of a run that came up, lowest first, and where
+// its node reaches each: a run that is not running serves none.
+func endpointsOf(run task.Execution) []taskKind.Endpoint {
+	var endpoints []taskKind.Endpoint
+
+	for p, bindings := range run.PortBindings {
+		for _, binding := range bindings {
+			if binding.HostPort == 0 {
+				continue
+			}
+
+			endpoints = append(endpoints, taskKind.Endpoint{Port: p, Address: net.JoinHostPort(binding.HostIP, strconv.Itoa(int(binding.HostPort)))})
+
+			break
+		}
+	}
+
+	slices.SortFunc(endpoints, func(a, b taskKind.Endpoint) int { return cmp.Compare(a.Port, b.Port) })
+
+	return endpoints
+}
+
+// pick is the endpoint of the port asked for, or of the lowest one when none
+// was, which is what a task with a single port needs no port in its name for.
+func pick(endpoints []taskKind.Endpoint, requested port.Port) (taskKind.Endpoint, bool) {
+	for _, endpoint := range endpoints {
+		if requested == 0 || endpoint.Port == requested {
+			return endpoint, true
+		}
+	}
+
+	return taskKind.Endpoint{}, false
+}
+
+// current is the run of a task that speaks for it: the one running, or
+// otherwise its latest attempt, and of those the one that started last.
+func current(runs []task.Execution) task.Execution {
+	if running, found := runningOf(runs); found {
+		return running
+	}
+
+	return slices.MaxFunc(runs, func(a, b task.Execution) int {
+		return cmp.Or(cmp.Compare(a.Attempt, b.Attempt), a.StartedAt.Compare(b.StartedAt))
+	})
+}
+
+func runningOf(runs []task.Execution) (task.Execution, bool) {
+	for _, run := range runs {
+		if run.Status == task.StatusRunning {
+			return run, true
+		}
+	}
+
+	return task.Execution{}, false
+}
+
+// opensFor reports whether a run labelled as owned by labelled opens a
+// terminal for asking.
+func opensFor(labelled string, asking string) bool {
+	return len(labelled) == 0 || labelled == task.GuestOwnerUUID || labelled == asking
+}
+
+// linesOf is what was written, a line at a time.
+func linesOf(written string) []string {
+	written = strings.TrimSuffix(written, "\n")
+	if len(written) == 0 {
+		return []string{}
+	}
+
+	return strings.Split(written, "\n")
+}
+
+// last is the last limit bytes of output, starting at a whole character.
+func last(output string, limit int) string {
+	if len(output) <= limit {
+		return output
+	}
+
+	output = output[len(output)-limit:]
+
+	for i := 0; i < len(output) && i < utf8.UTFMax; i++ {
+		if utf8.RuneStart(output[i]) {
+			return output[i:]
+		}
+	}
+
+	return output
+}
+
+// fitted cuts outputs so that, written out as JSON strings, they take no
+// more than budget bytes between them. When they fit together each is kept
+// whole; otherwise each is given an even share of what the smaller ones
+// leave, and one larger than its share keeps its last share of it: the end of
+// what a program printed is what says how it ended.
+func fitted(outputs []string, budget int) []string {
+	sizes := make([]int, len(outputs))
+	total := 0
+
+	for i, output := range outputs {
+		sizes[i] = encodedSize(output)
+		total += sizes[i]
+	}
+
+	if total <= budget {
+		return outputs
+	}
+
+	order := make([]int, len(outputs))
+	for i := range order {
+		order[i] = i
+	}
+
+	slices.SortFunc(order, func(a, b int) int { return cmp.Compare(sizes[a], sizes[b]) })
+
+	cut := slices.Clone(outputs)
+	left := budget
+
+	for k, i := range order {
+		share := left / (len(order) - k)
+
+		if sizes[i] > share {
+			cut[i] = tailWithin(outputs[i], share)
+		}
+
+		left -= min(sizes[i], encodedSize(cut[i]))
+	}
+
+	return cut
+}
+
+// encodedSize is how many bytes s takes written out as a JSON string, at
+// most: what HTML-safe encoding escapes is counted as escaped.
+func encodedSize(s string) int {
+	size := 2
+
+	for _, r := range s {
+		size += encodedRune(r)
+	}
+
+	return size
+}
+
+func encodedRune(r rune) int {
+	switch {
+	case r == '"' || r == '\\' || r == '\n' || r == '\r' || r == '\t':
+		return 2
+	case r < 0x20 || r == '<' || r == '>' || r == '&' || r == ' ' || r == ' ' || r == utf8.RuneError:
+		return 6
+	}
+
+	return utf8.RuneLen(r)
+}
+
+// tailWithin is the longest end of s that takes no more than limit bytes
+// written out as a JSON string.
+func tailWithin(s string, limit int) string {
+	size := 2
+	start := len(s)
+
+	for start > 0 {
+		r, width := utf8.DecodeLastRuneInString(s[:start])
+
+		if size+encodedRune(r) > limit {
+			break
+		}
+
+		size += encodedRune(r)
+		start -= width
+	}
+
+	return s[start:]
+}
+
+// session is a command running in a run, as a stream action is carried: its
+// output, which under a terminal is all there is, and its input.
+type session struct {
+	exec task.ExecSession
+	done chan struct{}
+	once sync.Once
+}
+
+var _ kind.Session = &session{}
+
+func newSession(exec task.ExecSession) *session {
+	return &session{exec: exec, done: make(chan struct{})}
+}
+
+func (s *session) Stdin() io.WriteCloser {
+	return input{s.exec}
+}
+
+func (s *session) Stdout() io.Reader {
+	return s.exec
+}
+
+// Stderr is empty: under a terminal, everything is on its output.
+func (s *session) Stderr() io.Reader {
+	return strings.NewReader("")
+}
+
+func (s *session) Resize(ctx context.Context, rows uint, cols uint) error {
+	return s.exec.Resize(ctx, rows, cols)
+}
+
+// Wait waits for the session to be closed: a run's command says nothing of
+// how it ended.
+func (s *session) Wait(ctx context.Context) (int, error) {
+	select {
+	case <-s.done:
+		return 0, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
+// Close lets go of the command, and then ends it, and everything it started,
+// given a moment to finish on its own: the client is gone, and what it left
+// running has nothing to show its output to.
+func (s *session) Close() error {
+	var err error
+
+	s.once.Do(func() {
+		close(s.done)
+
+		err = s.exec.Close()
+
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), endWait)
+			defer cancel()
+
+			_ = s.exec.End(ctx)
+		}()
+	})
+
+	return err
+}
+
+// input is a command's input, which closing ends nothing of: the command
+// ends with its session.
+type input struct {
+	exec task.ExecSession
+}
+
+func (i input) Write(p []byte) (int, error) {
+	return i.exec.Write(p)
+}
+
+func (i input) Close() error {
+	return nil
+}

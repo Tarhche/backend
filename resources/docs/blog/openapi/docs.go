@@ -2607,25 +2607,21 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/workload/stacks": {
+        "/dashboard/my/workload/containers": {
             "get": {
-                "description": "paginated list of the stacks the current user owns",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "the containers of every running Docker VM, each with the VM it is in, narrowed to one VM with ?vm=: anybody's on the workload routes, the caller's own on the my routes",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload containers"
                 ],
-                "summary": "List my stacks",
+                "summary": "List containers across Docker VMs",
                 "parameters": [
                     {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page",
-                        "name": "page",
+                        "type": "string",
+                        "description": "Only the containers of this Docker VM",
+                        "name": "vm",
                         "in": "query"
                     }
                 ],
@@ -2633,14 +2629,242 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/getuserstacks.Response"
+                            "$ref": "#/definitions/getContainers.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/snapshots": {
+            "get": {
+                "description": "a page of snapshots, of one VM's with ?vm=: anybody's on the workload routes, the caller's own on the my routes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload snapshots"
+                ],
+                "summary": "List snapshots",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only the snapshots of this VM",
+                        "name": "vm",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getSnapshots.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/snapshots/{uuid}": {
+            "get": {
+                "description": "one snapshot",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload snapshots"
+                ],
+                "summary": "Show a snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snapshot UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getSnapshot.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a snapshot and the archive it kept",
+                "tags": [
+                    "dashboard workload snapshots"
+                ],
+                "summary": "Delete a snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snapshot UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "give a snapshot another name, which is all there is to change about one",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload snapshots"
+                ],
+                "summary": "Rename a snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snapshot UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Its name",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/renameSnapshot.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Snapshot"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/stacks": {
+            "get": {
+                "description": "a page of stacks, without their files, in one VM with ?vm=: anybody's on the workload routes, the caller's own on the my routes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload stacks"
+                ],
+                "summary": "List stacks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only the stacks deployed into this VM",
+                        "name": "vm",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getStacks.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
@@ -2648,17 +2872,14 @@ const docTemplate = `{
         },
         "/dashboard/my/workload/stacks/{uuid}": {
             "get": {
-                "description": "one of the stacks the current user owns",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "one stack, with its file and the containers its graph made of its services as its VM lists them now, each with the stack's slug and uuid and its service; note is vm_not_running when there are none because its VM is not running",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload stacks"
                 ],
-                "summary": "Show own stack",
+                "summary": "Show a stack",
                 "parameters": [
                     {
                         "type": "string",
@@ -2672,65 +2893,29 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/getuserstack.Response"
+                            "$ref": "#/definitions/getStack.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
             },
             "delete": {
-                "description": "stop and remove one of your own stacks",
+                "description": "take a stack down and remove it; it is removing until its graph has removed its containers and its networks. Its volumes stay, and so does its VM",
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload stacks"
                 ],
-                "summary": "Delete own stack",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Stack UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/my/workload/stacks/{uuid}/kill": {
-            "post": {
-                "description": "stop every service of one of your own stacks at once",
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Kill own stack",
+                "summary": "Delete a stack",
                 "parameters": [
                     {
                         "type": "string",
@@ -2748,11 +2933,22 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
@@ -2760,11 +2956,11 @@ const docTemplate = `{
         },
         "/dashboard/my/workload/stacks/{uuid}/restart": {
             "post": {
-                "description": "restart every service of one of your own stacks",
+                "description": "ask for a stack's containers to be restarted",
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload stacks"
                 ],
-                "summary": "Restart own stack",
+                "summary": "Restart a stack",
                 "parameters": [
                     {
                         "type": "string",
@@ -2782,11 +2978,67 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/stacks/{uuid}/start": {
+            "post": {
+                "description": "ask for a stopped stack's containers to be started again; its state says how it went",
+                "tags": [
+                    "dashboard workload stacks"
+                ],
+                "summary": "Start a stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
@@ -2794,11 +3046,11 @@ const docTemplate = `{
         },
         "/dashboard/my/workload/stacks/{uuid}/stop": {
             "post": {
-                "description": "stop every service of one of your own stacks",
+                "description": "ask for a stack's containers to be stopped, and kept",
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload stacks"
                 ],
-                "summary": "Stop own stack",
+                "summary": "Stop a stack",
                 "parameters": [
                     {
                         "type": "string",
@@ -2816,29 +3068,37 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
             }
         },
-        "/dashboard/my/workload/tasks": {
+        "/dashboard/my/workload/vms": {
             "get": {
-                "description": "paginated list of the tasks the current user owns",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "a page of VMs: anybody's on the workload routes, the caller's own on the my routes",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload vms"
                 ],
-                "summary": "List my tasks",
+                "summary": "List VMs",
                 "parameters": [
                     {
                         "type": "integer",
@@ -2852,36 +3112,38 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/getusertasks.Response"
+                            "$ref": "#/definitions/getVMs.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
             }
         },
-        "/dashboard/my/workload/tasks/{uuid}": {
+        "/dashboard/my/workload/vms/{uuid}": {
             "get": {
-                "description": "one of the tasks the current user owns",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "one VM, with the addresses its ports are served on while its ingress is allowed",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload vms"
                 ],
-                "summary": "Show own task",
+                "summary": "Show a VM",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Task UUID",
+                        "description": "VM UUID",
                         "name": "uuid",
                         "in": "path",
                         "required": true
@@ -2891,36 +3153,442 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/getusertask.Response"
+                            "$ref": "#/definitions/getVM.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
             },
             "delete": {
-                "description": "stop and remove one of your own tasks",
+                "description": "ask for a VM and its disk to be removed; it is deleting until its node has removed it, and its snapshots stay. The stacks and the containers in it make it again, under its uuid and as it was, and then what they need in it, unless cascade deletes them with it; when anything needs it, it is answered with what does, and with whether one of them makes it again",
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload vms"
                 ],
-                "summary": "Delete own task",
+                "summary": "Delete a VM",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Task UUID",
+                        "description": "VM UUID",
                         "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Delete the stacks and the containers in it with it, rather than have them make it again",
+                        "name": "cascade",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "change what the request carries and leave the rest: name, lifetime_seconds, ports, network and resources (sent whole). A change to the ports, the network or the resources restarts a VM that is not stopped; the disk only grows. A code runner's snippet, while it runs, is changed as its task: such a change runs it again from the start, and its lifetime is its snippet's, which is not changed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Change a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "What changes",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/updateVM.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.VM"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/containers": {
+            "get": {
+                "description": "every container of one Docker VM, stopped ones too, read from its dockerd as it is now",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "List a Docker VM's containers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getVMContainers.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/containers/{id}": {
+            "get": {
+                "description": "one container, read from its VM's dockerd as it is now",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Show a container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Container"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a container; one that is running only by force. Its volumes stay",
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Remove a container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Remove it even while it runs",
+                        "name": "force",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/containers/{id}/logs": {
+            "get": {
+                "description": "the tail of what a container has written: the last tail lines, or those written since a moment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Container logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only lines written from this moment on (RFC 3339)",
+                        "name": "since",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Only the last this many lines",
+                        "name": "tail",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getContainerLogs.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/containers/{id}/networks": {
+            "post": {
+                "description": "attach a container to another docker network of its VM, under the aliases its neighbours there reach it by",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Connect a container to a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The network",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/connectNetwork.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/containers/{id}/networks/{network}": {
+            "delete": {
+                "description": "detach a container from one of its VM's docker networks",
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Disconnect a container from a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Network id or name",
+                        "name": "network",
                         "in": "path",
                         "required": true
                     }
@@ -2933,53 +3601,332 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
             }
         },
-        "/dashboard/my/workload/tasks/{uuid}/kill": {
+        "/dashboard/my/workload/vms/{uuid}/containers/{id}/restart": {
             "post": {
-                "description": "stop one of your own tasks at once",
+                "description": "stop a container and start it again",
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload containers"
                 ],
-                "summary": "Kill own task",
+                "summary": "Restart a container",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Task UUID",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/containers/{id}/start": {
+            "post": {
+                "description": "start a container that is not running; it is running once this answers",
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Start a container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/containers/{id}/stats": {
+            "get": {
+                "description": "one sample of what a container uses: CPU, memory, network and block counters, in bytes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Container stats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.ContainerStats"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/containers/{id}/stop": {
+            "post": {
+                "description": "stop a container, giving it docker's grace period to shut down on its own first",
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Stop a container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/dependents": {
+            "get": {
+                "description": "what needs a VM, read before it is asked to be deleted: the containers and the stacks in it, which make it again, under its uuid and as it was, once it is gone, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "What needs a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
                         "name": "uuid",
                         "in": "path",
                         "required": true
                     }
                 ],
                 "responses": {
-                    "202": {
-                        "description": "Accepted",
+                    "200": {
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
             }
         },
-        "/dashboard/my/workload/tasks/{uuid}/logs": {
+        "/dashboard/my/workload/vms/{uuid}/images": {
             "get": {
-                "description": "what one of your own tasks has written",
+                "description": "the images a Docker VM holds, read from its dockerd as it is now",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload images"
+                ],
+                "summary": "List a Docker VM's images",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getImages.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "pull an image into a Docker VM. A pull takes as long as the registry does, and carries on after whoever asked has stopped waiting",
                 "consumes": [
                     "application/json"
                 ],
@@ -2987,27 +3934,147 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard workload"
+                    "dashboard workload images"
                 ],
-                "summary": "Own task logs",
+                "summary": "Pull an image",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Task UUID",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The image",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/pullImage.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Image"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/images/{id}": {
+            "delete": {
+                "description": "remove an image from a Docker VM; one a container was created from only by force",
+                "tags": [
+                    "dashboard workload images"
+                ],
+                "summary": "Remove an image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
                         "name": "uuid",
                         "in": "path",
                         "required": true
                     },
                     {
                         "type": "string",
-                        "description": "Only lines written after this time (RFC3339)",
-                        "name": "after",
+                        "description": "Image id or tag",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Remove it even while a container uses it",
+                        "name": "force",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/logs": {
+            "get": {
+                "description": "the tail of what a VM has written, read from its node as it is now: the last tail lines, or those written since a moment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "VM logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only lines written from this moment on (RFC 3339)",
+                        "name": "since",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "How many lines",
-                        "name": "limit",
+                        "description": "Only the last this many lines",
+                        "name": "tail",
                         "in": "query"
                     }
                 ],
@@ -3015,37 +4082,263 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/getusertasklogs.Response"
+                            "$ref": "#/definitions/getVMLogs.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
             }
         },
-        "/dashboard/my/workload/tasks/{uuid}/restart": {
-            "post": {
-                "description": "restart one of your own tasks",
-                "tags": [
-                    "dashboard workload"
+        "/dashboard/my/workload/vms/{uuid}/networks": {
+            "get": {
+                "description": "the docker networks of a Docker VM, the ones docker made itself included",
+                "produces": [
+                    "application/json"
                 ],
-                "summary": "Restart own task",
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "List a Docker VM's networks",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Task UUID",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getNetworks.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a docker network in a Docker VM, for its containers to meet on; it never reaches past the VM",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "Create a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Network",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createNetwork.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.DockerNetwork"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/networks/{id}": {
+            "delete": {
+                "description": "remove a docker network from a Docker VM; one a container is attached to is refused, unless cascade deletes the stacks and the containers that need it first. When anything needs it, it is answered with what does, and with whether one of them makes it again, as a stack or a container that owns it does",
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "Remove a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Network id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Delete the stacks and the containers that need it first",
+                        "name": "cascade",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/networks/{id}/dependents": {
+            "get": {
+                "description": "what needs a docker network of a Docker VM, found by its id or its name as its delete finds it, read before it is asked to be deleted: the containers and the stacks that need it, each saying whether it makes it again once it is gone, as one that owns it does, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "What needs a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Network id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/restart": {
+            "post": {
+                "description": "ask for a VM to be stopped and started again in place",
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Restart a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
                         "name": "uuid",
                         "in": "path",
                         "required": true
@@ -3059,27 +4352,95 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
             }
         },
-        "/dashboard/my/workload/tasks/{uuid}/stop": {
+        "/dashboard/my/workload/vms/{uuid}/restore": {
             "post": {
-                "description": "stop one of your own tasks",
-                "tags": [
-                    "dashboard workload"
+                "description": "replace a VM's disk with a snapshot's: one of its owner's, of the same kind and engine, and no larger than its disk. The VM is stopped, restored and started again; it keeps its uuid, its slug and its ports",
+                "consumes": [
+                    "application/json"
                 ],
-                "summary": "Stop own task",
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Restore a VM from a snapshot",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Task UUID",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The snapshot",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/restoreVM.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/start": {
+            "post": {
+                "description": "ask for a stopped VM to be started; its state says how it is going",
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Start a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
                         "name": "uuid",
                         "in": "path",
                         "required": true
@@ -3093,11 +4454,295 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
                         "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/stop": {
+            "post": {
+                "description": "ask for a VM to be stopped; its disk is kept where it lives",
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Stop a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/volumes": {
+            "get": {
+                "description": "the volumes of a Docker VM",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "List a Docker VM's volumes",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getVolumes.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a volume in a Docker VM, on its disk, for its containers to keep what they write in",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "Create a volume",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Volume",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createVolume.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Volume"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/volumes/{name}": {
+            "delete": {
+                "description": "remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force, or once cascade deleted the stacks and the containers that need it first. When anything needs it, it is answered with what does, and with whether one of them makes it again",
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "Remove a volume",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Volume name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Remove it even while a container uses it",
+                        "name": "force",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Delete the stacks and the containers that need it first",
+                        "name": "cascade",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/workload/vms/{uuid}/volumes/{name}/dependents": {
+            "get": {
+                "description": "what needs a volume of a Docker VM, found by its name as its delete finds it, read before it is asked to be deleted: the containers and the stacks that need it, a container that mounts it among them, each saying whether it makes it again once it is gone, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "What needs a volume",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Volume name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
@@ -3531,587 +5176,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/workload/stacks": {
-            "get": {
-                "description": "paginated list of the stacks the workload is holding",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "List stacks",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page",
-                        "name": "page",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStacks.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "run a set of connected services from a docker compose specification",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Run a stack",
-                "parameters": [
-                    {
-                        "description": "Stack specification",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Request"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/stacks/{uuid}": {
-            "get": {
-                "description": "retrieve a stack and the services in it",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Get stack",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Stack UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "remove a stack and everything it holds: its ports, its log and the task itself",
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Delete stack",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Stack UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/stacks/{uuid}/kill": {
-            "post": {
-                "description": "stop every service of a stack at once, without a grace period",
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Kill stack",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Stack UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/stacks/{uuid}/restart": {
-            "post": {
-                "description": "restart every service of a stack",
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Restart stack",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Stack UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/stacks/{uuid}/stop": {
-            "post": {
-                "description": "stop every service of a stack, giving each a moment to shut down on its own",
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Stop stack",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Stack UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/tasks": {
-            "get": {
-                "description": "paginated list of the tasks the workload is holding",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "List tasks",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page",
-                        "name": "page",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getTasks.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "run one long-running task from a docker compose service specification",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Run a task",
-                "parameters": [
-                    {
-                        "description": "Task specification",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Request"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/tasks/{uuid}": {
-            "get": {
-                "description": "retrieve one task, with the addresses its ports are served on",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Get task",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Task UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getTask.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "remove a task and everything it holds: its ports, its log and the task itself",
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Delete task",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Task UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/tasks/{uuid}/kill": {
-            "post": {
-                "description": "stop a task at once, without a grace period",
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Kill task",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Task UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/tasks/{uuid}/logs": {
-            "get": {
-                "description": "read what a task has written, from its first line onward",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Task logs",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Task UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Only lines written after this moment (RFC3339)",
-                        "name": "after",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "How many lines to return",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_getTaskLogs.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/tasks/{uuid}/restart": {
-            "post": {
-                "description": "stop a task and start it again in place",
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Restart task",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Task UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/workload/tasks/{uuid}/stop": {
-            "post": {
-                "description": "stop a task, giving it a moment to shut down on its own",
-                "tags": [
-                    "dashboard workload"
-                ],
-                "summary": "Stop task",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Task UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/dashboard/users": {
             "get": {
                 "description": "paginated list of users",
@@ -4434,6 +5498,2356 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/containers": {
+            "get": {
+                "description": "the containers of every running Docker VM, each with the VM it is in, narrowed to one VM with ?vm=: anybody's on the workload routes, the caller's own on the my routes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "List containers across Docker VMs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Only the containers of this Docker VM",
+                        "name": "vm",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getContainers.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create and start a container for the caller, pulling its image first when the VM does not hold it: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. The answer says which VM it went into and whether it was made for it",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Create a container",
+                "parameters": [
+                    {
+                        "description": "Container",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createContainer.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/createContainer.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/snapshots": {
+            "get": {
+                "description": "a page of snapshots, of one VM's with ?vm=: anybody's on the workload routes, the caller's own on the my routes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload snapshots"
+                ],
+                "summary": "List snapshots",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only the snapshots of this VM",
+                        "name": "vm",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getSnapshots.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/snapshots/{uuid}": {
+            "get": {
+                "description": "one snapshot",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload snapshots"
+                ],
+                "summary": "Show a snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snapshot UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getSnapshot.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a snapshot and the archive it kept",
+                "tags": [
+                    "dashboard workload snapshots"
+                ],
+                "summary": "Delete a snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snapshot UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "give a snapshot another name, which is all there is to change about one",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload snapshots"
+                ],
+                "summary": "Rename a snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Snapshot UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Its name",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/renameSnapshot.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Snapshot"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/stacks": {
+            "get": {
+                "description": "a page of stacks, without their files, in one VM with ?vm=: anybody's on the workload routes, the caller's own on the my routes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload stacks"
+                ],
+                "summary": "List stacks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only the stacks deployed into this VM",
+                        "name": "vm",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getStacks.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "deploy a stack for the caller from its file, which the platform reads and carries out itself, each service a container of its own: YAML in the shape of a compose file, of which it takes services (at least one), volumes and networks at the top, each volume and network with nothing beneath it; and of a service, image, which it needs, command and entrypoint, environment, ports (short or long form), privileged, restart (no or unless-stopped), depends_on (service_started), volumes (named ones the file declares, or binds of absolute paths), networks, pids_limit, user, runtime and resources.limits.cpus and .memory. Anything else, build, healthcheck, deploy, profiles, extends, configs, secrets, x- keys, anchors and aliases, tags but !!str, directives (%YAML, %TAG), and a top-level version or name among it, is refused, and so is everything else wrong with it, field by field under its path in the file, as compose.\u003cpath\u003e: compose.services.web.build. The file is 256 KiB at most, in UTF-8; a key is a string, quoted when YAML would read it as anything else, of 1024 characters at most; a name, of a service, a volume or a network, is 63 characters at most; its services name 1000 of what it declares at most, each network a service joins, each named volume it mounts and each service it depends on; and nothing in it nests deeper than 16 levels. It goes in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. Its graph makes it after the answer, which says which VM it goes into and whether that is made for it",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload stacks"
+                ],
+                "summary": "Deploy a stack",
+                "parameters": [
+                    {
+                        "description": "Stack",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createStack.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/createStack.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/stacks/{uuid}": {
+            "get": {
+                "description": "one stack, with its file and the containers its graph made of its services as its VM lists them now, each with the stack's slug and uuid and its service; note is vm_not_running when there are none because its VM is not running",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload stacks"
+                ],
+                "summary": "Show a stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getStack.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "take a stack down and remove it; it is removing until its graph has removed its containers and its networks. Its volumes stay, and so does its VM",
+                "tags": [
+                    "dashboard workload stacks"
+                ],
+                "summary": "Delete a stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/stacks/{uuid}/restart": {
+            "post": {
+                "description": "ask for a stack's containers to be restarted",
+                "tags": [
+                    "dashboard workload stacks"
+                ],
+                "summary": "Restart a stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/stacks/{uuid}/start": {
+            "post": {
+                "description": "ask for a stopped stack's containers to be started again; its state says how it went",
+                "tags": [
+                    "dashboard workload stacks"
+                ],
+                "summary": "Start a stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/stacks/{uuid}/stop": {
+            "post": {
+                "description": "ask for a stack's containers to be stopped, and kept",
+                "tags": [
+                    "dashboard workload stacks"
+                ],
+                "summary": "Stop a stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms": {
+            "get": {
+                "description": "a page of VMs: anybody's on the workload routes, the caller's own on the my routes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "List VMs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getVMs.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a VM for the caller, from an image or from one of their snapshots; the workload boots it in its own time",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Create a VM",
+                "parameters": [
+                    {
+                        "description": "VM",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createVM.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.VM"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}": {
+            "get": {
+                "description": "one VM, with the addresses its ports are served on while its ingress is allowed",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Show a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getVM.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "ask for a VM and its disk to be removed; it is deleting until its node has removed it, and its snapshots stay. The stacks and the containers in it make it again, under its uuid and as it was, and then what they need in it, unless cascade deletes them with it; when anything needs it, it is answered with what does, and with whether one of them makes it again",
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Delete a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Delete the stacks and the containers in it with it, rather than have them make it again",
+                        "name": "cascade",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "change what the request carries and leave the rest: name, lifetime_seconds, ports, network and resources (sent whole). A change to the ports, the network or the resources restarts a VM that is not stopped; the disk only grows. A code runner's snippet, while it runs, is changed as its task: such a change runs it again from the start, and its lifetime is its snippet's, which is not changed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Change a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "What changes",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/updateVM.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.VM"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/containers": {
+            "get": {
+                "description": "every container of one Docker VM, stopped ones too, read from its dockerd as it is now",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "List a Docker VM's containers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getVMContainers.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/containers/{id}": {
+            "get": {
+                "description": "one container, read from its VM's dockerd as it is now",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Show a container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Container"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a container; one that is running only by force. Its volumes stay",
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Remove a container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Remove it even while it runs",
+                        "name": "force",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/containers/{id}/logs": {
+            "get": {
+                "description": "the tail of what a container has written: the last tail lines, or those written since a moment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Container logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only lines written from this moment on (RFC 3339)",
+                        "name": "since",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Only the last this many lines",
+                        "name": "tail",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getContainerLogs.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/containers/{id}/networks": {
+            "post": {
+                "description": "attach a container to another docker network of its VM, under the aliases its neighbours there reach it by",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Connect a container to a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The network",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/connectNetwork.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/containers/{id}/networks/{network}": {
+            "delete": {
+                "description": "detach a container from one of its VM's docker networks",
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Disconnect a container from a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Network id or name",
+                        "name": "network",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/containers/{id}/restart": {
+            "post": {
+                "description": "stop a container and start it again",
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Restart a container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/containers/{id}/start": {
+            "post": {
+                "description": "start a container that is not running; it is running once this answers",
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Start a container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/containers/{id}/stats": {
+            "get": {
+                "description": "one sample of what a container uses: CPU, memory, network and block counters, in bytes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Container stats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.ContainerStats"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/containers/{id}/stop": {
+            "post": {
+                "description": "stop a container, giving it docker's grace period to shut down on its own first",
+                "tags": [
+                    "dashboard workload containers"
+                ],
+                "summary": "Stop a container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Container id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/dependents": {
+            "get": {
+                "description": "what needs a VM, read before it is asked to be deleted: the containers and the stacks in it, which make it again, under its uuid and as it was, once it is gone, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "What needs a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/images": {
+            "get": {
+                "description": "the images a Docker VM holds, read from its dockerd as it is now",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload images"
+                ],
+                "summary": "List a Docker VM's images",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getImages.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "pull an image into a Docker VM. A pull takes as long as the registry does, and carries on after whoever asked has stopped waiting",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload images"
+                ],
+                "summary": "Pull an image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The image",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/pullImage.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Image"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/images/{id}": {
+            "delete": {
+                "description": "remove an image from a Docker VM; one a container was created from only by force",
+                "tags": [
+                    "dashboard workload images"
+                ],
+                "summary": "Remove an image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Image id or tag",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Remove it even while a container uses it",
+                        "name": "force",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/logs": {
+            "get": {
+                "description": "the tail of what a VM has written, read from its node as it is now: the last tail lines, or those written since a moment",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "VM logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only lines written from this moment on (RFC 3339)",
+                        "name": "since",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Only the last this many lines",
+                        "name": "tail",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getVMLogs.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/networks": {
+            "get": {
+                "description": "the docker networks of a Docker VM, the ones docker made itself included",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "List a Docker VM's networks",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getNetworks.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a docker network in a Docker VM, for its containers to meet on; it never reaches past the VM",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "Create a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Network",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createNetwork.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.DockerNetwork"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/networks/{id}": {
+            "delete": {
+                "description": "remove a docker network from a Docker VM; one a container is attached to is refused, unless cascade deletes the stacks and the containers that need it first. When anything needs it, it is answered with what does, and with whether one of them makes it again, as a stack or a container that owns it does",
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "Remove a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Network id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Delete the stacks and the containers that need it first",
+                        "name": "cascade",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/networks/{id}/dependents": {
+            "get": {
+                "description": "what needs a docker network of a Docker VM, found by its id or its name as its delete finds it, read before it is asked to be deleted: the containers and the stacks that need it, each saying whether it makes it again once it is gone, as one that owns it does, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload networks"
+                ],
+                "summary": "What needs a network",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Network id or name",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/restart": {
+            "post": {
+                "description": "ask for a VM to be stopped and started again in place",
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Restart a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/restore": {
+            "post": {
+                "description": "replace a VM's disk with a snapshot's: one of its owner's, of the same kind and engine, and no larger than its disk. The VM is stopped, restored and started again; it keeps its uuid, its slug and its ports",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Restore a VM from a snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The snapshot",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/restoreVM.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/snapshots": {
+            "post": {
+                "description": "take a snapshot of one of the caller's own VMs, which is running or stopped, or of a code runner's snippet while it runs, as the caller's own: it outlives the snippet, and is restored as a new VM. It is being created until its archive is stored",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload snapshots"
+                ],
+                "summary": "Take a snapshot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Snapshot",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createSnapshot.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Snapshot"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/start": {
+            "post": {
+                "description": "ask for a stopped VM to be started; its state says how it is going",
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Start a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/stop": {
+            "post": {
+                "description": "ask for a VM to be stopped; its disk is kept where it lives",
+                "tags": [
+                    "dashboard workload vms"
+                ],
+                "summary": "Stop a VM",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/volumes": {
+            "get": {
+                "description": "the volumes of a Docker VM",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "List a Docker VM's volumes",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getVolumes.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a volume in a Docker VM, on its disk, for its containers to keep what they write in",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "Create a volume",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Volume",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createVolume.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Volume"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/volumes/{name}": {
+            "delete": {
+                "description": "remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force, or once cascade deleted the stacks and the containers that need it first. When anything needs it, it is answered with what does, and with whether one of them makes it again",
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "Remove a volume",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Volume name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Remove it even while a container uses it",
+                        "name": "force",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Delete the stacks and the containers that need it first",
+                        "name": "cascade",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Removal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/vms/{uuid}/volumes/{name}/dependents": {
+            "get": {
+                "description": "what needs a volume of a Docker VM, found by its name as its delete finds it, read before it is asked to be deleted: the containers and the stacks that need it, a container that mounts it among them, each saying whether it makes it again once it is gone, and whether one of them does, as its delete would be answered with them now; a list of none when nothing does. Reading it deletes nothing, and asks nothing of its node",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload volumes"
+                ],
+                "summary": "What needs a volume",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "VM UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Volume name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/presenter.Needs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Refusal"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/workload.Failure"
                         }
                     }
                 }
@@ -4978,6 +8392,165 @@ const docTemplate = `{
                 }
             }
         },
+        "connectNetwork.Request": {
+            "type": "object",
+            "properties": {
+                "aliases": {
+                    "description": "Aliases are the names its neighbours on that network reach it by, beside\nits own.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "network": {
+                    "description": "Network is the network's id or its name.",
+                    "type": "string"
+                }
+            }
+        },
+        "createContainer.Mount": {
+            "type": "object",
+            "properties": {
+                "read_only": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "createContainer.PortBinding": {
+            "type": "object",
+            "properties": {
+                "container_port": {
+                    "type": "integer"
+                },
+                "host_ip": {
+                    "description": "HostIP is the VM's address it is published on, an IPv4 or an IPv6\none; empty is every one.",
+                    "type": "string"
+                },
+                "host_port": {
+                    "type": "integer"
+                },
+                "protocol": {
+                    "description": "Protocol is tcp or udp; empty is tcp.",
+                    "type": "string"
+                }
+            }
+        },
+        "createContainer.Request": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "cpus": {
+                    "description": "CPUs is in cores and Memory in bytes; zero is no limit beyond the VM's.",
+                    "type": "number"
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "env": {
+                    "description": "Env is the environment, each as KEY=value.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "image": {
+                    "description": "Image is pulled first when the VM does not hold it.",
+                    "type": "string"
+                },
+                "memory": {
+                    "type": "integer"
+                },
+                "mounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/createContainer.Mount"
+                    }
+                },
+                "name": {
+                    "description": "Name is docker's name for it; empty lets docker pick one.",
+                    "type": "string"
+                },
+                "networks": {
+                    "description": "Networks are the VM's docker networks to attach it to, beside the\ndefault one.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "pids_limit": {
+                    "description": "PidsLimit is the most processes it may run at once; zero leaves it to\nthe VM's dockerd.",
+                    "type": "integer"
+                },
+                "ports": {
+                    "description": "Ports publish container ports on the VM. A VM port the VM also exposes\nthrough the ingress is reachable from outside; any other is reachable\nonly from inside the VM.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/createContainer.PortBinding"
+                    }
+                },
+                "privileged": {
+                    "description": "Privileged gives it every device and capability the VM has.",
+                    "type": "boolean"
+                },
+                "restart_policy": {
+                    "description": "RestartPolicy is no, always, unless-stopped or on-failure.",
+                    "type": "string"
+                },
+                "runtime": {
+                    "description": "Runtime is the runtime the VM's dockerd runs it with; empty is\ndockerd's default, and one it lacks is refused by it.",
+                    "type": "string"
+                },
+                "user": {
+                    "description": "User is whom its processes run as, user[:group], by name or by number;\nempty is its image's.",
+                    "type": "string"
+                },
+                "vm": {
+                    "$ref": "#/definitions/input.NewDockerVM"
+                },
+                "vm_uuid": {
+                    "type": "string"
+                },
+                "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "createContainer.Response": {
+            "type": "object",
+            "properties": {
+                "container": {
+                    "$ref": "#/definitions/presenter.Container"
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "vm": {
+                    "description": "VM is the Docker VM the container went into, and whether it was made\nfor it.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.ChosenVM"
+                        }
+                    ]
+                }
+            }
+        },
         "createMessage.Request": {
             "type": "object",
             "properties": {
@@ -4991,6 +8564,132 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "subject": {
+                    "type": "string"
+                }
+            }
+        },
+        "createNetwork.Request": {
+            "type": "object",
+            "properties": {
+                "driver": {
+                    "description": "Driver is bridge, which is also what empty is: a VM is a single docker\nhost, and no other driver has anything to join there.",
+                    "type": "string"
+                },
+                "internal": {
+                    "description": "Internal keeps the containers on it from reaching anything outside it.",
+                    "type": "boolean"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "createSnapshot.Request": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "createStack.Request": {
+            "type": "object",
+            "properties": {
+                "compose": {
+                    "description": "Compose is its file, YAML in the shape of a compose file, of which the\nplatform takes what it carries out itself: services, volumes and\nnetworks. Anything else is refused under its path in the file\n(compose.services.web.build). It names no project: what the stack's\ngraph makes is named under the stack's slug.",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "vm": {
+                    "$ref": "#/definitions/input.NewDockerVM"
+                },
+                "vm_uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "createStack.Response": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "stack": {
+                    "$ref": "#/definitions/presenter.Stack"
+                },
+                "vm": {
+                    "description": "VM is the Docker VM the stack went into, and whether it was made for\nit.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.ChosenVM"
+                        }
+                    ]
+                }
+            }
+        },
+        "createVM.Request": {
+            "type": "object",
+            "properties": {
+                "image": {
+                    "description": "Image is the OCI reference a machine boots from; empty takes its\nkind's default, and a Docker VM is always the workload's own image.",
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "Kind is machine, an OS image somebody opens a terminal in, or docker,\nthe image containers and stacks are run in.",
+                    "type": "string"
+                },
+                "lifetime_seconds": {
+                    "description": "LifetimeSeconds is how long the VM is kept before it is deleted, and\nzero keeps it until somebody deletes it.",
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "network": {
+                    "$ref": "#/definitions/input.Network"
+                },
+                "persistent_disk": {
+                    "description": "PersistentDisk keeps what is written to the disk across a stop and a\nstart; without it the disk is as the image left it on every start.",
+                    "type": "boolean"
+                },
+                "ports": {
+                    "description": "Ports are the guest ports the ingress serves, while ingress allows it.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "resources": {
+                    "$ref": "#/definitions/input.Resources"
+                },
+                "snapshot_uuid": {
+                    "description": "SnapshotUUID makes the VM from one of the caller's snapshots: its kind\nand image are the snapshot's, and its disk the larger of the one asked\nfor and the snapshot's.",
+                    "type": "string"
+                }
+            }
+        },
+        "createVolume.Request": {
+            "type": "object",
+            "properties": {
+                "driver": {
+                    "description": "Driver is local, which is also what empty is: a volume lives on the\nVM's own disk.",
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
                     "type": "string"
                 }
             }
@@ -5553,6 +9252,52 @@ const docTemplate = `{
                 }
             }
         },
+        "getContainerLogs.Response": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.LogLine"
+                    }
+                },
+                "truncated": {
+                    "description": "Truncated says there was more than one answer carries: what is here is\nthe last of it.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "getContainers.Response": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.VMContainer"
+                    }
+                }
+            }
+        },
+        "getImages.Response": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Image"
+                    }
+                }
+            }
+        },
         "getMessage.Response": {
             "type": "object",
             "properties": {
@@ -5630,122 +9375,154 @@ const docTemplate = `{
                 }
             }
         },
-        "getTask.Response": {
+        "getNetworks.Response": {
             "type": "object",
             "properties": {
-                "command": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/presenter.DockerNetwork"
                     }
+                }
+            }
+        },
+        "getSnapshot.Response": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"
                 },
-                "deadline": {
-                    "description": "Deadline is when a task that is only allowed to run for so long\nwill be stopped. A task with no limit of its own has none.",
-                    "type": "string"
+                "disk": {
+                    "description": "Disk is the disk, in bytes, a VM it is restored onto needs at least.",
+                    "type": "integer"
                 },
-                "endpoints": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Endpoint"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "expected_state": {
-                    "type": "string"
-                },
-                "finished_at": {
+                "engine": {
+                    "description": "Engine is what took it; only the same engine can restore it.",
                     "type": "string"
                 },
                 "image": {
                     "type": "string"
                 },
-                "max_retries": {
-                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the workload gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
-                    "type": "integer"
+                "kind": {
+                    "type": "string"
                 },
                 "name": {
                     "type": "string"
                 },
                 "owner": {
-                    "description": "Owner is who asked for this task.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
+                    "$ref": "#/definitions/presenter.Owner"
                 },
-                "read_only": {
-                    "type": "boolean"
+                "owner_uuid": {
+                    "type": "string"
                 },
                 "reason": {
-                    "description": "Reason is why a task failed, when the workload can say so.",
                     "type": "string"
                 },
-                "resource_limits": {
-                    "$ref": "#/definitions/presenter.Limits"
-                },
-                "retries": {
+                "size": {
+                    "description": "Size is how many bytes it takes where it is kept.",
                     "type": "integer"
                 },
-                "service_name": {
-                    "type": "string"
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "stack_uuid": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
                 "state": {
-                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the workload is closing the gap.",
                     "type": "string"
                 },
                 "uuid": {
                     "type": "string"
                 },
-                "working_dir": {
+                "vm_name": {
+                    "type": "string"
+                },
+                "vm_uuid": {
+                    "description": "VMUUID and VMName are the VM it was taken of, which may be gone since.",
                     "type": "string"
                 }
             }
         },
-        "getTaskLogs.log": {
-            "type": "object",
-            "properties": {
-                "at": {
-                    "type": "string"
-                },
-                "content": {
-                    "type": "string"
-                },
-                "stream": {
-                    "type": "string"
-                }
-            }
-        },
-        "getTasks.Response": {
+        "getSnapshots.Response": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/presenter.Task"
+                        "$ref": "#/definitions/presenter.Snapshot"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/presenter.Pagination"
+                }
+            }
+        },
+        "getStack.Response": {
+            "type": "object",
+            "properties": {
+                "compose": {
+                    "description": "Compose is its file, the YAML as it was given. A listing leaves it out:\nit is as long as somebody wrote it, and a listing is read to choose\none.",
+                    "type": "string"
+                },
+                "containers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Container"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "expected_state": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "note": {
+                    "description": "Note says why there are no containers when it is not that the stack has\nnone: NoteVMNotRunning.",
+                    "type": "string"
+                },
+                "owner": {
+                    "$ref": "#/definitions/presenter.Owner"
+                },
+                "owner_uuid": {
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason is why it is in its state: what it waits on, or what its plan\nfailed with.",
+                    "type": "string"
+                },
+                "slug": {
+                    "description": "Slug is what it is known by inside its VM: what its graph makes is\nnamed under it, \u003cslug\u003e_\u003cname\u003e, and its containers are shown with it as\ntheir stack.",
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is what its graph last said it is, what its containers make it\nonce it is made; ExpectedState is what it was asked to be, running or\nstopped.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "vm_name": {
+                    "type": "string"
+                },
+                "vm_uuid": {
+                    "description": "VMUUID is the Docker VM it is deployed into, and VMName what that VM is\ncalled now.",
+                    "type": "string"
+                }
+            }
+        },
+        "getStacks.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Stack"
                     }
                 },
                 "pagination": {
@@ -5921,6 +9698,164 @@ const docTemplate = `{
                 },
                 "total_pages": {
                     "type": "integer"
+                }
+            }
+        },
+        "getVM.Response": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "expected_state": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "lifetime_seconds": {
+                    "description": "LifetimeSeconds is how long the VM is kept, and zero is until it is\ndeleted. ExpiresAt is when one with a lifetime goes.",
+                    "type": "integer"
+                },
+                "managed_by": {
+                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM is\nstopped, deleted, read and opened a terminal in, its terminal being its\ntask's (/tasks/{uuid}/attach on the workload's ingress, anybody's);\nsnapshotted, as whoever takes the snapshot; and changed, its name,\nports, network and resources, which runs its snippet again from the\nstart. Its stats are what its snippet's VM uses, sampled as any VM's\nare while it runs. It is not started, restarted or restored, and its\nlifetime is its snippet's. It is left out for every other VM.",
+                    "type": "string",
+                    "enum": [
+                        "code-runner"
+                    ]
+                },
+                "name": {
+                    "type": "string"
+                },
+                "network": {
+                    "$ref": "#/definitions/presenter.Network"
+                },
+                "node_name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "$ref": "#/definitions/presenter.Owner"
+                },
+                "owner_uuid": {
+                    "type": "string"
+                },
+                "persistent_disk": {
+                    "type": "boolean"
+                },
+                "ports": {
+                    "description": "Ports are the guest ports the ingress serves, sorted.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "reason": {
+                    "description": "Reason is why it failed, or what is pending, when the workload can say.",
+                    "type": "string"
+                },
+                "resources": {
+                    "$ref": "#/definitions/presenter.Resources"
+                },
+                "slug": {
+                    "description": "Slug is the name its ports are served under.",
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is what the VM is doing; ExpectedState is what it was asked to be\ndoing. They differ while the workload is closing the gap.",
+                    "type": "string"
+                },
+                "stats": {
+                    "description": "Stats is the last sample its node reported, and is left out until there\nis one.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Stats"
+                        }
+                    ]
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "urls": {
+                    "description": "URLs are where its ports are served, while its ingress allows it.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.URL"
+                    }
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getVMContainers.Response": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Container"
+                    }
+                }
+            }
+        },
+        "getVMLogs.Response": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.VMLogLine"
+                    }
+                },
+                "truncated": {
+                    "description": "Truncated says there was more than one answer carries: what is here is\nthe last of it.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "getVMs.Response": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.VM"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/presenter.Pagination"
+                }
+            }
+        },
+        "getVolumes.Response": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Volume"
+                    }
                 }
             }
         },
@@ -6535,192 +10470,6 @@ const docTemplate = `{
                 }
             }
         },
-        "getuserstack.Response": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "expected_state": {
-                    "description": "ExpectedState is what the stack was asked to be, which is what it is on\nits way to while a command is still reaching its services.",
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner": {
-                    "description": "Owner is who asked for this stack.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
-                },
-                "services": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Task"
-                    }
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "state": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "getuserstacks.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Stack"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/presenter.Pagination"
-                }
-            }
-        },
-        "getusertask.Response": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "deadline": {
-                    "description": "Deadline is when a task that is only allowed to run for so long\nwill be stopped. A task with no limit of its own has none.",
-                    "type": "string"
-                },
-                "endpoints": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Endpoint"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "expected_state": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "max_retries": {
-                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the workload gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner": {
-                    "description": "Owner is who asked for this task.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
-                },
-                "read_only": {
-                    "type": "boolean"
-                },
-                "reason": {
-                    "description": "Reason is why a task failed, when the workload can say so.",
-                    "type": "string"
-                },
-                "resource_limits": {
-                    "$ref": "#/definitions/presenter.Limits"
-                },
-                "retries": {
-                    "type": "integer"
-                },
-                "service_name": {
-                    "type": "string"
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "stack_uuid": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the workload is closing the gap.",
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                },
-                "working_dir": {
-                    "type": "string"
-                }
-            }
-        },
-        "getusertasklogs.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/getusertasklogs.log"
-                    }
-                }
-            }
-        },
-        "getusertasklogs.log": {
-            "type": "object",
-            "properties": {
-                "at": {
-                    "type": "string"
-                },
-                "content": {
-                    "type": "string"
-                },
-                "stream": {
-                    "type": "string"
-                }
-            }
-        },
-        "getusertasks.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Task"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/presenter.Pagination"
-                }
-            }
-        },
         "github_com_khanzadimahdi_testproject_application_article_getArticle.Response": {
             "type": "object",
             "properties": {
@@ -7139,274 +10888,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "expected_state": {
-                    "description": "ExpectedState is what the stack was asked to be, which is what it is on\nits way to while a command is still reaching its services.",
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner": {
-                    "description": "Owner is who asked for this stack.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
-                },
-                "services": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Task"
-                    }
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "state": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStacks.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Stack"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/presenter.Pagination"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Request": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "services": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/spec.Service"
-                    }
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Response": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "errors": {
-                    "$ref": "#/definitions/domain.ValidationErrors"
-                },
-                "expected_state": {
-                    "description": "ExpectedState is what the stack was asked to be, which is what it is on\nits way to while a command is still reaching its services.",
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner": {
-                    "description": "Owner is who asked for this stack.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
-                },
-                "services": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Task"
-                    }
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "state": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_dashboard_workload_task_getTaskLogs.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/getTaskLogs.log"
-                    }
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Request": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "deploy": {
-                    "$ref": "#/definitions/spec.Deploy"
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "image": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "network_mode": {
-                    "description": "NetworkMode is how much of the network the task reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the workload\ndecides which networks a task joins — but it sits in the same place\na compose file puts that decision.",
-                    "type": "string"
-                },
-                "ports": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/spec.Port"
-                    }
-                },
-                "read_only": {
-                    "description": "ReadOnly makes the task's filesystem immutable, so nothing it runs\ncan change the image it was started from. It is compose's read_only.",
-                    "type": "boolean"
-                },
-                "restart": {
-                    "type": "string"
-                },
-                "working_dir": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Response": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "deadline": {
-                    "description": "Deadline is when a task that is only allowed to run for so long\nwill be stopped. A task with no limit of its own has none.",
-                    "type": "string"
-                },
-                "endpoints": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Endpoint"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "errors": {
-                    "$ref": "#/definitions/domain.ValidationErrors"
-                },
-                "expected_state": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "max_retries": {
-                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the workload gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner": {
-                    "description": "Owner is who asked for this task.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
-                },
-                "read_only": {
-                    "type": "boolean"
-                },
-                "reason": {
-                    "description": "Reason is why a task failed, when the workload can say so.",
-                    "type": "string"
-                },
-                "resource_limits": {
-                    "$ref": "#/definitions/presenter.Limits"
-                },
-                "retries": {
-                    "type": "integer"
-                },
-                "service_name": {
-                    "type": "string"
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "stack_uuid": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the workload is closing the gap.",
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                },
-                "working_dir": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_khanzadimahdi_testproject_application_language_getLanguages.Response": {
             "type": "object",
             "properties": {
@@ -7557,6 +11038,51 @@ const docTemplate = `{
                 }
             }
         },
+        "input.Network": {
+            "type": "object",
+            "properties": {
+                "egress": {
+                    "type": "string"
+                },
+                "ingress": {
+                    "type": "string"
+                }
+            }
+        },
+        "input.NewDockerVM": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "network": {
+                    "$ref": "#/definitions/input.Network"
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "resources": {
+                    "$ref": "#/definitions/input.Resources"
+                }
+            }
+        },
+        "input.Resources": {
+            "type": "object",
+            "properties": {
+                "cpus": {
+                    "type": "integer"
+                },
+                "disk": {
+                    "type": "integer"
+                },
+                "memory": {
+                    "type": "integer"
+                }
+            }
+        },
         "login.Request": {
             "type": "object",
             "properties": {
@@ -7602,31 +11128,259 @@ const docTemplate = `{
                 }
             }
         },
-        "presenter.Endpoint": {
+        "presenter.ChosenVM": {
             "type": "object",
             "properties": {
-                "host": {
+                "created": {
+                    "type": "boolean"
+                },
+                "name": {
                     "type": "string"
                 },
-                "task_port": {
-                    "type": "integer"
-                },
-                "url": {
+                "uuid": {
                     "type": "string"
                 }
             }
         },
-        "presenter.Limits": {
+        "presenter.Container": {
             "type": "object",
             "properties": {
-                "cpu": {
+                "command": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "mounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Mount"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "networks": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.PortBinding"
+                    }
+                },
+                "restart_policy": {
+                    "type": "string"
+                },
+                "service": {
+                    "type": "string"
+                },
+                "stack": {
+                    "description": "Stack and StackUUID are the slug and the uuid of the stack whose graph\nmade it, when the request could see that stack: whoever knows which\nstacks it could see says them (workload.StackIndexOf), and a stack's\ndetail says its own. Service is the service of the stack's file it is,\nas its labels say.",
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is docker's: created, running, paused, restarting, removing,\nexited or dead. Status is the sentence docker puts it in.",
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal, so\nnothing brings it back when it stops or goes.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "presenter.ContainerStats": {
+            "type": "object",
+            "properties": {
+                "block_read": {
+                    "type": "integer"
+                },
+                "block_write": {
+                    "type": "integer"
+                },
+                "cpu_percent": {
+                    "description": "CPUPercent is 0 to 100 of all of the CPUs the container can see, which\nare its VM's vCPUs: 100 is every one of them busy.",
                     "type": "number"
                 },
-                "disk": {
+                "memory_limit": {
                     "type": "integer"
                 },
-                "memory": {
+                "memory_used": {
                     "type": "integer"
+                },
+                "network_rx": {
+                    "type": "integer"
+                },
+                "network_tx": {
+                    "type": "integer"
+                },
+                "pids": {
+                    "type": "integer"
+                },
+                "sampled_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.Dependent": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "recreates": {
+                    "type": "boolean"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.DockerNetwork": {
+            "type": "object",
+            "properties": {
+                "containers": {
+                    "description": "Containers are the containers attached to it.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "driver": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "internal": {
+                    "type": "boolean"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "presenter.Image": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "in_use": {
+                    "description": "InUse says a container was created from it.",
+                    "type": "boolean"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was pulled from its VM's terminal,\nand no container the platform keeps, a stack's among them, uses it.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "presenter.LogLine": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "type": "string"
+                },
+                "line": {
+                    "type": "string"
+                },
+                "stream": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.Mount": {
+            "type": "object",
+            "properties": {
+                "read_only": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.Needs": {
+            "type": "object",
+            "properties": {
+                "dependents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Dependent"
+                    }
+                },
+                "recreated": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "presenter.Network": {
+            "type": "object",
+            "properties": {
+                "egress": {
+                    "type": "string"
+                },
+                "ingress": {
+                    "type": "string"
                 }
             }
         },
@@ -7658,135 +11412,397 @@ const docTemplate = `{
                 }
             }
         },
-        "presenter.Stack": {
+        "presenter.PortBinding": {
             "type": "object",
             "properties": {
+                "container_port": {
+                    "type": "integer"
+                },
+                "host_port": {
+                    "type": "integer"
+                },
+                "protocol": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.Resources": {
+            "type": "object",
+            "properties": {
+                "cpus": {
+                    "type": "integer"
+                },
+                "disk": {
+                    "type": "integer"
+                },
+                "memory": {
+                    "type": "integer"
+                }
+            }
+        },
+        "presenter.Snapshot": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
-                "expected_state": {
-                    "description": "ExpectedState is what the stack was asked to be, which is what it is on\nits way to while a command is still reaching its services.",
+                "disk": {
+                    "description": "Disk is the disk, in bytes, a VM it is restored onto needs at least.",
+                    "type": "integer"
+                },
+                "engine": {
+                    "description": "Engine is what took it; only the same engine can restore it.",
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "kind": {
                     "type": "string"
                 },
                 "name": {
                     "type": "string"
                 },
                 "owner": {
-                    "description": "Owner is who asked for this stack.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
+                    "$ref": "#/definitions/presenter.Owner"
                 },
-                "services": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Task"
-                    }
-                },
-                "slug": {
+                "owner_uuid": {
                     "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "size": {
+                    "description": "Size is how many bytes it takes where it is kept.",
+                    "type": "integer"
                 },
                 "state": {
                     "type": "string"
                 },
                 "uuid": {
                     "type": "string"
+                },
+                "vm_name": {
+                    "type": "string"
+                },
+                "vm_uuid": {
+                    "description": "VMUUID and VMName are the VM it was taken of, which may be gone since.",
+                    "type": "string"
                 }
             }
         },
-        "presenter.Task": {
+        "presenter.Stack": {
             "type": "object",
             "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "compose": {
+                    "description": "Compose is its file, the YAML as it was given. A listing leaves it out:\nit is as long as somebody wrote it, and a listing is read to choose\none.",
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"
                 },
-                "deadline": {
-                    "description": "Deadline is when a task that is only allowed to run for so long\nwill be stopped. A task with no limit of its own has none.",
-                    "type": "string"
-                },
-                "endpoints": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Endpoint"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "expected_state": {
                     "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "max_retries": {
-                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the workload gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
-                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
                 },
                 "owner": {
-                    "description": "Owner is who asked for this task.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
+                    "$ref": "#/definitions/presenter.Owner"
                 },
-                "read_only": {
-                    "type": "boolean"
-                },
-                "reason": {
-                    "description": "Reason is why a task failed, when the workload can say so.",
+                "owner_uuid": {
                     "type": "string"
                 },
-                "resource_limits": {
-                    "$ref": "#/definitions/presenter.Limits"
-                },
-                "retries": {
-                    "type": "integer"
-                },
-                "service_name": {
+                "reason": {
+                    "description": "Reason is why it is in its state: what it waits on, or what its plan\nfailed with.",
                     "type": "string"
                 },
                 "slug": {
+                    "description": "Slug is what it is known by inside its VM: what its graph makes is\nnamed under it, \u003cslug\u003e_\u003cname\u003e, and its containers are shown with it as\ntheir stack.",
                     "type": "string"
                 },
-                "stack_uuid": {
+                "state": {
+                    "description": "State is what its graph last said it is, what its containers make it\nonce it is made; ExpectedState is what it was asked to be, running or\nstopped.",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "vm_name": {
+                    "type": "string"
+                },
+                "vm_uuid": {
+                    "description": "VMUUID is the Docker VM it is deployed into, and VMName what that VM is\ncalled now.",
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.Stats": {
+            "type": "object",
+            "properties": {
+                "cpu_percent": {
+                    "description": "CPUPercent is 0 to 100 of all of the VM's vCPUs together: 100 is every\none of them busy, however many it has.",
+                    "type": "number"
+                },
+                "disk_total": {
+                    "type": "integer"
+                },
+                "disk_used": {
+                    "type": "integer"
+                },
+                "memory_limit": {
+                    "type": "integer"
+                },
+                "memory_used": {
+                    "type": "integer"
+                },
+                "network_rx": {
+                    "type": "integer"
+                },
+                "network_tx": {
+                    "type": "integer"
+                },
+                "sampled_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.URL": {
+            "type": "object",
+            "properties": {
+                "port": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.VM": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "expected_state": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "lifetime_seconds": {
+                    "description": "LifetimeSeconds is how long the VM is kept, and zero is until it is\ndeleted. ExpiresAt is when one with a lifetime goes.",
+                    "type": "integer"
+                },
+                "managed_by": {
+                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM is\nstopped, deleted, read and opened a terminal in, its terminal being its\ntask's (/tasks/{uuid}/attach on the workload's ingress, anybody's);\nsnapshotted, as whoever takes the snapshot; and changed, its name,\nports, network and resources, which runs its snippet again from the\nstart. Its stats are what its snippet's VM uses, sampled as any VM's\nare while it runs. It is not started, restarted or restored, and its\nlifetime is its snippet's. It is left out for every other VM.",
+                    "type": "string",
+                    "enum": [
+                        "code-runner"
+                    ]
+                },
+                "name": {
+                    "type": "string"
+                },
+                "network": {
+                    "$ref": "#/definitions/presenter.Network"
+                },
+                "node_name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "$ref": "#/definitions/presenter.Owner"
+                },
+                "owner_uuid": {
+                    "type": "string"
+                },
+                "persistent_disk": {
+                    "type": "boolean"
+                },
+                "ports": {
+                    "description": "Ports are the guest ports the ingress serves, sorted.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "reason": {
+                    "description": "Reason is why it failed, or what is pending, when the workload can say.",
+                    "type": "string"
+                },
+                "resources": {
+                    "$ref": "#/definitions/presenter.Resources"
+                },
+                "slug": {
+                    "description": "Slug is the name its ports are served under.",
                     "type": "string"
                 },
                 "started_at": {
                     "type": "string"
                 },
                 "state": {
-                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the workload is closing the gap.",
+                    "description": "State is what the VM is doing; ExpectedState is what it was asked to be\ndoing. They differ while the workload is closing the gap.",
                     "type": "string"
+                },
+                "stats": {
+                    "description": "Stats is the last sample its node reported, and is left out until there\nis one.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Stats"
+                        }
+                    ]
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "urls": {
+                    "description": "URLs are where its ports are served, while its ingress allows it.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.URL"
+                    }
                 },
                 "uuid": {
                     "type": "string"
+                }
+            }
+        },
+        "presenter.VMContainer": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string"
                 },
-                "working_dir": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "mounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Mount"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "networks": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.PortBinding"
+                    }
+                },
+                "restart_policy": {
+                    "type": "string"
+                },
+                "service": {
+                    "type": "string"
+                },
+                "stack": {
+                    "description": "Stack and StackUUID are the slug and the uuid of the stack whose graph\nmade it, when the request could see that stack: whoever knows which\nstacks it could see says them (workload.StackIndexOf), and a stack's\ndetail says its own. Service is the service of the stack's file it is,\nas its labels say.",
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is docker's: created, running, paused, restarting, removing,\nexited or dead. Status is the sentence docker puts it in.",
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal, so\nnothing brings it back when it stops or goes.",
+                    "type": "boolean"
+                },
+                "vm_name": {
+                    "type": "string"
+                },
+                "vm_uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.VMLogLine": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "type": "string"
+                },
+                "line": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.Volume": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "driver": {
+                    "type": "string"
+                },
+                "in_use": {
+                    "description": "InUse says a container mounts it.",
+                    "type": "boolean"
+                },
+                "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "mountpoint": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "pullImage.Request": {
+            "type": "object",
+            "properties": {
+                "reference": {
+                    "description": "Reference is the image, as name[:tag] or name@digest.",
                     "type": "string"
                 }
             }
@@ -7905,6 +11921,14 @@ const docTemplate = `{
                 }
             }
         },
+        "renameSnapshot.Request": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "resetpassword.Request": {
             "type": "object",
             "properties": {
@@ -7916,101 +11940,11 @@ const docTemplate = `{
                 }
             }
         },
-        "spec.Deploy": {
+        "restoreVM.Request": {
             "type": "object",
             "properties": {
-                "resources": {
-                    "$ref": "#/definitions/spec.Resources"
-                },
-                "restart_policy": {
-                    "$ref": "#/definitions/spec.RestartPolicy"
-                }
-            }
-        },
-        "spec.Limits": {
-            "type": "object",
-            "properties": {
-                "cpus": {
-                    "type": "number"
-                },
-                "disk": {
-                    "type": "integer"
-                },
-                "memory": {
-                    "type": "integer"
-                }
-            }
-        },
-        "spec.Port": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "integer"
-                }
-            }
-        },
-        "spec.Resources": {
-            "type": "object",
-            "properties": {
-                "limits": {
-                    "$ref": "#/definitions/spec.Limits"
-                }
-            }
-        },
-        "spec.RestartPolicy": {
-            "type": "object",
-            "properties": {
-                "max_attempts": {
-                    "description": "MaxAttempts is how many times a task that failed is asked for\nagain. Nothing at all leaves it to the workload, zero is not at all, and\n-1 never gives up.",
-                    "type": "integer"
-                }
-            }
-        },
-        "spec.Service": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "deploy": {
-                    "$ref": "#/definitions/spec.Deploy"
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "image": {
-                    "type": "string"
-                },
-                "network_mode": {
-                    "description": "NetworkMode is how much of the network the task reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the workload\ndecides which networks a task joins — but it sits in the same place\na compose file puts that decision.",
-                    "type": "string"
-                },
-                "ports": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/spec.Port"
-                    }
-                },
-                "read_only": {
-                    "description": "ReadOnly makes the task's filesystem immutable, so nothing it runs\ncan change the image it was started from. It is compose's read_only.",
-                    "type": "boolean"
-                },
-                "restart": {
-                    "type": "string"
-                },
-                "working_dir": {
+                "snapshot_uuid": {
+                    "description": "SnapshotUUID is the snapshot whose disk replaces the VM's: one of its\nowner's, of the same kind and engine, and no larger than its disk.",
                     "type": "string"
                 }
             }
@@ -8083,6 +12017,31 @@ const docTemplate = `{
                 },
                 "uuid": {
                     "type": "string"
+                }
+            }
+        },
+        "updateVM.Request": {
+            "type": "object",
+            "properties": {
+                "lifetime_seconds": {
+                    "description": "LifetimeSeconds counts again from now, and zero keeps the VM until it\nis deleted.",
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "network": {
+                    "$ref": "#/definitions/input.Network"
+                },
+                "ports": {
+                    "description": "Ports replace the ones it has; an empty list exposes none.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "resources": {
+                    "$ref": "#/definitions/input.Resources"
                 }
             }
         },
@@ -8273,6 +12232,42 @@ const docTemplate = `{
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "workload.Failure": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "workload.Refusal": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                }
+            }
+        },
+        "workload.Removal": {
+            "type": "object",
+            "properties": {
+                "dependents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Dependent"
+                    }
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "recreated": {
+                    "type": "boolean"
                 }
             }
         }

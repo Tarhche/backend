@@ -20,11 +20,19 @@ type Options struct {
 	SecretKey  string
 	UseSSL     bool
 	BucketName string
+
+	// PartSize is how much of an object is held in memory at a time while it
+	// is stored in parts, in bytes. Zero is minio's own choice, which for an
+	// object of unknown size (stored with a size of -1) is parts of about
+	// 512 MiB: fine for an upload, and far too much for a service streaming
+	// an archive with a memory limit. At least 5 MiB, which S3 requires.
+	PartSize uint64
 }
 
 type MinIO struct {
 	client     *minio.Client
 	bucketName string
+	partSize   uint64
 	tracer     oteltrace.Tracer
 }
 
@@ -50,6 +58,7 @@ func New(opt Options) (*MinIO, error) {
 	return &MinIO{
 		client:     minioClient,
 		bucketName: opt.BucketName,
+		partSize:   opt.PartSize,
 		tracer:     otel.Tracer("minio"),
 	}, nil
 }
@@ -61,7 +70,9 @@ func (storage *MinIO) Store(ctx context.Context, objectName string, reader io.Re
 	)
 	defer span.End()
 
-	_, err := storage.client.PutObject(ctx, storage.bucketName, objectName, reader, objectSize, minio.PutObjectOptions{})
+	_, err := storage.client.PutObject(ctx, storage.bucketName, objectName, reader, objectSize, minio.PutObjectOptions{
+		PartSize: storage.partSize,
+	})
 
 	return trace.RecordError(span, err)
 }
