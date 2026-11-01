@@ -118,7 +118,7 @@ services:
       - no-new-privileges:true
     # every VM on the node lives inside these.
     cpus: ${BACKEND_WORKLOAD_VMHOST_CPUS_LIMIT:-2}
-    mem_limit: ${BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT:-4g}
+    mem_limit: ${BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT:-8g}
     pids_limit: 16384
     # on SIGTERM it stops every VM gracefully, which it is given 110 s for, so
     # no guest loses what it had not yet written.
