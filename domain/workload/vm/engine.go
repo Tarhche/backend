@@ -173,10 +173,9 @@ type LogOptions struct {
 
 // Where a log line came from.
 const (
-	LogSourceKernel  = "kernel"
-	LogSourceRuntime = "runtime"
-	LogSourceMain    = "main"
-	LogSourceExec    = "exec"
+	LogSourceKernel = "kernel"
+	LogSourceMain   = "main"
+	LogSourceExec   = "exec"
 )
 
 // LogLine is one line of an instance's log.

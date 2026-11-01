@@ -28,7 +28,7 @@ func TestUseCase_Execute(t *testing.T) {
 			var workload controlplane.MockClient
 			workload.On("VMLogs", mock.Anything, scope.OwnerUUID, "vm-uuid", vm.LogOptions{Since: since, Tail: 500}).Once().Return([]vm.LogLine{
 				{At: since, Source: "kernel", Line: "booted"},
-				{At: since.Add(time.Second), Source: "runtime", Line: "agent up"},
+				{At: since.Add(time.Second), Source: "exec", Line: "ran"},
 			}, nil)
 			defer workload.AssertExpectations(t)
 
@@ -46,7 +46,7 @@ func TestUseCase_Execute(t *testing.T) {
 			assert.JSONEq(t, `{
 				"items": [
 					{"at": "2026-10-04T12:01:00Z", "source": "kernel", "line": "booted"},
-					{"at": "2026-10-04T12:01:01Z", "source": "runtime", "line": "agent up"}
+					{"at": "2026-10-04T12:01:01Z", "source": "exec", "line": "ran"}
 				],
 				"truncated": false
 			}`, string(presented))

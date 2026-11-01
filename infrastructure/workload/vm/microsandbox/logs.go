@@ -39,16 +39,18 @@ type logEntry struct {
 // Every other line of the system source is the guest's console.
 var runtimeLine = regexp.MustCompile(`^\s*(?:(?:TRACE|DEBUG|INFO|WARN|ERROR)\s+[A-Za-z0-9_:]+:\s|--- sandbox \w+ ---)`)
 
-// sourceOf is which of the engine's sources an entry is: what the runtime and
-// the guest's console said are the kernel's and the runtime's, the main
-// process's session is the main process's, and every other session is an
-// exec's.
+// ofRuntime says an entry is microsandbox's own, not the VM's: the host
+// attaching to the guest's agent, for every exec and every read through it,
+// which is nothing of what the VM wrote.
+func ofRuntime(entry logEntry) bool {
+	return entry.source == sdkSourceSystem && runtimeLine.Match(entry.data)
+}
+
+// sourceOf is which of the engine's sources an entry is: the guest's console
+// is the kernel's, the main process's session is the main process's, and
+// every other session is an exec's.
 func sourceOf(entry logEntry, hasMain bool) string {
 	if entry.source == sdkSourceSystem {
-		if runtimeLine.Match(entry.data) {
-			return vm.LogSourceRuntime
-		}
-
 		return vm.LogSourceKernel
 	}
 
@@ -60,14 +62,15 @@ func sourceOf(entry logEntry, hasMain bool) string {
 }
 
 // linesOf is the lines a sandbox's log entries hold, in the order they were
-// written. An entry is split at its newlines, and what a terminal ends a line
-// with is not part of it. A line written in two chunks reads as two.
+// written, but for the runtime's own. An entry is split at its newlines, and
+// what a terminal ends a line with is not part of it. A line written in two
+// chunks reads as two.
 func linesOf(entries []logEntry, hasMain bool) []vm.LogLine {
 	lines := make([]vm.LogLine, 0, len(entries))
 
 	for _, entry := range entries {
 		text := strings.TrimSuffix(string(entry.data), "\n")
-		if len(entry.data) == 0 {
+		if len(entry.data) == 0 || ofRuntime(entry) {
 			continue
 		}
 

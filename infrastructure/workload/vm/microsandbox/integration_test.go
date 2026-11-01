@@ -158,7 +158,9 @@ func TestMachineLogsAndStats(t *testing.T) {
 		return hasLine(lines, vm.LogSourceExec, "exec-line") && hasLine(lines, vm.LogSourceKernel, "console-line")
 	}, "the exec's and the console's lines are in the log: %v", lines)
 
-	assert.True(t, hasSource(lines, vm.LogSourceRuntime), "what microsandbox's runtime said is in it")
+	for _, line := range lines {
+		assert.NotContains(t, line.Line, "microsandbox_runtime::", "what microsandbox's runtime said is not the vm's")
+	}
 	assert.False(t, hasSource(lines, vm.LogSourceMain), "a vm has no main process")
 
 	t.Run("since keeps the lines written at that moment, and none before", func(t *testing.T) {
