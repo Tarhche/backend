@@ -21,22 +21,7 @@ func TestSourceOf(t *testing.T) {
 		want    string
 	}{
 		{
-			name:  "the runtime's tracing is the runtime's",
-			entry: logEntry{source: "system", data: []byte("INFO microsandbox_runtime::runner::vm: sandbox starting sandbox=vm-1")},
-			want:  vm.LogSourceRuntime,
-		},
-		{
-			name:  "tracing padded to its level's width is the runtime's too",
-			entry: logEntry{source: "system", data: []byte(" WARN microsandbox_checkpoint_timing: slow")},
-			want:  vm.LogSourceRuntime,
-		},
-		{
-			name:  "the markers of a sandbox starting and stopping are the runtime's",
-			entry: logEntry{source: "system", data: []byte("--- sandbox restored ---\n")},
-			want:  vm.LogSourceRuntime,
-		},
-		{
-			name:  "everything else the system says is the guest's console",
+			name:  "what the system says is the guest's console",
 			entry: logEntry{source: "system", data: []byte("2026-10-05T01:37:37Z vminit[1 --pid1]: dockerd started (pid 223)")},
 			want:  vm.LogSourceKernel,
 		},
@@ -92,6 +77,23 @@ func TestLinesOf(t *testing.T) {
 		{At: at.Add(time.Second), Source: vm.LogSourceExec, Line: "tty"},
 		{At: at.Add(2 * time.Second), Source: vm.LogSourceExec, Line: "no newline"},
 		{At: at.Add(3 * time.Second), Source: vm.LogSourceExec, Line: ""},
+	}, lines)
+}
+
+func TestLinesOfLeavesTheRuntimeOut(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
+
+	lines := linesOf([]logEntry{
+		{source: "system", at: at, data: []byte("INFO microsandbox_runtime::runner::relay: agent relay: client connected slot=1 id_start=33554432 id_end_exclusive=67108862")},
+		{source: "system", at: at, data: []byte(" WARN microsandbox_checkpoint_timing: slow")},
+		{source: "system", at: at, data: []byte("--- sandbox restored ---\n")},
+		{source: "system", at: at.Add(time.Second), data: []byte("2026-10-05T01:37:37Z vminit[1 --pid1]: dockerd started (pid 223)\n")},
+	}, false)
+
+	assert.Equal(t, []vm.LogLine{
+		{At: at.Add(time.Second), Source: vm.LogSourceKernel, Line: "2026-10-05T01:37:37Z vminit[1 --pid1]: dockerd started (pid 223)"},
 	}, lines)
 }
 

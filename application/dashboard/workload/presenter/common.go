@@ -83,7 +83,7 @@ func NewNeeds(needed workloadControlPlane.Deleted) Needs {
 }
 
 // VMLogLine is one line of what a VM wrote, and where it came from: kernel,
-// runtime, main or exec.
+// main or exec.
 type VMLogLine struct {
 	At     time.Time `json:"at"`
 	Source string    `json:"source"`
