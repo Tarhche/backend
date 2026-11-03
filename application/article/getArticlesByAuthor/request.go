@@ -30,7 +30,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 	}
 
 	if len(r.Username) > 0 && !rules.IsValidUsername(r.Username) {
-		validationErrors["username"] = "invalid_value"
+		validationErrors["username"] = "invalid_username"
 	}
 
 	return validationErrors

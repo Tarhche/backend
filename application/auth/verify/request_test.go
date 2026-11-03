@@ -78,7 +78,7 @@ func TestRequest_Validate(t *testing.T) {
 				Repassword:   "password123",
 			},
 			want: domain.ValidationErrors{
-				"username": "invalid_value",
+				"username": "invalid_username",
 			},
 		},
 		{
@@ -92,7 +92,7 @@ func TestRequest_Validate(t *testing.T) {
 				Repassword:   "password123",
 			},
 			want: domain.ValidationErrors{
-				"username": "invalid_value",
+				"username": "invalid_username",
 			},
 		},
 		{
