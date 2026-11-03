@@ -111,7 +111,7 @@ func TestRequest_Validate(t *testing.T) {
 				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
-				"username": "invalid_value",
+				"username": "invalid_username",
 			},
 		},
 		{
@@ -124,7 +124,7 @@ func TestRequest_Validate(t *testing.T) {
 				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
-				"username": "invalid_value",
+				"username": "invalid_username",
 			},
 		},
 		{

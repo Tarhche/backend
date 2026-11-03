@@ -103,6 +103,19 @@ func TestRequest_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid request with uppercase username",
+			request: Request{
+				UserUUID:     "user-uuid-123",
+				Name:         "John Doe",
+				Email:        "user@example.com",
+				Username:     "JohnDoe",
+				LanguageCode: "EN",
+			},
+			wantErr: domain.ValidationErrors{
+				"username": "invalid_username",
+			},
+		},
+		{
 			name: "invalid request with empty language",
 			request: Request{
 				UserUUID:     "user-uuid-123",

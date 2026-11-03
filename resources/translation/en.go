@@ -15,6 +15,7 @@ var english = map[string]string{
 	"required_field":                    "this field is required",
 	"invalid_value":                     "the provided value is invalid",
 	"invalid_email":                     "should be a valid email address",
+	"invalid_username":                  "should contain only lowercase English letters (a-z), digits (0-9), dots (.), underscores (_) and hyphens (-), with at least one letter or digit",
 	"invalid_phone_number":              "should be a valid phone number (digits only, at least 4 of them)",
 	"email_or_phone_required":           "either an email address or a phone number is required",
 	"repassword":                        "password and it's repeat should be the same",

@@ -35,6 +35,8 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.Username) == 0 {
 		validationErrors["username"] = "required_field"
+	} else if !rules.IsValidUsername(r.Username) {
+		validationErrors["username"] = "invalid_username"
 	}
 
 	if len(r.LanguageCode) == 0 {
